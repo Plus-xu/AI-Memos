@@ -1,0 +1,200 @@
+{
+   "extName": {
+      "message": "AI-MEMOS"
+   },
+   "actionTitle": {
+      "message": "Send to AI-MEMOS"
+   },
+   "extDescription": {
+      "message": "AI-powered Memos browser extension - Quickly capture, intelligently organize, and elegantly manage your thoughts and knowledge"
+   },
+   "sendTo": {
+      "message": "SendTo Memos \"%s\""
+   },
+   "sendLinkTo": {
+      "message": "Send link to Memos"
+   },
+   "sendImageTo": {
+      "message": "Send image to Memos"
+   },
+   "saveBtn":{
+      "message": "Save"
+   },
+   "placeApiUrl":{
+      "message": "Memos Self Home Url"
+   },
+   "placeApiTokens":{
+      "message": "Memos Access Tokens"
+   },
+   "placeContent":{
+      "message": "Any thoughts..."
+   },
+   "lockPrivate":{
+      "message": "Only you"
+   },
+   "lockProtected":{
+      "message": "Members"
+   },
+   "lockPublic":{
+      "message": "Everyone"
+   },
+   "visibilityTooltip":{
+      "message": "Set visibility scope"
+   },
+   "submitBtn":{
+      "message": "Save"
+   },
+   "placeHideInput":{
+      "message": "Default 'Only visible to you' Tag name"
+   },
+   "placeShowInput":{
+      "message": "Default 'Everyone can see' Tag name"
+   },
+   "picDrag":{
+      "message": "Drag upload the image"
+   },
+   "picCancelDrag":{
+      "message": "Cancel upload"
+   },
+   "picUploading":{
+      "message": "Upload the picture..."
+   },
+   "picSuccess":{
+      "message": "Upload completed"
+   },
+   "picFailed":{
+      "message": "Uploading failed"
+   },
+   "picPending":{
+      "message": "Image uploading is in progress"
+   },
+   "saveSuccess":{
+      "message": "Save Info Success!"
+   },
+   "searchNow":{
+      "message": "What are you looking for?"
+   },
+   "searchNone":{
+      "message": "Try another word!"
+   },
+   "archiveSuccess":{
+      "message": "Archive Success 😊"
+   },
+   "archiveFailed":{
+      "message": "Archive Failed 😭"
+   },
+   "getTabFailed":{
+      "message": "Get Tab Failed 😭"
+   },
+   "memoUploading":{
+      "message": "Sending"
+   },
+   "memoSuccess":{
+      "message": "Success! 😊"
+   },
+   "memoFailed":{
+      "message": "Failed! 😭"
+   },
+   "invalidToken":{
+      "message": "Invalid token or url 😭"
+   },
+   "languageLabel":{
+      "message": "Language"
+   },
+   "themeAuto":{
+      "message": "Auto"
+   },
+   "themeLight":{
+      "message": "Light"
+   },
+   "themeDark":{
+      "message": "Dark"
+   },
+   "languageChangeConfirm":{
+      "message": "Change language?"
+   },
+   "languageChanged":{
+      "message": "Language changed"
+   },
+   "settingsBtn":{
+      "message": "Settings"
+   },
+   "tagsTooltip":{
+      "message": "Add tags"
+   },
+   "todoTooltip":{
+      "message": "Add todo"
+   },
+   "uploadTooltip":{
+      "message": "Upload resource"
+   },
+   "linkTooltip":{
+      "message": "Get link"
+   },
+   "randomTooltip":{
+      "message": "Random review"
+   },
+   "searchTooltip":{
+      "message": "Search"
+   },
+   "noMemosFound":{
+      "message": "No memos found"
+   },
+   "noTagsFound":{
+      "message": "No tags found"
+   },
+   "noSearchResults":{
+      "message": "No matching memos found"
+   },
+   "apiFailed":{
+      "message": "API call failed"
+   },
+   "apiNotFound":{
+      "message": "API endpoint not found, please check Memos version"
+   },
+   "llmProviderLabel":{
+      "message": "AI Model Provider"
+   },
+   "llmModelLabel":{
+      "message": "AI Model"
+   },
+   "llmApiKeyLabel":{
+      "message": "API Key"
+   },
+   "llmCustomModelPlaceholder":{
+      "message": "Enter custom model name"
+   },
+   "llmApiKeyPlaceholder":{
+      "message": "Enter API key"
+   },
+   "aiOptimizeTooltip":{
+      "message": "Optimize with AI"
+   },
+   "aiOptimizing":{
+      "message": "AI is optimizing..."
+   },
+   "aiOptimizeSuccess":{
+      "message": "AI optimization completed!"
+   },
+   "aiOptimizeFailed":{
+      "message": "AI optimization failed"
+   },
+   "aiNoContent":{
+      "message": "Please enter content first"
+   },
+   "aiNotConfigured":{
+      "message": "Please configure AI model first"
+   },
+   "aiApiKeyRequired":{
+      "message": "Please enter API key"
+   },
+   "llmBaseUrlLabel":{
+      "message": "New API Base URL"
+   },
+   "llmBaseUrlPlaceholder":{
+      "message": "For example https://your-new-api.example.com/v1"
+   },
+   "aiBaseUrlRequired":{
+      "message": "Please enter New API Base URL"
+   }
+}

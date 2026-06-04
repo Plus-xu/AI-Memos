@@ -1,0 +1,200 @@
+{
+   "extName": {
+      "message": "AI-MEMOS"
+   },
+   "actionTitle": {
+      "message": "AI-MEMOSに送信"
+   },
+   "extDescription": {
+      "message": "AI搭載のMemosブラウザ拡張機能 - アイデアと知識を素早く記録、賢く整理、美しく管理"
+   },
+   "sendTo": {
+      "message": "Memosに送信 \"%s\""
+   },
+   "sendLinkTo": {
+      "message": "リンクをMemosに送信"
+   },
+   "sendImageTo": {
+      "message": "画像をMemosに送信"
+   },
+   "saveBtn":{
+      "message": "保存"
+   },
+   "placeApiUrl":{
+      "message": "MemosホームページURLを入力"
+   },
+   "placeApiTokens":{
+      "message": "Memos Access Tokensを入力"
+   },
+   "placeContent":{
+      "message": "今の考えは..."
+   },
+   "lockPrivate":{
+      "message": "自分のみ"
+   },
+   "lockProtected":{
+      "message": "メンバー"
+   },
+   "lockPublic":{
+      "message": "全員"
+   },
+   "visibilityTooltip":{
+      "message": "公開範囲を設定"
+   },
+   "submitBtn":{
+      "message": "記録"
+   },
+   "placeHideInput":{
+      "message": "デフォルト「自分のみ表示」タグ名"
+   },
+   "placeShowInput":{
+      "message": "デフォルト「全員に表示」タグ名"
+   },
+   "picDrag":{
+      "message": "ウィンドウにドラッグして画像をアップロード"
+   },
+   "picCancelDrag":{
+      "message": "アップロードをキャンセル"
+   },
+   "picUploading":{
+      "message": "画像をアップロード中..."
+   },
+   "picSuccess":{
+      "message": "アップロード完了"
+   },
+   "picFailed":{
+      "message": "画像のアップロードに失敗"
+   },
+   "picPending":{
+      "message": "画像がアップロード待ち"
+   },
+   "saveSuccess":{
+      "message": "情報を保存しました"
+   },
+   "searchNow":{
+      "message": "何を検索しますか？"
+   },
+   "searchNone":{
+      "message": "見つかりません、別の言葉を試してください"
+   },
+   "archiveSuccess":{
+      "message": "アーカイブ成功！😊"
+   },
+   "archiveFailed":{
+      "message": "アーカイブ失敗 😭"
+   },
+   "getTabFailed":{
+      "message": "タブの取得失敗 😭"
+   },
+   "memoUploading":{
+      "message": "送信中..."
+   },
+   "memoSuccess":{
+      "message": "成功！😊"
+   },
+   "memoFailed":{
+      "message": "失敗！😭"
+   },
+   "invalidToken":{
+      "message": "無効なトークンまたはURL 😭"
+   },
+   "languageLabel":{
+      "message": "言語"
+   },
+   "themeAuto":{
+      "message": "自動"
+   },
+   "themeLight":{
+      "message": "ライト"
+   },
+   "themeDark":{
+      "message": "ダーク"
+   },
+   "languageChangeConfirm":{
+      "message": "言語を変更しますか？"
+   },
+   "languageChanged":{
+      "message": "言語を変更しました"
+   },
+   "settingsBtn":{
+      "message": "設定"
+   },
+   "tagsTooltip":{
+      "message": "タグを追加"
+   },
+   "todoTooltip":{
+      "message": "TODOを追加"
+   },
+   "uploadTooltip":{
+      "message": "リソースをアップロード"
+   },
+   "linkTooltip":{
+      "message": "リンクを取得"
+   },
+   "randomTooltip":{
+      "message": "ランダムレビュー"
+   },
+   "searchTooltip":{
+      "message": "検索"
+   },
+   "noMemosFound":{
+      "message": "メモが見つかりません"
+   },
+   "noTagsFound":{
+      "message": "タグが見つかりません"
+   },
+   "noSearchResults":{
+      "message": "一致するメモが見つかりません"
+   },
+   "apiFailed":{
+      "message": "API呼び出しに失敗しました"
+   },
+   "apiNotFound":{
+      "message": "APIエンドポイントが見つかりません。Memosバージョンを確認してください"
+   },
+   "llmProviderLabel":{
+      "message": "AI モデルプロバイダー"
+   },
+   "llmModelLabel":{
+      "message": "AI モデル"
+   },
+   "llmApiKeyLabel":{
+      "message": "API キー"
+   },
+   "llmCustomModelPlaceholder":{
+      "message": "カスタムモデル名を入力"
+   },
+   "llmApiKeyPlaceholder":{
+      "message": "API キーを入力"
+   },
+   "aiOptimizeTooltip":{
+      "message": "AI で最適化"
+   },
+   "aiOptimizing":{
+      "message": "AI が最適化中..."
+   },
+   "aiOptimizeSuccess":{
+      "message": "AI 最適化が完了しました！"
+   },
+   "aiOptimizeFailed":{
+      "message": "AI 最適化に失敗しました"
+   },
+   "aiNoContent":{
+      "message": "まず内容を入力してください"
+   },
+   "aiNotConfigured":{
+      "message": "まず AI モデルを設定してください"
+   },
+   "aiApiKeyRequired":{
+      "message": "API キーを入力してください"
+   },
+   "llmBaseUrlLabel":{
+      "message": "New API Base URL"
+   },
+   "llmBaseUrlPlaceholder":{
+      "message": "例: https://your-new-api.example.com/v1"
+   },
+   "aiBaseUrlRequired":{
+      "message": "New API Base URL を入力してください"
+   }
+}

@@ -1,0 +1,200 @@
+{
+   "extName": {
+      "message": "AI-MEMOS"
+   },
+   "actionTitle": {
+      "message": "发送到 AI-MEMOS"
+   },
+   "extDescription": {
+      "message": "AI赋能的Memos浏览器扩展 - 快速记录、智能整理、优雅管理你的想法与知识"
+   },
+   "sendTo": {
+      "message": "发送至 Memos “%s”"
+   },
+   "sendLinkTo": {
+      "message": "发送链接至 Memos"
+   },
+   "sendImageTo": {
+      "message": "发送图片至 Memos"
+   },
+   "saveBtn":{
+      "message": "保存"
+   },
+   "placeApiUrl":{
+      "message": "请填入 Memos 主页网址"
+   },
+   "placeApiTokens":{
+      "message": "请填入 Memos Access Tokens"
+   },
+   "placeContent":{
+      "message": "现在的想法是..."
+   },
+   "lockPrivate":{
+      "message": "仅自己"
+   },
+   "lockProtected":{
+      "message": "成员"
+   },
+   "lockPublic":{
+      "message": "所有人"
+   },
+   "visibilityTooltip":{
+      "message": "设置可见范围"
+   },
+   "submitBtn":{
+      "message": "记下"
+   },
+   "placeHideInput":{
+      "message": "默认“仅自己可见”标签名"
+   },
+   "placeShowInput":{
+      "message": "默认“所有人可见”标签名"
+   },
+   "picDrag":{
+      "message": "拖拽到窗口上传该图片"
+   },
+   "picCancelDrag":{
+      "message": "取消上传"
+   },
+   "picUploading":{
+      "message": "图片上传中……"
+   },
+   "picSuccess":{
+      "message": "上传完成"
+   },
+   "picFailed":{
+      "message": "上传图片失败"
+   },
+   "picPending":{
+      "message": "有图片等待上传"
+   },
+   "saveSuccess":{
+      "message": "保存信息成功"
+   },
+   "searchNow":{
+      "message": "想搜点啥？"
+   },
+   "searchNone":{
+      "message": "搜不到，换个词试试"
+   },
+   "archiveSuccess":{
+      "message": "归档成功！😊"
+   },
+   "archiveFailed":{
+      "message": "归档失败 😭"
+   },
+   "getTabFailed":{
+      "message": "获取标签失败 😭"
+   },
+   "memoUploading":{
+      "message": "发送中……"
+   },
+   "memoSuccess":{
+      "message": "发送成功！😊"
+   },
+   "memoFailed":{
+      "message": "发送失败 😭"
+   },
+   "invalidToken":{
+      "message": "无效的 token 或 url 😭"
+   },
+   "languageLabel":{
+      "message": "语言"
+   },
+   "themeAuto":{
+      "message": "自动"
+   },
+   "themeLight":{
+      "message": "亮色"
+   },
+   "themeDark":{
+      "message": "暗黑"
+   },
+   "languageChangeConfirm":{
+      "message": "确定要切换语言吗？"
+   },
+   "languageChanged":{
+      "message": "语言已切换"
+   },
+   "settingsBtn":{
+      "message": "设置"
+   },
+   "tagsTooltip":{
+      "message": "添加标签"
+   },
+   "todoTooltip":{
+      "message": "添加待办"
+   },
+   "uploadTooltip":{
+      "message": "上传资源"
+   },
+   "linkTooltip":{
+      "message": "获取链接"
+   },
+   "randomTooltip":{
+      "message": "随机回顾"
+   },
+   "searchTooltip":{
+      "message": "搜索"
+   },
+   "noMemosFound":{
+      "message": "没有找到任何 memos"
+   },
+   "noTagsFound":{
+      "message": "没有找到任何标签"
+   },
+   "noSearchResults":{
+      "message": "没有找到匹配的 memos"
+   },
+   "apiFailed":{
+      "message": "API 调用失败"
+   },
+   "apiNotFound":{
+      "message": "API 端点不存在，请检查 Memos 版本"
+   },
+   "llmProviderLabel":{
+      "message": "AI 模型提供商"
+   },
+   "llmModelLabel":{
+      "message": "AI 模型"
+   },
+   "llmApiKeyLabel":{
+      "message": "API 密钥"
+   },
+   "llmCustomModelPlaceholder":{
+      "message": "输入自定义模型名称"
+   },
+   "llmApiKeyPlaceholder":{
+      "message": "输入 API 密钥"
+   },
+   "aiOptimizeTooltip":{
+      "message": "使用 AI 优化内容"
+   },
+   "aiOptimizing":{
+      "message": "AI 正在优化中..."
+   },
+   "aiOptimizeSuccess":{
+      "message": "AI 优化完成！"
+   },
+   "aiOptimizeFailed":{
+      "message": "AI 优化失败"
+   },
+   "aiNoContent":{
+      "message": "请先输入内容"
+   },
+   "aiNotConfigured":{
+      "message": "请先配置 AI 模型"
+   },
+   "aiApiKeyRequired":{
+      "message": "请输入 API 密钥"
+   },
+   "llmBaseUrlLabel":{
+      "message": "New API Base URL"
+   },
+   "llmBaseUrlPlaceholder":{
+      "message": "例如 https://your-new-api.example.com/v1"
+   },
+   "aiBaseUrlRequired":{
+      "message": "请输入 New API Base URL"
+   }
+}
