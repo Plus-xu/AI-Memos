@@ -196,5 +196,20 @@
    },
    "aiBaseUrlRequired":{
       "message": "New API Base URL を入力してください"
+   },
+   "llmQuickPresetsLabel":{
+      "message": "クイック AI 最適化プリセット"
+   },
+   "llmQuickPresetPrefix":{
+      "message": "クイック"
+   },
+   "llmQuickPresetEmpty":{
+      "message": "未設定"
+   },
+   "llmQuickPresetMenuTooltip":{
+      "message": "クイック AI 最適化プリセットを選択"
+   },
+   "llmQuickPresetNotConfigured":{
+      "message": "このクイックプリセットは未設定です"
    }
 }

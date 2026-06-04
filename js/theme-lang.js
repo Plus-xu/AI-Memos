@@ -192,7 +192,8 @@ function updatePageTexts(messages) {
     'llmProviderLabel': 'llmProviderLabel',
     'llmModelLabel': 'llmModelLabel',
     'llmApiKeyLabel': 'llmApiKeyLabel',
-    'llmBaseUrlLabel': 'llmBaseUrlLabel'
+    'llmBaseUrlLabel': 'llmBaseUrlLabel',
+    'llmQuickPresetsLabel': 'llmQuickPresetsLabel'
   };
   
   for (const [elementId, messageKey] of Object.entries(aiLabels)) {
@@ -242,6 +243,10 @@ function updatePageTexts(messages) {
     if (element && messages[messageKey]) {
       element.title = messages[messageKey].message;
     }
+  }
+
+  if (typeof refreshLLMTexts === 'function') {
+    refreshLLMTexts(messages);
   }
 }
 
@@ -297,7 +302,8 @@ function initToolbarTooltips() {
     'random': 'randomTooltip',
     'search': 'searchTooltip',
     'lock': 'visibilityTooltip',
-    'ai_optimize': 'aiOptimizeTooltip'
+    'ai_optimize': 'aiOptimizeTooltip',
+    'ai_quick_toggle': 'llmQuickPresetMenuTooltip'
   };
 
   for (const [elementId, messageKey] of Object.entries(tooltipMappings)) {

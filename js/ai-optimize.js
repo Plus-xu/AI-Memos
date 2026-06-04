@@ -3,69 +3,475 @@
  * 负责LLM配置管理和内容优化
  */
 
-// 初始化LLM配置界面
-function initLLMConfig() {
-  // 加载保存的配置
-  chrome.storage.sync.get(['llmProvider', 'llmModel', 'llmCustomModel', 'llmApiKey', 'llmBaseUrl'], function(data) {
-    const provider = data.llmProvider || LLM_CONFIG.defaults.provider;
-    if (LLM_CONFIG.providers[provider]) {
-      $('#llmProvider').val(provider);
-      updateModelList(provider);
+const LLM_QUICK_PRESET_LIMIT = 3;
+let llmProviderConfigs = {};
+let llmActiveProvider = LLM_CONFIG.defaults.provider;
+let llmQuickPresets = [];
+let llmMessagesOverride = null;
+
+function getLLMMessage(key, fallback) {
+  if (llmMessagesOverride && llmMessagesOverride[key]) {
+    return llmMessagesOverride[key].message;
+  }
+
+  return chrome.i18n.getMessage(key) || fallback || '';
+}
+
+function isValidProvider(provider) {
+  return !!LLM_CONFIG.providers[provider];
+}
+
+function getProviderDefaultModel(provider) {
+  const providerConfig = LLM_CONFIG.providers[provider];
+  if (!providerConfig || !providerConfig.models || providerConfig.models.length === 0) {
+    return LLM_CONFIG.defaults.model;
+  }
+  if (provider === LLM_CONFIG.defaults.provider) {
+    return LLM_CONFIG.defaults.model;
+  }
+  return providerConfig.models[0].value;
+}
+
+function getProviderModelValues(provider) {
+  const providerConfig = LLM_CONFIG.providers[provider];
+  if (!providerConfig || !providerConfig.models) {
+    return [];
+  }
+  return providerConfig.models.map(function(model) {
+    return model.value;
+  });
+}
+
+function normalizeProviderConfig(provider, config) {
+  const modelValues = getProviderModelValues(provider);
+  let model = config && config.model ? config.model : getProviderDefaultModel(provider);
+  let customModel = config && config.customModel ? config.customModel : '';
+
+  if (modelValues.indexOf(model) === -1) {
+    if (modelValues.indexOf('custom') !== -1) {
+      customModel = customModel || model;
+      model = 'custom';
     } else {
-      $('#llmProvider').val(LLM_CONFIG.defaults.provider);
-      updateModelList(LLM_CONFIG.defaults.provider);
+      model = getProviderDefaultModel(provider);
     }
-    updateBaseUrlVisibility($('#llmProvider').val());
-    
-    if (data.llmModel) {
-      $('#llmModel').val(data.llmModel);
-      if (data.llmModel === 'custom' && data.llmCustomModel) {
-        $('#llmCustomModel').val(data.llmCustomModel).show();
-      }
-    }
-    
-    if (data.llmApiKey) {
-      $('#llmApiKey').val(data.llmApiKey);
+  }
+
+  return {
+    model: model,
+    customModel: model === 'custom' ? customModel : '',
+    apiKey: config && config.apiKey ? config.apiKey : '',
+    baseUrl: config && config.baseUrl ? config.baseUrl : ''
+  };
+}
+
+function normalizeQuickPresets(presets) {
+  const normalized = Array.isArray(presets) ? presets.slice(0, LLM_QUICK_PRESET_LIMIT) : [];
+  while (normalized.length < LLM_QUICK_PRESET_LIMIT) {
+    normalized.push({});
+  }
+
+  return normalized.map(function(preset) {
+    if (!preset || !isValidProvider(preset.provider)) {
+      return {};
     }
 
-    if (data.llmBaseUrl) {
-      $('#llmBaseUrl').val(data.llmBaseUrl);
+    const config = normalizeProviderConfig(preset.provider, {
+      model: preset.model,
+      customModel: preset.customModel
+    });
+
+    return {
+      provider: preset.provider,
+      model: config.model,
+      customModel: config.customModel
+    };
+  });
+}
+
+function getCurrentFormConfig(providerOverride) {
+  const provider = providerOverride || $('#llmProvider').val();
+  return normalizeProviderConfig(provider, {
+    model: $('#llmModel').val(),
+    customModel: $('#llmCustomModel').val(),
+    apiKey: $('#llmApiKey').val(),
+    baseUrl: $('#llmBaseUrl').val()
+  });
+}
+
+function cacheCurrentProviderForm(providerOverride) {
+  const provider = providerOverride || $('#llmProvider').val();
+  if (!isValidProvider(provider)) {
+    return;
+  }
+
+  llmProviderConfigs[provider] = getCurrentFormConfig(provider);
+  llmActiveProvider = provider;
+}
+
+function applyModelSelection($modelSelect, $customInput, provider, model, customModel) {
+  const config = normalizeProviderConfig(provider, {
+    model: model,
+    customModel: customModel
+  });
+
+  $modelSelect.val(config.model);
+  if (config.model === 'custom') {
+    $customInput.val(config.customModel).show();
+  } else {
+    $customInput.val('').hide();
+  }
+}
+
+function applyProviderConfigToForm(provider) {
+  const config = normalizeProviderConfig(provider, llmProviderConfigs[provider]);
+
+  $('#llmProvider').val(provider);
+  updateModelList(provider, $('#llmModel'));
+  applyModelSelection($('#llmModel'), $('#llmCustomModel'), provider, config.model, config.customModel);
+  $('#llmApiKey').val(config.apiKey);
+  $('#llmBaseUrl').val(config.baseUrl);
+  updateBaseUrlVisibility(provider);
+}
+
+function buildLegacyConfig(data) {
+  const provider = isValidProvider(data.llmProvider) ? data.llmProvider : LLM_CONFIG.defaults.provider;
+  const hasLegacyConfig = data.llmProvider || data.llmModel || data.llmCustomModel || data.llmApiKey || data.llmBaseUrl;
+
+  if (!hasLegacyConfig) {
+    return null;
+  }
+
+  return {
+    provider: provider,
+    config: normalizeProviderConfig(provider, {
+      model: data.llmModel,
+      customModel: data.llmCustomModel,
+      apiKey: data.llmApiKey,
+      baseUrl: data.llmBaseUrl
+    })
+  };
+}
+
+function loadLLMState(callback) {
+  const keys = [
+    'llmProviderConfigs',
+    'llmActiveProvider',
+    'llmQuickPresets',
+    'llmProvider',
+    'llmModel',
+    'llmCustomModel',
+    'llmApiKey',
+    'llmBaseUrl'
+  ];
+
+  chrome.storage.sync.get(keys, function(data) {
+    llmProviderConfigs = data.llmProviderConfigs || {};
+    const legacyConfig = buildLegacyConfig(data);
+    let migrated = false;
+
+    if (legacyConfig && !llmProviderConfigs[legacyConfig.provider]) {
+      llmProviderConfigs[legacyConfig.provider] = legacyConfig.config;
+      migrated = true;
     }
-    
-    // 更新占位符文本
-    updatePlaceholders();
-  });
-  
-  // 监听提供商选择变化
-  $('#llmProvider').change(function() {
-    const provider = $(this).val();
-    updateModelList(provider);
-    updateBaseUrlVisibility(provider);
-    $('#llmCustomModel').hide().val('');
-  });
-  
-  // 监听模型选择变化
-  $('#llmModel').change(function() {
-    const model = $(this).val();
-    if (model === 'custom') {
-      $('#llmCustomModel').show();
-    } else {
-      $('#llmCustomModel').hide().val('');
+
+    Object.keys(LLM_CONFIG.providers).forEach(function(provider) {
+      if (llmProviderConfigs[provider]) {
+        llmProviderConfigs[provider] = normalizeProviderConfig(provider, llmProviderConfigs[provider]);
+      }
+    });
+
+    llmActiveProvider = data.llmActiveProvider || (legacyConfig && legacyConfig.provider) || LLM_CONFIG.defaults.provider;
+    if (!isValidProvider(llmActiveProvider)) {
+      llmActiveProvider = LLM_CONFIG.defaults.provider;
+    }
+
+    if (!llmProviderConfigs[llmActiveProvider]) {
+      llmProviderConfigs[llmActiveProvider] = normalizeProviderConfig(llmActiveProvider, {});
+    }
+
+    llmQuickPresets = normalizeQuickPresets(data.llmQuickPresets);
+
+    if (migrated) {
+      persistLLMState();
+    }
+
+    if (typeof callback === 'function') {
+      callback();
     }
   });
 }
 
+function persistLLMState(callback) {
+  const activeConfig = normalizeProviderConfig(llmActiveProvider, llmProviderConfigs[llmActiveProvider]);
+
+  chrome.storage.sync.set({
+    llmProviderConfigs: llmProviderConfigs,
+    llmActiveProvider: llmActiveProvider,
+    llmQuickPresets: collectQuickPresetConfigs(),
+    // Keep legacy keys in sync for older extension versions.
+    llmProvider: llmActiveProvider,
+    llmModel: activeConfig.model,
+    llmCustomModel: activeConfig.customModel,
+    llmApiKey: activeConfig.apiKey,
+    llmBaseUrl: activeConfig.baseUrl
+  }, callback);
+}
+
+// 初始化LLM配置界面
+function initLLMConfig() {
+  loadLLMState(function() {
+    applyProviderConfigToForm(llmActiveProvider);
+    initQuickPresetControls();
+    refreshLLMTexts();
+  });
+
+  $('#llmProvider').change(function() {
+    const previousProvider = llmActiveProvider;
+    if (isValidProvider(previousProvider)) {
+      llmProviderConfigs[previousProvider] = getCurrentFormConfig(previousProvider);
+    }
+
+    const provider = $(this).val();
+    llmActiveProvider = provider;
+    if (!llmProviderConfigs[provider]) {
+      llmProviderConfigs[provider] = normalizeProviderConfig(provider, {});
+    }
+    applyProviderConfigToForm(provider);
+  });
+
+  $('#llmModel').change(function() {
+    toggleCustomModel($('#llmModel'), $('#llmCustomModel'));
+  });
+}
+
 // 更新模型列表
-function updateModelList(provider) {
-  const $modelSelect = $('#llmModel');
-  $modelSelect.empty();
+function updateModelList(provider, $modelSelect) {
+  const $select = $modelSelect || $('#llmModel');
+  $select.empty();
   
   if (LLM_CONFIG.providers[provider]) {
     const models = LLM_CONFIG.providers[provider].models;
     models.forEach(function(model) {
-      $modelSelect.append(`<option value="${model.value}">${model.label}</option>`);
+      $select.append(`<option value="${model.value}">${model.label}</option>`);
     });
   }
+}
+
+function toggleCustomModel($modelSelect, $customInput) {
+  const model = $modelSelect.val();
+  if (model === 'custom') {
+    $customInput.show();
+  } else {
+    $customInput.hide().val('');
+  }
+}
+
+function getProviderDisplayName(provider) {
+  return LLM_CONFIG.providers[provider] ? LLM_CONFIG.providers[provider].name : provider;
+}
+
+function getModelDisplayName(provider, model, customModel) {
+  if (model === 'custom') {
+    return customModel || getLLMMessage('llmCustomModelPlaceholder', 'Custom model');
+  }
+
+  const providerConfig = LLM_CONFIG.providers[provider];
+  if (!providerConfig || !providerConfig.models) {
+    return model || '';
+  }
+
+  const matchedModel = providerConfig.models.find(function(item) {
+    return item.value === model;
+  });
+
+  return matchedModel ? matchedModel.label : model;
+}
+
+function getPresetLabel(preset, index) {
+  if (!preset || !preset.provider) {
+    return getLLMMessage('llmQuickPresetEmpty', 'Not set') || ('Preset ' + (index + 1));
+  }
+
+  const modelLabel = getModelDisplayName(preset.provider, preset.model, preset.customModel);
+  return getProviderDisplayName(preset.provider) + ' / ' + modelLabel;
+}
+
+function collectQuickPresetConfigs() {
+  const $rows = $('.quick-preset-row');
+  if ($rows.length === 0) {
+    return normalizeQuickPresets(llmQuickPresets);
+  }
+
+  const presets = [];
+  $rows.each(function() {
+    const $row = $(this);
+    const provider = $row.find('.quick-preset-provider').val();
+    if (!provider || !isValidProvider(provider)) {
+      presets.push({});
+      return;
+    }
+
+    const model = $row.find('.quick-preset-model').val();
+    const customModel = $row.find('.quick-preset-custom-model').val();
+    const config = normalizeProviderConfig(provider, {
+      model: model,
+      customModel: customModel
+    });
+
+    presets.push({
+      provider: provider,
+      model: config.model,
+      customModel: config.customModel
+    });
+  });
+
+  return normalizeQuickPresets(presets);
+}
+
+function populateProviderSelect($select, selectedProvider, includeEmpty) {
+  $select.empty();
+  if (includeEmpty) {
+    $select.append(`<option value="">${getLLMMessage('llmQuickPresetEmpty', 'Not set')}</option>`);
+  }
+
+  Object.keys(LLM_CONFIG.providers).forEach(function(provider) {
+    $select.append(`<option value="${provider}">${getProviderDisplayName(provider)}</option>`);
+  });
+
+  $select.val(selectedProvider || '');
+}
+
+function populateQuickPresetModelSelect($row, provider, selectedModel, customModel) {
+  const $modelSelect = $row.find('.quick-preset-model');
+  const $customInput = $row.find('.quick-preset-custom-model');
+
+  if (!provider || !isValidProvider(provider)) {
+    $modelSelect.empty().prop('disabled', true);
+    $customInput.hide().val('');
+    return;
+  }
+
+  $modelSelect.prop('disabled', false);
+  updateModelList(provider, $modelSelect);
+  applyModelSelection($modelSelect, $customInput, provider, selectedModel, customModel);
+}
+
+function buildQuickPresetRows() {
+  const $container = $('#quickPresetRows');
+  $container.empty();
+
+  llmQuickPresets = normalizeQuickPresets(llmQuickPresets);
+
+  for (let index = 0; index < LLM_QUICK_PRESET_LIMIT; index++) {
+    const preset = llmQuickPresets[index] || {};
+    const $row = $('<div class="quick-preset-row"></div>');
+    const $name = $('<span class="quick-preset-name"></span>');
+    const $providerSelect = $('<select class="inputer quick-preset-provider"></select>');
+    const $modelSelect = $('<select class="inputer quick-preset-model"></select>');
+    const $customInput = $('<input class="inputer quick-preset-custom-model" type="text" maxlength="100" style="display: none;" />');
+
+    $name.text(getLLMMessage('llmQuickPresetPrefix', 'Quick') + ' ' + (index + 1));
+    $customInput.attr('placeholder', getLLMMessage('llmCustomModelPlaceholder', 'Custom model'));
+
+    $row.append($name, $providerSelect, $modelSelect, $customInput);
+    $container.append($row);
+
+    populateProviderSelect($providerSelect, preset.provider, true);
+    populateQuickPresetModelSelect($row, preset.provider, preset.model, preset.customModel);
+  }
+}
+
+function refreshQuickPresetRowLabels() {
+  $('.quick-preset-name').each(function(index) {
+    $(this).text(getLLMMessage('llmQuickPresetPrefix', 'Quick') + ' ' + (index + 1));
+  });
+}
+
+function updateQuickPresetMenu() {
+  const $menu = $('#ai_quick_menu');
+  if ($menu.length === 0) {
+    return;
+  }
+
+  $menu.empty();
+  llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
+
+  llmQuickPresets.forEach(function(preset, index) {
+    const $item = $('<button type="button" class="ai-quick-item"></button>');
+    $item.attr('data-index', index);
+
+    if (!preset.provider) {
+      $item.prop('disabled', true).text((index + 1) + '. ' + getLLMMessage('llmQuickPresetEmpty', 'Not set'));
+    } else {
+      $item.text((index + 1) + '. ' + getPresetLabel(preset, index));
+    }
+
+    $menu.append($item);
+  });
+}
+
+function refreshLLMTexts(messages) {
+  if (messages) {
+    llmMessagesOverride = messages;
+  }
+
+  $('#llmQuickPresetsLabel').text(getLLMMessage('llmQuickPresetsLabel', 'Quick presets'));
+  $('#ai_quick_toggle').attr('title', getLLMMessage('llmQuickPresetMenuTooltip', 'Quick AI presets'));
+  $('.quick-preset-provider option[value=""]').text(getLLMMessage('llmQuickPresetEmpty', 'Not set'));
+  refreshQuickPresetRowLabels();
+  updatePlaceholders();
+  updateQuickPresetMenu();
+}
+
+function initQuickPresetControls() {
+  buildQuickPresetRows();
+  refreshLLMTexts();
+
+  $('#quickPresetRows').on('change', '.quick-preset-provider', function() {
+    const $row = $(this).closest('.quick-preset-row');
+    const provider = $(this).val();
+    populateQuickPresetModelSelect($row, provider, null, '');
+    llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
+    updateQuickPresetMenu();
+  });
+
+  $('#quickPresetRows').on('change', '.quick-preset-model', function() {
+    const $row = $(this).closest('.quick-preset-row');
+    toggleCustomModel($row.find('.quick-preset-model'), $row.find('.quick-preset-custom-model'));
+    llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
+    updateQuickPresetMenu();
+  });
+
+  $('#quickPresetRows').on('input', '.quick-preset-custom-model', function() {
+    llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
+    updateQuickPresetMenu();
+  });
+
+  $('#ai_quick_toggle').click(function(e) {
+    e.preventDefault();
+    updateQuickPresetMenu();
+    $('#ai_quick_menu').toggleClass('hidden');
+  });
+
+  $('#ai_quick_menu').on('click', '.ai-quick-item', function(e) {
+    e.preventDefault();
+    const index = Number($(this).attr('data-index'));
+    const preset = collectQuickPresetConfigs()[index];
+    $('#ai_quick_menu').addClass('hidden');
+
+    if (!preset || !preset.provider) {
+      $.message({ message: getLLMMessage('llmQuickPresetNotConfigured', 'Quick preset is not configured') });
+      return;
+    }
+
+    optimizeWithAI(preset, $('#ai_optimize'));
+  });
+
+  $(document).click(function(e) {
+    if ($(e.target).closest('.ai-split-wrapper').length === 0) {
+      $('#ai_quick_menu').addClass('hidden');
+    }
+  });
 }
 
 // 根据提供商切换 Base URL 输入框
@@ -77,26 +483,17 @@ function updateBaseUrlVisibility(provider) {
 
 // 更新占位符文本
 function updatePlaceholders() {
-  $('#llmCustomModel').attr('placeholder', chrome.i18n.getMessage('llmCustomModelPlaceholder'));
-  $('#llmApiKey').attr('placeholder', chrome.i18n.getMessage('llmApiKeyPlaceholder'));
-  $('#llmBaseUrl').attr('placeholder', chrome.i18n.getMessage('llmBaseUrlPlaceholder'));
+  $('#llmCustomModel').attr('placeholder', getLLMMessage('llmCustomModelPlaceholder'));
+  $('#llmApiKey').attr('placeholder', getLLMMessage('llmApiKeyPlaceholder'));
+  $('#llmBaseUrl').attr('placeholder', getLLMMessage('llmBaseUrlPlaceholder'));
+  $('.quick-preset-custom-model').attr('placeholder', getLLMMessage('llmCustomModelPlaceholder'));
 }
 
 // 保存LLM配置（在原有保存按钮点击时调用）
 function saveLLMConfig() {
-  const provider = $('#llmProvider').val();
-  const model = $('#llmModel').val();
-  const customModel = $('#llmCustomModel').val();
-  const apiKey = $('#llmApiKey').val();
-  const baseUrl = $('#llmBaseUrl').val();
-  
-  chrome.storage.sync.set({
-    llmProvider: provider,
-    llmModel: model,
-    llmCustomModel: customModel,
-    llmApiKey: apiKey,
-    llmBaseUrl: baseUrl
-  });
+  cacheCurrentProviderForm();
+  llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
+  persistLLMState(updateQuickPresetMenu);
 }
 
 // 获取语言输出指令
@@ -123,80 +520,121 @@ function getLanguageInstruction(languageCode) {
   return languageInfo.instruction;
 }
 
+function getFallbackUserLanguage() {
+  const browserLang = chrome.i18n.getUILanguage();
+  if (browserLang.startsWith('zh')) {
+    return 'zh_CN';
+  }
+  if (browserLang.startsWith('ja')) {
+    return 'ja';
+  }
+  return 'en';
+}
+
+function resolveOptimizationConfig(preset) {
+  cacheCurrentProviderForm();
+
+  const provider = preset && preset.provider ? preset.provider : llmActiveProvider;
+  if (!isValidProvider(provider)) {
+    throw new Error(getLLMMessage('aiNotConfigured'));
+  }
+
+  const savedProviderConfig = normalizeProviderConfig(provider, llmProviderConfigs[provider]);
+  const modelConfig = preset && preset.provider
+    ? normalizeProviderConfig(provider, {
+      model: preset.model,
+      customModel: preset.customModel,
+      apiKey: savedProviderConfig.apiKey,
+      baseUrl: savedProviderConfig.baseUrl
+    })
+    : savedProviderConfig;
+
+  let modelName = modelConfig.model;
+  if (modelConfig.model === 'custom') {
+    modelName = modelConfig.customModel;
+  }
+
+  if (!modelName || modelName.trim() === '') {
+    throw new Error(getLLMMessage('aiNotConfigured'));
+  }
+
+  if (!modelConfig.apiKey || modelConfig.apiKey.trim() === '') {
+    throw new Error(getLLMMessage('aiApiKeyRequired'));
+  }
+
+  const providerConfig = LLM_CONFIG.providers[provider];
+  if (providerConfig.requiresBaseUrl && (!modelConfig.baseUrl || modelConfig.baseUrl.trim() === '')) {
+    throw new Error(getLLMMessage('aiBaseUrlRequired', 'Please enter Base URL'));
+  }
+
+  return {
+    provider: provider,
+    model: modelName,
+    apiKey: modelConfig.apiKey,
+    baseUrl: modelConfig.baseUrl
+  };
+}
+
+function setAIButtonLoading($button, isLoading) {
+  const $targetButton = $button && $button.length ? $button : $('#ai_optimize');
+  $('.ai-btn').prop('disabled', isLoading);
+  $targetButton.toggleClass('loading', isLoading);
+}
+
 // AI优化功能
-function optimizeWithAI() {
+function optimizeWithAI(preset, $button) {
   const content = $('#content').val();
   
   // 验证内容
   if (!content || content.trim() === '') {
     $.message({
-      message: chrome.i18n.getMessage('aiNoContent')
+      message: getLLMMessage('aiNoContent')
     });
     return;
   }
-  
-  // 获取LLM配置和用户语言设置
-  chrome.storage.sync.get(['llmProvider', 'llmModel', 'llmCustomModel', 'llmApiKey', 'llmBaseUrl', 'userLanguage'], function(data) {
-    if (!data.llmProvider || !data.llmModel) {
-      $.message({
-        message: chrome.i18n.getMessage('aiNotConfigured')
-      });
-      return;
-    }
-    
-    if (!data.llmApiKey || data.llmApiKey.trim() === '') {
-      $.message({
-        message: chrome.i18n.getMessage('aiApiKeyRequired')
-      });
-      return;
-    }
-    
-    // 确定实际使用的模型名称
-    let modelName = data.llmModel;
-    if (data.llmModel === 'custom' && data.llmCustomModel) {
-      modelName = data.llmCustomModel;
-    }
-    
-    // 获取用户语言设置（如果没有设置，默认使用浏览器语言）
-    let userLanguage = data.userLanguage;
-    if (!userLanguage) {
-      const browserLang = chrome.i18n.getUILanguage();
-      if (browserLang.startsWith('zh')) {
-        userLanguage = 'zh_CN';
-      } else if (browserLang.startsWith('ja')) {
-        userLanguage = 'ja';
-      } else {
-        userLanguage = 'en';
-      }
-    }
-    
-    console.log('🌐 用户语言设置:', userLanguage);
-    
-    // 显示加载状态
-    const $aiBtn = $('#ai_optimize');
-    $aiBtn.prop('disabled', true).addClass('loading');
+
+  let optimizationConfig;
+  try {
+    optimizationConfig = resolveOptimizationConfig(preset);
+  } catch (error) {
     $.message({
-      message: chrome.i18n.getMessage('aiOptimizing')
+      message: error.message
     });
-    
-    // 调用LLM API，传入用户语言设置
-    callLLMAPI(data.llmProvider, modelName, data.llmApiKey, content, userLanguage, data.llmBaseUrl)
+    return;
+  }
+
+  chrome.storage.sync.get(['userLanguage'], function(data) {
+    const userLanguage = data.userLanguage || getFallbackUserLanguage();
+    console.log('🌐 用户语言设置:', userLanguage);
+
+    const $targetButton = $button && $button.length ? $button : $('#ai_optimize');
+    setAIButtonLoading($targetButton, true);
+    $.message({
+      message: getLLMMessage('aiOptimizing')
+    });
+
+    callLLMAPI(
+      optimizationConfig.provider,
+      optimizationConfig.model,
+      optimizationConfig.apiKey,
+      content,
+      userLanguage,
+      optimizationConfig.baseUrl
+    )
       .then(function(optimizedContent) {
-        // 优化成功
         $('#content').val(optimizedContent);
         $.message({
-          message: chrome.i18n.getMessage('aiOptimizeSuccess')
+          message: getLLMMessage('aiOptimizeSuccess')
         });
       })
       .catch(function(error) {
         console.error('AI优化失败:', error);
         $.message({
-          message: chrome.i18n.getMessage('aiOptimizeFailed') + ': ' + error.message
+          message: getLLMMessage('aiOptimizeFailed') + ': ' + error.message
         });
       })
       .finally(function() {
-        // 恢复按钮状态
-        $aiBtn.prop('disabled', false).removeClass('loading');
+        setAIButtonLoading($targetButton, false);
       });
   });
 }

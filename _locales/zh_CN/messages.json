@@ -196,5 +196,20 @@
    },
    "aiBaseUrlRequired":{
       "message": "请输入 New API Base URL"
+   },
+   "llmQuickPresetsLabel":{
+      "message": "快捷 AI 优化预设"
+   },
+   "llmQuickPresetPrefix":{
+      "message": "快捷"
+   },
+   "llmQuickPresetEmpty":{
+      "message": "未设置"
+   },
+   "llmQuickPresetMenuTooltip":{
+      "message": "选择快捷 AI 优化预设"
+   },
+   "llmQuickPresetNotConfigured":{
+      "message": "该快捷预设尚未配置"
    }
 }

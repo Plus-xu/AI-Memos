@@ -121,7 +121,15 @@ a{color: var(--text-link);}
     line-height: 1.5rem;
     overflow-wrap: anywhere;
     word-break: normal;}
-.btns-container{text-align:right;}
+.btns-container{
+    text-align:right;
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-shrink: 0;
+    position: relative;
+    white-space: nowrap;
+}
 .common-editor-inputer,input.inputer{
     font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,Liberation Mono,Courier New,monospace;
     height: 100%;
@@ -316,6 +324,9 @@ input.inputer{border-bottom: 1px solid var(--border-color);width:75%;}
 }
 
 .\!hidden{
+    display: none!important;
+}
+.hidden{
     display: none!important;
 }
 .selector-wrapper {
@@ -614,6 +625,46 @@ input.inputer{border-bottom: 1px solid var(--border-color);width:75%;}
     box-shadow: 0 0 0 3px var(--bg-border);
 }
 
+.quick-preset-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    border-top: 1px dashed var(--bg-border);
+}
+
+.quick-preset-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.quick-preset-row {
+    display: grid;
+    grid-template-columns: 4.25rem minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.quick-preset-name {
+    color: var(--text-secondary);
+    font-size: 0.75rem;
+    line-height: 1.25rem;
+    white-space: nowrap;
+}
+
+.quick-preset-row select,
+.quick-preset-row input {
+    min-width: 0;
+    font-size: 0.875rem;
+    padding: 0.4rem 0.5rem;
+}
+
+.quick-preset-custom-model {
+    grid-column: 2 / 4;
+}
+
 /* AI 优化按钮样式 AI Optimize Button */
 .ai-btn {
     display: inline-flex;
@@ -637,6 +688,69 @@ input.inputer{border-bottom: 1px solid var(--border-color);width:75%;}
     transition: all 0.2s ease;
     vertical-align: middle;
     position: relative;
+}
+
+.ai-split-wrapper {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    height: 2rem;
+    margin-right: 0.5rem;
+    flex-shrink: 0;
+}
+
+.ai-split-wrapper .ai-btn {
+    margin-right: 0;
+}
+
+.ai-main-btn {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.ai-quick-toggle {
+    width: 1.75rem;
+    padding: 0;
+    border-left: 1px solid rgba(255,255,255,.35);
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.ai-quick-menu {
+    position: absolute;
+    right: 0;
+    bottom: calc(100% + 0.35rem);
+    z-index: 10002;
+    min-width: 14rem;
+    max-width: 18rem;
+    padding: 0.25rem;
+    border: 1px solid var(--bg-border);
+    border-radius: 0.375rem;
+    background-color: var(--bg-secondary);
+    box-shadow: 0 8px 24px rgb(0 0 0 / .16);
+}
+
+.ai-quick-item {
+    display: block;
+    width: 100%;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0.25rem;
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+    font-size: 0.8125rem;
+    line-height: 1.2rem;
+    text-align: left;
+    overflow-wrap: anywhere;
+}
+
+.ai-quick-item:hover {
+    background-color: var(--bg-border);
+}
+
+.ai-quick-item:disabled {
+    color: var(--text-tertiary);
+    cursor: not-allowed;
 }
 
 .ai-btn:hover {

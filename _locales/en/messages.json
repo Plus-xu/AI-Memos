@@ -196,5 +196,20 @@
    },
    "aiBaseUrlRequired":{
       "message": "Please enter New API Base URL"
+   },
+   "llmQuickPresetsLabel":{
+      "message": "Quick AI optimization presets"
+   },
+   "llmQuickPresetPrefix":{
+      "message": "Quick"
+   },
+   "llmQuickPresetEmpty":{
+      "message": "Not set"
+   },
+   "llmQuickPresetMenuTooltip":{
+      "message": "Choose a quick AI optimization preset"
+   },
+   "llmQuickPresetNotConfigured":{
+      "message": "This quick preset is not configured"
    }
 }
