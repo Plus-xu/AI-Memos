@@ -106,11 +106,12 @@ function buildMemoAttachmentHtml(info, memo) {
 
 function buildMemoHtml(info, memo) {
   var memoId = MemosAPI.getMemoId(memo);
+  var memoUrl = MemosAPI.buildMemoUrl(info.apiUrl, memo);
   var createTime = memo.createTime || memo.createdTs || '';
   var timeText = createTime ? dayjs(createTime).fromNow() : '';
 
   var itemHtml = '<div class="random-item"><div class="random-time">';
-  itemHtml += '<span class="random-link" data-uid="' + escapeHtml(memoId) + '"><svg class="icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path d="M864 640a32 32 0 0 1 64 0v224.096A63.936 63.936 0 0 1 864.096 928H159.904A63.936 63.936 0 0 1 96 864.096V159.904C96 124.608 124.64 96 159.904 96H384a32 32 0 0 1 0 64H192.064A31.904 31.904 0 0 0 160 192.064v639.872A31.904 31.904 0 0 0 192.064 864h639.872A31.904 31.904 0 0 0 864 831.936V640zm-485.184 52.48a31.84 31.84 0 0 1-45.12-.128 31.808 31.808 0 0 1-.128-45.12L815.04 166.048l-176.128.736a31.392 31.392 0 0 1-31.584-31.744 32.32 32.32 0 0 1 31.84-32l255.232-1.056a31.36 31.36 0 0 1 31.584 31.584L924.928 388.8a32.32 32.32 0 0 1-32 31.84 31.392 31.392 0 0 1-31.712-31.584l.736-179.392L378.816 692.48z" fill="#666" class="selected"/></svg></span>';
+  itemHtml += '<span class="random-link" data-uid="' + escapeHtml(memoId) + '" data-url="' + escapeHtml(memoUrl) + '"><svg class="icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path d="M864 640a32 32 0 0 1 64 0v224.096A63.936 63.936 0 0 1 864.096 928H159.904A63.936 63.936 0 0 1 96 864.096V159.904C96 124.608 124.64 96 159.904 96H384a32 32 0 0 1 0 64H192.064A31.904 31.904 0 0 0 160 192.064v639.872A31.904 31.904 0 0 0 192.064 864h639.872A31.904 31.904 0 0 0 864 831.936V640zm-485.184 52.48a31.84 31.84 0 0 1-45.12-.128 31.808 31.808 0 0 1-.128-45.12L815.04 166.048l-176.128.736a31.392 31.392 0 0 1-31.584-31.744 32.32 32.32 0 0 1 31.84-32l255.232-1.056a31.36 31.36 0 0 1 31.584 31.584L924.928 388.8a32.32 32.32 0 0 1-32 31.84 31.392 31.392 0 0 1-31.712-31.584l.736-179.392L378.816 692.48z" fill="#666" class="selected"/></svg></span>';
   itemHtml += '<span class="random-delete" data-name="' + escapeHtml(memo.name) + '" data-uid="' + escapeHtml(memoId) + '"><svg class="icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path d="M224 322.6h576c16.6 0 30-13.4 30-30s-13.4-30-30-30H224c-16.6 0-30 13.4-30 30 0 16.5 13.5 30 30 30zm66.1-144.2h443.8c16.6 0 30-13.4 30-30s-13.4-30-30-30H290.1c-16.6 0-30 13.4-30 30s13.4 30 30 30zm339.5 435.5H394.4c-16.6 0-30 13.4-30 30s13.4 30 30 30h235.2c16.6 0 30-13.4 30-30s-13.4-30-30-30z" fill="#666"/><path d="M850.3 403.9H173.7c-33 0-60 27-60 60v360c0 33 27 60 60 60h676.6c33 0 60-27 60-60v-360c0-33-27-60-60-60zm-.1 419.8l-.1.1H173.9l-.1-.1V464l.1-.1h676.2l.1.1v359.7z" fill="#666"/></svg></span>';
   itemHtml += escapeHtml(timeText) + '</div>';
   itemHtml += '<div class="random-content">' + renderMarkdownPreview(memo.content || '') + '</div>';
@@ -463,9 +464,10 @@ function randDom(randomData) {
 }
 
 $(document).on("click", ".random-link", function () {
-  var memoUid = $(this).data('uid');
+  var memoUrl = $(this).attr('data-url');
+  var memoUid = $(this).attr('data-uid');
   get_info(function (info) {
-    chrome.tabs.create({ url: info.apiUrl + "m/" + memoUid });
+    chrome.tabs.create({ url: memoUrl || (info.apiUrl + "memos/" + encodeURIComponent(memoUid)) });
   });
 });
 

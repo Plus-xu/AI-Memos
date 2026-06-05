@@ -99,6 +99,21 @@ const MemosAPI = (function () {
     return memo.name.split('/').pop();
   }
 
+  function getMemoPageId(memo) {
+    if (!memo) return '';
+    var memoId = getMemoId(memo);
+    if (memoId) return memoId;
+    if (memo.uid !== undefined && memo.uid !== null && memo.uid !== '') return String(memo.uid);
+    if (memo.id !== undefined && memo.id !== null && memo.id !== '') return String(memo.id);
+    return '';
+  }
+
+  function buildMemoUrl(apiUrl, memo) {
+    var memoPageId = getMemoPageId(memo);
+    if (!memoPageId) return normalizeBaseUrl(apiUrl);
+    return normalizeBaseUrl(apiUrl) + 'memos/' + encodeURIComponent(memoPageId);
+  }
+
   function getMemoAttachments(memo) {
     if (!memo) return [];
     return memo.attachments || memo.resources || [];
@@ -122,7 +137,9 @@ const MemosAPI = (function () {
     archiveMemo: archiveMemo,
     uploadAttachment: uploadAttachment,
     getMemoId: getMemoId,
+    getMemoPageId: getMemoPageId,
     getMemoAttachments: getMemoAttachments,
+    buildMemoUrl: buildMemoUrl,
     buildFileUrl: buildFileUrl
   };
 })();
