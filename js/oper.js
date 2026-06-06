@@ -131,6 +131,47 @@ function renderMemoList(info, memos) {
   window.ViewImage && ViewImage.init('.random-image');
 }
 
+function resolveShortcutUser(info) {
+  if (info.userid || info.userName) {
+    return $.Deferred().resolve(info.userid || info.userName).promise();
+  }
+
+  return MemosAPI.currentUser(info.apiUrl, info.apiTokens).then(function (userInfo) {
+    chrome.storage.sync.set({
+      userid: userInfo.userId,
+      userName: userInfo.userName
+    });
+    return userInfo.userId || userInfo.userName;
+  });
+}
+
+function getShortcutTitle(shortcut) {
+  if (shortcut.title) return shortcut.title;
+  if (shortcut.name) return shortcut.name.split('/').pop();
+  return chrome.i18n.getMessage("shortcutUntitled") || 'Untitled shortcut';
+}
+
+function renderShortcutList(shortcuts) {
+  if (!shortcuts.length) {
+    $("#shortcutlist")
+      .html('<div class="shortcut-empty">' + escapeHtml(chrome.i18n.getMessage("noShortcutsFound")) + '</div>')
+      .slideDown(500);
+    return;
+  }
+
+  var shortcutHtml = '';
+  for (var i = 0; i < shortcuts.length; i++) {
+    var shortcut = shortcuts[i] || {};
+    var shortcutFilter = shortcut.filter || '';
+    var shortcutTitle = getShortcutTitle(shortcut);
+    shortcutHtml += '<button type="button" class="shortcut-item" data-filter="' + escapeHtml(shortcutFilter) + '">';
+    shortcutHtml += '<span class="shortcut-title">' + escapeHtml(shortcutTitle) + '</span>';
+    shortcutHtml += '</button>';
+  }
+
+  $("#shortcutlist").html(shortcutHtml).slideDown(500);
+}
+
 get_info(function (info) {
   if (info.status) {
     $('#blog_info').hide();
@@ -366,6 +407,55 @@ $('#tags').click(function () {
       $("#taglist").html(tagDom).slideToggle(500);
     }).catch(function (xhr) {
       showApiError('Tags API failed', xhr, chrome.i18n.getMessage("apiFailed"));
+    });
+  });
+});
+
+$('#shortcuts').click(function () {
+  get_info(function (info) {
+    if (!info.status) {
+      $.message({ message: chrome.i18n.getMessage("placeApiUrl") });
+      return;
+    }
+
+    $("#taglist").hide();
+    $("#shortcutlist").html('').hide();
+
+    resolveShortcutUser(info).then(function (user) {
+      return MemosAPI.listShortcuts(info, user);
+    }).then(function (shortcuts) {
+      if (!shortcuts.length) {
+        $.message({ message: chrome.i18n.getMessage("noShortcutsFound") });
+      }
+      renderShortcutList(shortcuts);
+    }).catch(function (xhr) {
+      showApiError('Shortcuts API failed', xhr, chrome.i18n.getMessage("apiFailed"));
+    });
+  });
+});
+
+$(document).on("click", ".shortcut-item", function () {
+  var shortcutFilter = $(this).attr('data-filter') || '';
+  if (!shortcutFilter) {
+    $.message({ message: chrome.i18n.getMessage("shortcutNoFilter") });
+    return;
+  }
+
+  get_info(function (info) {
+    if (!info.status) {
+      $.message({ message: chrome.i18n.getMessage("placeApiUrl") });
+      return;
+    }
+
+    $("#randomlist").html('').hide();
+    MemosAPI.listMemos(info, "?filter=" + encodeURIComponent(shortcutFilter)).then(function (memos) {
+      if (!memos.length) {
+        $.message({ message: chrome.i18n.getMessage("noShortcutResults") });
+        return;
+      }
+      renderMemoList(info, memos);
+    }).catch(function (xhr) {
+      showApiError('Shortcut memo API failed', xhr, chrome.i18n.getMessage("apiFailed"));
     });
   });
 });

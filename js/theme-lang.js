@@ -233,6 +233,7 @@ function updatePageTexts(messages) {
     'newtodo': 'todoTooltip',
     'upres': 'uploadTooltip',
     'getlink': 'linkTooltip',
+    'shortcuts': 'shortcutsTooltip',
     'random': 'randomTooltip',
     'search': 'searchTooltip',
     'lock': 'visibilityTooltip'
@@ -299,6 +300,7 @@ function initToolbarTooltips() {
     'newtodo': 'todoTooltip',
     'upres': 'uploadTooltip',
     'getlink': 'linkTooltip',
+    'shortcuts': 'shortcutsTooltip',
     'random': 'randomTooltip',
     'search': 'searchTooltip',
     'lock': 'visibilityTooltip',

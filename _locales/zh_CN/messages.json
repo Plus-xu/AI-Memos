@@ -131,6 +131,9 @@
    "linkTooltip":{
       "message": "获取链接"
    },
+   "shortcutsTooltip":{
+      "message": "快捷视图"
+   },
    "randomTooltip":{
       "message": "随机回顾"
    },
@@ -145,6 +148,18 @@
    },
    "noSearchResults":{
       "message": "没有找到匹配的 memos"
+   },
+   "noShortcutsFound":{
+      "message": "没有找到快捷视图"
+   },
+   "noShortcutResults":{
+      "message": "这个快捷视图下没有找到 memos"
+   },
+   "shortcutNoFilter":{
+      "message": "这个快捷视图没有筛选条件"
+   },
+   "shortcutUntitled":{
+      "message": "未命名快捷视图"
    },
    "apiFailed":{
       "message": "API 调用失败"

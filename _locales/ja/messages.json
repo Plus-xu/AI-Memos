@@ -131,6 +131,9 @@
    "linkTooltip":{
       "message": "リンクを取得"
    },
+   "shortcutsTooltip":{
+      "message": "ショートカット"
+   },
    "randomTooltip":{
       "message": "ランダムレビュー"
    },
@@ -145,6 +148,18 @@
    },
    "noSearchResults":{
       "message": "一致するメモが見つかりません"
+   },
+   "noShortcutsFound":{
+      "message": "ショートカットが見つかりません"
+   },
+   "noShortcutResults":{
+      "message": "このショートカットに一致するメモが見つかりません"
+   },
+   "shortcutNoFilter":{
+      "message": "このショートカットにはフィルターがありません"
+   },
+   "shortcutUntitled":{
+      "message": "無題のショートカット"
    },
    "apiFailed":{
       "message": "API呼び出しに失敗しました"

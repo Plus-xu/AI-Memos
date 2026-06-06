@@ -55,6 +55,22 @@ const MemosAPI = (function () {
     });
   }
 
+  function listShortcuts(info, parent) {
+    var parentName = String(parent || '').trim();
+    if (!parentName) {
+      parentName = info.userName || info.userid || info.userId || 'me';
+    }
+    if (parentName.slice(0, 6) !== 'users/') {
+      parentName = 'users/' + parentName;
+    }
+
+    return request(info, {
+      path: 'api/v1/' + parentName.split('/').map(encodeURIComponent).join('/') + '/shortcuts'
+    }).then(function (data) {
+      return data.shortcuts || data.items || [];
+    });
+  }
+
   function getMemo(info, memoName) {
     return request(info, {
       path: 'api/v1/' + memoName
@@ -132,6 +148,7 @@ const MemosAPI = (function () {
     normalizeBaseUrl: normalizeBaseUrl,
     currentUser: currentUser,
     listMemos: listMemos,
+    listShortcuts: listShortcuts,
     getMemo: getMemo,
     createMemo: createMemo,
     archiveMemo: archiveMemo,
