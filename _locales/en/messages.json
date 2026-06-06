@@ -41,6 +41,18 @@
    "visibilityTooltip":{
       "message": "Set visibility scope"
    },
+   "memoPinnedLabel":{
+      "message": "Pin"
+   },
+   "memoCreateTimeLabel":{
+      "message": "Memo time"
+   },
+   "memoCreateTimeTooltip":{
+      "message": "Set the memo create time"
+   },
+   "createTimeRequired":{
+      "message": "Please choose a memo time"
+   },
    "submitBtn":{
       "message": "Save"
    },

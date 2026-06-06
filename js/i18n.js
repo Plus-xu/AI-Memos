@@ -4,6 +4,9 @@ document.getElementById("saveTag").textContent = chrome.i18n.getMessage("saveBtn
 document.getElementById("apiUrl").placeholder = chrome.i18n.getMessage("placeApiUrl");
 document.getElementById("apiTokens").placeholder = chrome.i18n.getMessage("placeApiTokens");
 document.getElementById("content").placeholder = chrome.i18n.getMessage("placeContent");
+document.getElementById("memoPinnedLabel").textContent = chrome.i18n.getMessage("memoPinnedLabel");
+document.getElementById("memoCreateTimeLabel").textContent = chrome.i18n.getMessage("memoCreateTimeLabel");
+document.getElementById("memoCreateTime").title = chrome.i18n.getMessage("memoCreateTimeTooltip");
 
 document.getElementById("lockPrivate").textContent = chrome.i18n.getMessage("lockPrivate");
 document.getElementById("lockProtected").textContent = chrome.i18n.getMessage("lockProtected");

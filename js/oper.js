@@ -12,7 +12,10 @@ function get_info(callback) {
       open_action: '',
       open_content: '',
       userid: '',
-      userName: ''
+      userName: '',
+      memo_pinned: false,
+      memo_create_time_enabled: false,
+      memo_create_time: ''
     },
     function (items) {
       var returnObject = {
@@ -25,7 +28,10 @@ function get_info(callback) {
         open_content: items.open_content,
         open_action: items.open_action,
         userid: items.userid,
-        userName: items.userName
+        userName: items.userName,
+        memo_pinned: !!items.memo_pinned,
+        memo_create_time_enabled: !!items.memo_create_time_enabled,
+        memo_create_time: items.memo_create_time || ''
       };
 
       if (callback) callback(returnObject);
@@ -65,6 +71,65 @@ function resolveVisibility(info) {
   }
 
   return sendvisi;
+}
+
+function getLocalDateTimeValue(date) {
+  var pad = function (num) {
+    return String(num).padStart(2, '0');
+  };
+  return date.getFullYear() + '-' +
+    pad(date.getMonth() + 1) + '-' +
+    pad(date.getDate()) + 'T' +
+    pad(date.getHours()) + ':' +
+    pad(date.getMinutes());
+}
+
+function setCreateTimeInputState() {
+  var enabled = $('#memoCreateTimeEnabled').is(':checked');
+  var createTimeInput = $('#memoCreateTime');
+
+  createTimeInput.prop('disabled', !enabled);
+  if (enabled && !createTimeInput.val()) {
+    createTimeInput.val(getLocalDateTimeValue(new Date()));
+  }
+}
+
+function saveCreateOptions() {
+  chrome.storage.sync.set({
+    memo_pinned: $('#memoPinned').is(':checked'),
+    memo_create_time_enabled: $('#memoCreateTimeEnabled').is(':checked'),
+    memo_create_time: $('#memoCreateTime').val()
+  });
+}
+
+function loadCreateOptions(info) {
+  $('#memoPinned').prop('checked', info.memo_pinned);
+  $('#memoCreateTimeEnabled').prop('checked', info.memo_create_time_enabled);
+  $('#memoCreateTime').val(info.memo_create_time);
+  setCreateTimeInputState();
+}
+
+function getCreateMemoOptions() {
+  var options = {};
+
+  if ($('#memoPinned').is(':checked')) {
+    options.pinned = true;
+  }
+
+  if ($('#memoCreateTimeEnabled').is(':checked')) {
+    var createTimeValue = $('#memoCreateTime').val();
+    var createTime = createTimeValue ? new Date(createTimeValue) : null;
+
+    if (!createTime || Number.isNaN(createTime.getTime())) {
+      return {
+        error: chrome.i18n.getMessage("createTimeRequired") || 'Please choose a memo time'
+      };
+    }
+
+    options.createTime = createTime.toISOString();
+  }
+
+  return { body: options };
 }
 
 function escapeHtml(value) {
@@ -221,6 +286,7 @@ get_info(function (info) {
   $('#apiTokens').val(info.apiTokens);
   $('#hideInput').val(info.hidetag);
   $('#showInput').val(info.showtag);
+  loadCreateOptions(info);
   if (info.open_action === 'upload_image') {
     uploadImage(info.open_content);
   } else {
@@ -230,6 +296,15 @@ get_info(function (info) {
 });
 
 $("textarea[name=text]").focus();
+
+$('#memoPinned').on('change', saveCreateOptions);
+
+$('#memoCreateTimeEnabled').on('change', function () {
+  setCreateTimeInputState();
+  saveCreateOptions();
+});
+
+$('#memoCreateTime').on('change', saveCreateOptions);
 
 $("textarea[name=text]").blur(function () {
   chrome.storage.sync.set(
@@ -702,6 +777,13 @@ function sendText() {
       content: content,
       visibility: resolveVisibility(info)
     };
+    var createMemoOptions = getCreateMemoOptions();
+    if (createMemoOptions.error) {
+      $.message({ message: createMemoOptions.error });
+      return;
+    }
+    Object.assign(body, createMemoOptions.body);
+    saveCreateOptions();
 
     MemosAPI.createMemo(info, body).then(function (data) {
       console.log('Memo saved:', data);

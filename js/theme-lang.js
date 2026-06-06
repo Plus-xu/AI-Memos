@@ -157,7 +157,9 @@ function updatePageTexts(messages) {
     'lockProtected': 'lockProtected',
     'lockPublic': 'lockPublic',
     'content_submit_text': 'submitBtn',
-    'languageLabel': 'languageLabel'
+    'languageLabel': 'languageLabel',
+    'memoPinnedLabel': 'memoPinnedLabel',
+    'memoCreateTimeLabel': 'memoCreateTimeLabel'
   };
 
   // 更新文本内容
@@ -185,6 +187,11 @@ function updatePageTexts(messages) {
     if (element && messages[messageKey]) {
       element.placeholder = messages[messageKey].message;
     }
+  }
+
+  const memoCreateTime = document.getElementById('memoCreateTime');
+  if (memoCreateTime && messages['memoCreateTimeTooltip']) {
+    memoCreateTime.title = messages['memoCreateTimeTooltip'].message;
   }
   
   // 更新 AI 配置标签

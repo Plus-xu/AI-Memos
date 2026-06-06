@@ -41,6 +41,18 @@
    "visibilityTooltip":{
       "message": "设置可见范围"
    },
+   "memoPinnedLabel":{
+      "message": "置顶"
+   },
+   "memoCreateTimeLabel":{
+      "message": "记录时间"
+   },
+   "memoCreateTimeTooltip":{
+      "message": "设置 memo 的创建时间"
+   },
+   "createTimeRequired":{
+      "message": "请选择记录时间"
+   },
    "submitBtn":{
       "message": "记下"
    },
