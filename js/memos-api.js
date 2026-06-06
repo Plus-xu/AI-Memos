@@ -85,6 +85,14 @@ const MemosAPI = (function () {
     });
   }
 
+  function getLinkMetadata(info, url) {
+    return request(info, {
+      path: 'api/v1/memos/-/linkMetadata?url=' + encodeURIComponent(url)
+    }).then(function (data) {
+      return data.linkMetadata || data.metadata || data;
+    });
+  }
+
   function archiveMemo(info, memoName) {
     return request(info, {
       path: 'api/v1/' + memoName + '?updateMask=state',
@@ -151,6 +159,7 @@ const MemosAPI = (function () {
     listShortcuts: listShortcuts,
     getMemo: getMemo,
     createMemo: createMemo,
+    getLinkMetadata: getLinkMetadata,
     archiveMemo: archiveMemo,
     uploadAttachment: uploadAttachment,
     getMemoId: getMemoId,

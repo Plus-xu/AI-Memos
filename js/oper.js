@@ -172,6 +172,33 @@ function renderShortcutList(shortcuts) {
   $("#shortcutlist").html(shortcutHtml).slideDown(500);
 }
 
+function escapeMarkdownText(value) {
+  return String(value || '')
+    .replace(/\\/g, '\\\\')
+    .replace(/\[/g, '\\[')
+    .replace(/\]/g, '\\]')
+    .replace(/\n+/g, ' ')
+    .trim();
+}
+
+function getMetadataValue(metadata, key) {
+  if (!metadata) return '';
+  return metadata[key] || metadata.linkMetadata && metadata.linkMetadata[key] || metadata.metadata && metadata.metadata[key] || '';
+}
+
+function buildLinkMarkdown(tab, metadata) {
+  var url = getMetadataValue(metadata, 'url') || tab.url || '';
+  var title = getMetadataValue(metadata, 'title') || tab.title || url;
+  var description = getMetadataValue(metadata, 'description');
+  var markdown = ' [' + escapeMarkdownText(title) + '](' + url + ') ';
+
+  if (description) {
+    markdown += '\n> ' + escapeMarkdownText(description) + '\n';
+  }
+
+  return markdown;
+}
+
 get_info(function (info) {
   if (info.status) {
     $('#blog_info').hide();
@@ -584,12 +611,25 @@ $('#newtodo').click(function () {
 $('#getlink').click(function () {
   chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
     var tab = tabs[0] || {};
-    var linkHtml = " [" + tab.title + "](" + tab.url + ") ";
-    if (tab.url) {
-      add(linkHtml);
-    } else {
+    if (!tab.url) {
       $.message({ message: chrome.i18n.getMessage("getTabFailed") });
+      return;
     }
+
+    get_info(function (info) {
+      var fallbackMarkdown = buildLinkMarkdown(tab);
+      if (!info.status) {
+        add(fallbackMarkdown);
+        return;
+      }
+
+      MemosAPI.getLinkMetadata(info, tab.url).then(function (metadata) {
+        add(buildLinkMarkdown(tab, metadata));
+      }).catch(function (xhr) {
+        console.warn('Link metadata API failed, using basic link.', xhr);
+        add(fallbackMarkdown);
+      });
+    });
   });
 });
 
