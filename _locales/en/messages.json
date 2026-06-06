@@ -131,6 +131,9 @@
    "linkTooltip":{
       "message": "Get link"
    },
+   "shortcutsTooltip":{
+      "message": "Shortcuts"
+   },
    "randomTooltip":{
       "message": "Random review"
    },
@@ -145,6 +148,18 @@
    },
    "noSearchResults":{
       "message": "No matching memos found"
+   },
+   "noShortcutsFound":{
+      "message": "No shortcuts found"
+   },
+   "noShortcutResults":{
+      "message": "No memos found for this shortcut"
+   },
+   "shortcutNoFilter":{
+      "message": "This shortcut has no filter"
+   },
+   "shortcutUntitled":{
+      "message": "Untitled shortcut"
    },
    "apiFailed":{
       "message": "API call failed"
