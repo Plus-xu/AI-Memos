@@ -41,6 +41,18 @@
    "visibilityTooltip":{
       "message": "公開範囲を設定"
    },
+   "memoPinnedLabel":{
+      "message": "ピン留め"
+   },
+   "memoCreateTimeLabel":{
+      "message": "記録時刻"
+   },
+   "memoCreateTimeTooltip":{
+      "message": "メモの作成時刻を設定"
+   },
+   "createTimeRequired":{
+      "message": "記録時刻を選択してください"
+   },
    "submitBtn":{
       "message": "記録"
    },
