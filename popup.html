@@ -111,10 +111,28 @@
             <div id="quickPresetRows" class="quick-preset-rows"></div>
           </div>
         </div>
+        <div class="clip-template-section">
+          <label for="clipTemplate" class="config-label" data-feature-message="clipTemplateLabel"></label>
+          <textarea id="clipTemplate" class="feature-textarea" rows="4" maxlength="8000"></textarea>
+          <p class="feature-help" data-feature-message="clipTemplateHelp"></p>
+          <button id="clipTemplateReset" class="secondary-btn" type="button" data-feature-message="clipTemplateReset"></button>
+        </div>
         
         <span id="saveKey" class="action-btn confirm-btn"></span>
     </div>
 
+    <div class="editor-actions">
+      <button id="captureSource" class="secondary-btn" type="button" data-feature-message="clipAddSource"></button>
+      <label for="aiTask" data-feature-message="aiTaskLabel"></label>
+      <select id="aiTask">
+        <option value="organize" data-feature-message="aiTask_organize"></option>
+        <option value="summary" data-feature-message="aiTask_summary"></option>
+        <option value="keypoints" data-feature-message="aiTask_keypoints"></option>
+        <option value="qa" data-feature-message="aiTask_qa"></option>
+      </select>
+      <button id="aiUndo" class="secondary-btn" type="button" disabled data-feature-message="aiUndo"></button>
+    </div>
+    <p class="feature-help" data-feature-message="clipSelectionHelp"></p>
     <div class="memo-editor">
       <textarea
         class="common-editor-inputer"
@@ -125,6 +143,23 @@
         required=""
       ></textarea>
     </div>
+
+    <section id="aiReviewPanel" class="ai-review-panel" hidden aria-labelledby="aiReviewTitle">
+      <div class="feature-panel-header">
+        <strong id="aiReviewTitle" data-feature-message="aiReviewTitle"></strong>
+        <span class="feature-help" data-feature-message="aiReviewHelp"></span>
+      </div>
+      <p id="aiReviewWarning" class="feature-warning" role="status" hidden></p>
+      <div class="ai-review-columns">
+        <label><span data-feature-message="aiOriginal"></span><textarea id="aiReviewOriginal" class="feature-textarea" rows="6" readonly></textarea></label>
+        <label><span data-feature-message="aiResult"></span><textarea id="aiReviewResult" class="feature-textarea" rows="6"></textarea></label>
+      </div>
+      <div class="feature-actions">
+        <button id="aiReviewReplace" class="secondary-btn primary-choice" type="button" data-feature-message="aiReplace"></button>
+        <button id="aiReviewAppend" class="secondary-btn" type="button" data-feature-message="aiAppend"></button>
+        <button id="aiReviewDiscard" class="secondary-btn" type="button" data-feature-message="aiDiscard"></button>
+      </div>
+    </section>
 
   <div class="common-tools-wrapper">
     <div class="common-tools-container">
@@ -241,6 +276,10 @@
   <script src="js/relativeTime.js"></script>
   <script src="js/view-image.js"></script>
   <script src="js/theme-lang.js"></script>
+  <script src="js/ai-workflow.js"></script>
+  <script src="js/ai-review.js"></script>
+  <script src="js/clipper-core.js"></script>
+  <script src="js/clipper.js"></script>
   <script src="js/ai-optimize.js"></script>
   <script src="js/memos-api.js"></script>
   <script src="js/draft-storage.js"></script>

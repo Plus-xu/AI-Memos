@@ -235,5 +235,98 @@
    },
    "draftSaveFailed": {
       "message": "下書きをローカルに保存できません。ポップアップを開いたまま内容をコピーしてください。"
+   },
+   "aiTaskLabel": {
+      "message": "AI タスク"
+   },
+   "aiTask_organize": {
+      "message": "文章を整理"
+   },
+   "aiTask_summary": {
+      "message": "要約"
+   },
+   "aiTask_keypoints": {
+      "message": "要点を抽出"
+   },
+   "aiTask_qa": {
+      "message": "学習 Q&A"
+   },
+   "aiTask_custom": {
+      "message": "カスタム指示"
+   },
+   "aiPresetName": {
+      "message": "プリセット名（任意）"
+   },
+   "aiCustomPrompt": {
+      "message": "このプリセットのタスクを入力"
+   },
+   "aiCustomPromptRequired": {
+      "message": "カスタムタスクの指示を入力してください。"
+   },
+   "aiReviewTitle": {
+      "message": "AI 結果を確認"
+   },
+   "aiReviewHelp": {
+      "message": "採用または追記するまで下書きは変更されません。"
+   },
+   "aiOriginal": {
+      "message": "元の文章"
+   },
+   "aiResult": {
+      "message": "AI 結果（編集可）"
+   },
+   "aiReplace": {
+      "message": "結果を採用"
+   },
+   "aiAppend": {
+      "message": "下書きに追記"
+   },
+   "aiDiscard": {
+      "message": "結果を破棄"
+   },
+   "aiUndo": {
+      "message": "AI 編集を戻す"
+   },
+   "aiUndoConflict": {
+      "message": "AI 編集後に文章が変更されたため、新しい内容は上書きしません。"
+   },
+   "aiEditConflict": {
+      "message": "下書きが変更されました。結果を追記するか、破棄して再実行してください。"
+   },
+   "aiMissingLinks": {
+      "message": "元のリンクが一部ありません。採用する前に確認してください。"
+   },
+   "aiReviewReady": {
+      "message": "AI 結果を確認してください。"
+   },
+   "aiResultApplied": {
+      "message": "AI 結果を採用しました。元に戻すこともできます。"
+   },
+   "clipAddSource": {
+      "message": "出典を追加"
+   },
+   "clipSelection": {
+      "message": "選択範囲と出典を保存"
+   },
+   "clipSelectionHelp": {
+      "message": "ウェブページで文章を選択し、右クリックして出典と一緒に保存できます。"
+   },
+   "clipCaptureFailed": {
+      "message": "このページの出典を取得できません。通常のページで再試行してください。"
+   },
+   "clipSourceAdded": {
+      "message": "出典を下書きに追記しました。"
+   },
+   "clipTemplateLabel": {
+      "message": "選択範囲のテンプレート"
+   },
+   "clipTemplateHelp": {
+      "message": "{{content}}、{{title}}、{{url}}、{{date}} が使えます。内容と URL は必須です。変更はローカルに保存されます。"
+   },
+   "clipTemplateReset": {
+      "message": "初期テンプレートに戻す"
+   },
+   "clipTemplateInvalid": {
+      "message": "{{content}} と {{url}} を含む、8000 文字以内のテンプレートを指定してください。"
    }
 }

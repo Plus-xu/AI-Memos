@@ -1,2 +1,5 @@
 # Local source archives
 /原始文件/
+
+# Generated extension packages
+/artifacts/

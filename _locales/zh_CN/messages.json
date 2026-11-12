@@ -235,5 +235,98 @@
    },
    "draftSaveFailed": {
       "message": "草稿暂时无法保存到本地，请保持弹窗打开并复制内容备份。"
+   },
+   "aiTaskLabel": {
+      "message": "AI 任务"
+   },
+   "aiTask_organize": {
+      "message": "整理格式"
+   },
+   "aiTask_summary": {
+      "message": "摘要"
+   },
+   "aiTask_keypoints": {
+      "message": "提取要点"
+   },
+   "aiTask_qa": {
+      "message": "生成问答"
+   },
+   "aiTask_custom": {
+      "message": "自定义提示词"
+   },
+   "aiPresetName": {
+      "message": "预设名称（可选）"
+   },
+   "aiCustomPrompt": {
+      "message": "填写此预设要执行的任务"
+   },
+   "aiCustomPromptRequired": {
+      "message": "请先填写自定义任务的提示词。"
+   },
+   "aiReviewTitle": {
+      "message": "确认 AI 结果"
+   },
+   "aiReviewHelp": {
+      "message": "原文保持不变，请查看后选择采用或追加。"
+   },
+   "aiOriginal": {
+      "message": "原文"
+   },
+   "aiResult": {
+      "message": "AI 结果（可编辑）"
+   },
+   "aiReplace": {
+      "message": "采用结果"
+   },
+   "aiAppend": {
+      "message": "追加到草稿"
+   },
+   "aiDiscard": {
+      "message": "取消结果"
+   },
+   "aiUndo": {
+      "message": "撤销 AI"
+   },
+   "aiUndoConflict": {
+      "message": "采用结果后正文已有修改，撤销不会覆盖你的新内容。"
+   },
+   "aiEditConflict": {
+      "message": "正文已修改，请追加结果，或取消后重新处理。"
+   },
+   "aiMissingLinks": {
+      "message": "结果缺少部分原始链接，请核对后再采用。"
+   },
+   "aiReviewReady": {
+      "message": "AI 结果已生成，请预览确认。"
+   },
+   "aiResultApplied": {
+      "message": "已采用 AI 结果，可使用“撤销 AI”恢复。"
+   },
+   "clipAddSource": {
+      "message": "添加来源"
+   },
+   "clipSelection": {
+      "message": "摘录选区并附来源"
+   },
+   "clipSelectionHelp": {
+      "message": "选中文本后，右键选择“摘录选区并附来源”，再打开扩展查看。"
+   },
+   "clipCaptureFailed": {
+      "message": "此页面暂时无法读取来源，请在普通网页重试。"
+   },
+   "clipSourceAdded": {
+      "message": "已将当前页来源追加到草稿。"
+   },
+   "clipTemplateLabel": {
+      "message": "选区剪藏模板"
+   },
+   "clipTemplateHelp": {
+      "message": "支持 {{content}}、{{title}}、{{url}}、{{date}}，必须保留内容和来源。修改后保存在本地。"
+   },
+   "clipTemplateReset": {
+      "message": "恢复默认模板"
+   },
+   "clipTemplateInvalid": {
+      "message": "模板必须包含 {{content}} 和 {{url}}，且不超过 8000 字符。"
    }
 }

@@ -259,6 +259,7 @@ get_info(function (info) {
     uploadImage(info.open_content);
   } else {
     $("textarea[name=text]").val(info.open_content);
+    if (typeof AIReview !== 'undefined') AIReview.refresh();
   }
   setTimeout(get_info, 1);
 });
@@ -686,6 +687,10 @@ function getOne(memosName) {
 
 function sendText() {
   if (memoSaveInProgress) return;
+  if (typeof AIReview !== 'undefined' && AIReview.isBusy()) {
+    $.message({ message: chrome.i18n.getMessage("aiOptimizing") });
+    return;
+  }
   if (pendingUploads) {
     $.message({ message: chrome.i18n.getMessage("picUploading") });
     return;
@@ -711,6 +716,7 @@ function sendText() {
     MemosAPI.prepareMemo(info, body).then(function (prepared) {
       return MemosAPI.createMemo(info, prepared);
     }).then(function (data) {
+      if (typeof AIReview !== 'undefined') AIReview.onMemoSaved(content);
       getOne(data.name);
       var current = $("textarea[name=text]").val();
       var remaining = current === content ? '' : current;

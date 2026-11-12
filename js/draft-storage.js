@@ -1,5 +1,6 @@
 /** Local drafts avoid storage.sync's per-item quota. Read old synced drafts on first use. */
 var DraftStorage = (function () {
+  var appendQueue = Promise.resolve();
   function load(callback) {
     chrome.storage.local.get({ memosDraft: null }, function (items) {
       if (items.memosDraft && typeof items.memosDraft.open_content === 'string') {
@@ -20,5 +21,21 @@ var DraftStorage = (function () {
     });
   }
 
-  return { load: load, save: save };
+  function append(content, callback) {
+    appendQueue = appendQueue.then(function () {
+      return new Promise(function (resolve) {
+        load(function (draft) {
+          var current = draft.open_content || '';
+          var combined = (current ? current.replace(/\s+$/, '') + '\n\n' : '') + content;
+          save({ open_action: 'save_text', open_content: combined }, function (error) {
+            if (callback) callback(error, combined);
+            resolve();
+          });
+        });
+      });
+    });
+    return appendQueue;
+  }
+
+  return { load: load, save: save, append: append };
 })();

@@ -235,5 +235,98 @@
    },
    "draftSaveFailed": {
       "message": "The draft could not be stored locally. Keep this popup open and copy your text."
+   },
+   "aiTaskLabel": {
+      "message": "AI task"
+   },
+   "aiTask_organize": {
+      "message": "Organize"
+   },
+   "aiTask_summary": {
+      "message": "Summarize"
+   },
+   "aiTask_keypoints": {
+      "message": "Key points"
+   },
+   "aiTask_qa": {
+      "message": "Study Q&A"
+   },
+   "aiTask_custom": {
+      "message": "Custom prompt"
+   },
+   "aiPresetName": {
+      "message": "Preset name (optional)"
+   },
+   "aiCustomPrompt": {
+      "message": "Describe the task for this preset"
+   },
+   "aiCustomPromptRequired": {
+      "message": "Enter a prompt for this custom task."
+   },
+   "aiReviewTitle": {
+      "message": "Review AI result"
+   },
+   "aiReviewHelp": {
+      "message": "Your draft stays unchanged until you choose an action."
+   },
+   "aiOriginal": {
+      "message": "Original"
+   },
+   "aiResult": {
+      "message": "AI result (editable)"
+   },
+   "aiReplace": {
+      "message": "Use result"
+   },
+   "aiAppend": {
+      "message": "Append to draft"
+   },
+   "aiDiscard": {
+      "message": "Discard result"
+   },
+   "aiUndo": {
+      "message": "Undo AI edit"
+   },
+   "aiUndoConflict": {
+      "message": "The draft changed after the AI edit. Undo will not overwrite newer text."
+   },
+   "aiEditConflict": {
+      "message": "The draft changed. Append the result or discard it and run AI again."
+   },
+   "aiMissingLinks": {
+      "message": "Some original links are missing. Check before adopting this result."
+   },
+   "aiReviewReady": {
+      "message": "AI result is ready for review."
+   },
+   "aiResultApplied": {
+      "message": "AI result applied. You can undo this edit."
+   },
+   "clipAddSource": {
+      "message": "Add page source"
+   },
+   "clipSelection": {
+      "message": "Clip selection with source"
+   },
+   "clipSelectionHelp": {
+      "message": "Select text on a webpage, then right-click “Clip selection with source”."
+   },
+   "clipCaptureFailed": {
+      "message": "Cannot read this page source. Try a normal webpage."
+   },
+   "clipSourceAdded": {
+      "message": "Page source added to the draft."
+   },
+   "clipTemplateLabel": {
+      "message": "Selection clip template"
+   },
+   "clipTemplateHelp": {
+      "message": "Use {{content}}, {{title}}, {{url}} and {{date}}. Content and URL are required. Saved locally on change."
+   },
+   "clipTemplateReset": {
+      "message": "Reset template"
+   },
+   "clipTemplateInvalid": {
+      "message": "Include {{content}} and {{url}} in a template of at most 8000 characters."
    }
 }

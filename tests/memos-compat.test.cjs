@@ -378,18 +378,18 @@ test('legacy drafts load, long drafts persist locally, and an empty local draft 
   assert.equal(empty.storage.open_content, 'draft text', 'legacy text must not resurrect after a successful save');
 });
 
-test('the service worker appends context-menu captures to the same local draft used by the popup', () => {
+test('the service worker appends context-menu captures with source to the popup draft', async () => {
   const popup = loadPopup({}, { memosDraft: { open_action: 'save_text', open_content: 'existing\n' } });
   let onClicked;
-  popup.context.importScripts = source => {
-    assert.equal(source, 'draft-storage.js');
-    vm.runInContext(fs.readFileSync(path.join(root, 'js', source), 'utf8'), popup.context);
+  popup.context.importScripts = (...sources) => {
+    for (const source of sources) vm.runInContext(fs.readFileSync(path.join(root, 'js', source), 'utf8'), popup.context);
   };
   popup.context.chrome.runtime.onInstalled = { addListener() {} };
   popup.context.chrome.contextMenus = { onClicked: { addListener(handler) { onClicked = handler; } } };
   vm.runInContext(fs.readFileSync(path.join(root, 'js/background.js'), 'utf8'), popup.context);
-  onClicked({ menuItemId: 'Memos-send-selection', selectionText: 'captured text' });
-  assert.equal(popup.storage.memosDraft.open_content, 'existing\ncaptured text\n');
+  onClicked({ menuItemId: 'Memos-send-selection', selectionText: 'captured text', pageUrl: 'https://example.org/article' }, { title: 'Article' });
+  await flush();
+  assert.ok(popup.storage.memosDraft.open_content.startsWith('existing\n\n> captured text\n\n[Article](https://example.org/article)'));
   const reopened = loadPopup({}, { memosDraft: popup.storage.memosDraft });
-  assert.equal(reopened.node('textarea[name=text]').val(), 'existing\ncaptured text\n');
+  assert.equal(reopened.node('textarea[name=text]').val(), popup.storage.memosDraft.open_content);
 });

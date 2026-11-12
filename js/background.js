@@ -1,66 +1,44 @@
-importScripts('draft-storage.js');
+importScripts('draft-storage.js', 'clipper-core.js');
 
-chrome.runtime.onInstalled.addListener(() => {
-    chrome.contextMenus.create(
-      {
-        type: 'normal',
-        title: 'AI-MEMOS',
-        id: 'Memos-open-server',
-        contexts: ['action']
-      },
-    )
-    chrome.contextMenus.create(
-      {
-        type: 'normal',
-        title: chrome.i18n.getMessage("sendTo"),
-        id: 'Memos-send-selection',
-        contexts: ['selection']
-      },
-    )
-    chrome.contextMenus.create(
-      {
-        type: 'normal',
-        title: chrome.i18n.getMessage("sendLinkTo"),
-        id: 'Memos-send-link',
-        contexts: ['link', 'page']
-      },
-    )
-    chrome.contextMenus.create(
-      {
-        type: 'normal',
-        title: chrome.i18n.getMessage("sendImageTo"),
-        id: 'Memos-send-image',
-        contexts: ['image']
-      },
-    )
-})
-chrome.contextMenus.onClicked.addListener(info => {
-    let tempCont=''
-    switch(info.menuItemId){
-      case 'Memos-open-server':
-        chrome.storage.sync.get({apiUrl: ''}, function(items) {
-          if (items.apiUrl) {
-            chrome.tabs.create({url: items.apiUrl})
-          } else {
-            chrome.tabs.create({url: chrome.runtime.getURL('popup.html')})
-          }
-        })
-        return
-      case 'Memos-send-selection':
-        tempCont = info.selectionText + '\n'
-        break
-      case 'Memos-send-link':
-        tempCont = (info.linkUrl || info.pageUrl) + '\n'
-        break
-      case 'Memos-send-image':
-        tempCont = `![](${info.srcUrl})` + '\n'
-        break
-    }
-    DraftStorage.load(function(items) {
-      if(items.open_action === 'upload_image') {
-        alert(chrome.i18n.getMessage("picPending"));
-      } else {
-        DraftStorage.save({open_action: "save_text", open_content: items.open_content + tempCont});
+chrome.runtime.onInstalled.addListener(function () {
+  chrome.contextMenus.removeAll(function () {
+    [
+      { title: 'AI-MEMOS', id: 'Memos-open-server', contexts: ['action'] },
+      { title: chrome.i18n.getMessage('clipSelection'), id: 'Memos-send-selection', contexts: ['selection'] },
+      { title: chrome.i18n.getMessage('sendLinkTo'), id: 'Memos-send-link', contexts: ['link', 'page'] },
+      { title: chrome.i18n.getMessage('sendImageTo'), id: 'Memos-send-image', contexts: ['image'] }
+    ].forEach(function (menu) { chrome.contextMenus.create(menu); });
+  });
+});
+
+chrome.contextMenus.onClicked.addListener(function (info, tab) {
+  if (info.menuItemId === 'Memos-open-server') {
+    chrome.storage.sync.get({ apiUrl: '' }, function (items) {
+      chrome.tabs.create({ url: items.apiUrl || chrome.runtime.getURL('popup.html') });
+    });
+    return;
+  }
+  if (info.menuItemId === 'Memos-send-selection') {
+    chrome.storage.local.get({ memosClipTemplate: ClipperCore.defaultTemplate }, function (items) {
+      try {
+        var template;
+        try { template = ClipperCore.validateTemplate(items.memosClipTemplate); }
+        catch (_) { template = ClipperCore.defaultTemplate; }
+        var clip = ClipperCore.format({
+          content: info.selectionText,
+          title: tab && tab.title,
+          url: info.frameUrl || info.pageUrl || tab && tab.url
+        }, template);
+        DraftStorage.append(clip + '\n');
+      } catch (error) {
+        console.error('Selection capture failed', { code: error.message });
       }
-    })
-})
+    });
+    return;
+  }
+  var content;
+  if (info.menuItemId === 'Memos-send-link') content = (info.linkUrl || info.pageUrl || '') + '\n';
+  else if (info.menuItemId === 'Memos-send-image') content = '![](' + info.srcUrl + ')\n';
+  else return;
+  DraftStorage.append(content);
+});
