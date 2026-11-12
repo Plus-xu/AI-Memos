@@ -3,6 +3,7 @@ var AIReview = (function () {
   var currentReview = null;
   var lastTransaction = null;
   var busy = false;
+  var runningTask = 'organize';
 
   function message(key) { return getLLMMessage(key, key); }
 
@@ -18,7 +19,18 @@ var AIReview = (function () {
     });
     $('#aiTask').attr('aria-label', message('aiTaskLabel'));
     $('#aiUndo').attr('title', message('aiUndo'));
+    refreshTaskHint();
     renderWarning();
+  }
+
+  function taskName(task) { return message('aiTask_' + AIWorkflow.normalizeTask(task)); }
+
+  function refreshTaskHint() {
+    var selected = AIWorkflow.normalizeTask($('#aiTask').val());
+    $('#aiTaskHelp').text(message('aiTaskHelp_' + selected));
+    $('#ai_optimize').attr('title', message('aiRunTask').replace('{task}', taskName(selected)));
+    $('#aiTaskStatus').text(message('aiRunningTask').replace('{task}', taskName(runningTask))).prop('hidden', !busy);
+    $('#aiReviewTask').text(currentReview ? message('aiExecutedTask').replace('{task}', taskName(currentReview.task)) : '');
   }
 
   function renderWarning() {
@@ -39,6 +51,7 @@ var AIReview = (function () {
       $('#aiReviewResult').val(currentReview.result);
     }
     renderWarning();
+    refreshTaskHint();
   }
 
   function show(input, result, task) {
@@ -90,7 +103,10 @@ var AIReview = (function () {
       render();
       refreshTexts();
     });
-    $('#aiTask').on('change', function () { chrome.storage.local.set({ memosAITask: AIWorkflow.normalizeTask(this.value) }); });
+    $('#aiTask').on('change', function () {
+      chrome.storage.local.set({ memosAITask: AIWorkflow.normalizeTask(this.value) });
+      refreshTaskHint();
+    });
     $('#aiReviewReplace').click(function () { adopt('replace'); });
     $('#aiReviewAppend').click(function () { adopt('append'); });
     $('#aiReviewDiscard').click(function () { currentReview = null; persist(); render(); });
@@ -104,6 +120,11 @@ var AIReview = (function () {
     $('#aiUndo').click(undo);
   }
 
-  return { init: init, show: show, refresh: renderWarning, refreshTexts: refreshTexts, onMemoSaved: onMemoSaved,
-    isBusy: function () { return busy; }, setBusy: function (value) { busy = value; renderWarning(); } };
+  return { init: init, show: show, refresh: renderWarning, refreshTaskHint: refreshTaskHint, refreshTexts: refreshTexts, onMemoSaved: onMemoSaved,
+    isBusy: function () { return busy; }, setBusy: function (value, task) {
+      busy = value;
+      if (task) runningTask = AIWorkflow.normalizeTask(task);
+      renderWarning();
+      refreshTaskHint();
+    } };
 })();

@@ -303,7 +303,7 @@
       "message": "AI result applied. You can undo this edit."
    },
    "clipAddSource": {
-      "message": "Add page source"
+      "message": "Insert page source"
    },
    "clipSelection": {
       "message": "Clip selection with source"
@@ -315,7 +315,7 @@
       "message": "Cannot read this page source. Try a normal webpage."
    },
    "clipSourceAdded": {
-      "message": "Page source added to the draft."
+      "message": "Page source inserted at the cursor."
    },
    "clipTemplateLabel": {
       "message": "Selection clip template"
@@ -328,5 +328,38 @@
    },
    "clipTemplateInvalid": {
       "message": "Include {{content}} and {{url}} in a template of at most 8000 characters."
+   },
+   "sourceIncludeTime": {
+      "message": "Include capture time"
+   },
+   "settingsSaveFailed": {
+      "message": "Could not save this setting. Please try again."
+   },
+   "aiTaskHelp_organize": {
+      "message": "Keep the information; polish paragraphs and Markdown without intentionally shortening."
+   },
+   "aiTaskHelp_summary": {
+      "message": "One short paragraph: target 150 Chinese characters or 100 English words; sources separately."
+   },
+   "aiTaskHelp_keypoints": {
+      "message": "Extract 3–7 structured points; use fewer when the material is short."
+   },
+   "aiTaskHelp_qa": {
+      "message": "Create 3–5 evidence-based Q&A pairs; do not pad short material."
+   },
+   "aiTaskHelp_custom": {
+      "message": "Follow the prompt configured in this quick preset."
+   },
+   "aiTaskUsageHint": {
+      "message": "The main AI button uses this selection; quick presets display and run their own tasks."
+   },
+   "aiRunTask": {
+      "message": "Run AI task: {task}"
+   },
+   "aiRunningTask": {
+      "message": "Running task: {task}"
+   },
+   "aiExecutedTask": {
+      "message": "Task for this result: {task}"
    }
 }

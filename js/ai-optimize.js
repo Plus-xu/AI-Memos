@@ -310,7 +310,7 @@ function getPresetLabel(preset, index) {
 
   const modelLabel = getModelDisplayName(preset.provider, preset.model, preset.customModel);
   const taskLabel = getLLMMessage('aiTask_' + AIWorkflow.normalizeTask(preset.task));
-  return (preset.name || taskLabel) + ' · ' + getProviderDisplayName(preset.provider) + ' / ' + modelLabel;
+  return (preset.name && preset.name !== taskLabel ? preset.name + ' · ' : '') + taskLabel + ' · ' + getProviderDisplayName(preset.provider) + ' / ' + modelLabel;
 }
 
 function collectQuickPresetConfigs() {
@@ -658,7 +658,7 @@ function optimizeWithAI(preset, $button) {
     return;
   }
 
-  AIReview.setBusy(true);
+  AIReview.setBusy(true, optimizationConfig.task);
   setAIButtonLoading($button, true);
   chrome.storage.sync.get(['userLanguage'], function(data) {
     const userLanguage = data.userLanguage || getFallbackUserLanguage();
@@ -666,6 +666,7 @@ function optimizeWithAI(preset, $button) {
 
     const $targetButton = $button && $button.length ? $button : $('#ai_optimize');
     setAIButtonLoading($targetButton, true);
+    AIReview.refreshTaskHint();
     $.message({
       message: getLLMMessage('aiOptimizing')
     });

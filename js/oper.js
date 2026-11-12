@@ -617,18 +617,6 @@ $('#newtodo').click(function () {
   add("\n- [ ] ");
 });
 
-$('#getlink').click(function () {
-  chrome.tabs.query({ active: true, currentWindow: true }, function (tabs) {
-    var tab = tabs[0] || {};
-    var linkHtml = " [" + tab.title + "](" + tab.url + ") ";
-    if (tab.url) {
-      add(linkHtml);
-    } else {
-      $.message({ message: chrome.i18n.getMessage("getTabFailed") });
-    }
-  });
-});
-
 $('#upres').click(function () {
   $('#inFile').click();
 });

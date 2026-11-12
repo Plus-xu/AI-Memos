@@ -232,7 +232,6 @@ function updatePageTexts(messages) {
     'tags': 'tagsTooltip',
     'newtodo': 'todoTooltip',
     'upres': 'uploadTooltip',
-    'getlink': 'linkTooltip',
     'random': 'randomTooltip',
     'search': 'searchTooltip',
     'lock': 'visibilityTooltip'
@@ -298,7 +297,6 @@ function initToolbarTooltips() {
     'tags': 'tagsTooltip',
     'newtodo': 'todoTooltip',
     'upres': 'uploadTooltip',
-    'getlink': 'linkTooltip',
     'random': 'randomTooltip',
     'search': 'searchTooltip',
     'lock': 'visibilityTooltip',

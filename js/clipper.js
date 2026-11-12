@@ -13,8 +13,21 @@ var Clipper = (function () {
         if (runtimeError || !tab) throw new Error('source_unavailable');
         var url = ClipperCore.safeUrl(tab.url);
         var title = String(tab.title || url).replace(/[\\\[\]]/g, '\\$&').replace(/[\r\n]+/g, ' ');
-        var source = '[' + title + '](' + url + ')\n\n' + new Date().toISOString();
-        $('#content').val(ClipperCore.append($('#content').val(), source)).trigger('input');
+        var withTime = !!$('#sourceIncludeTime').prop('checked');
+        var source = '[' + title + '](' + url + ')' + (withTime ? '\n\n' + new Date().toISOString() : '');
+        var editor = $('#content')[0];
+        var current = editor.value;
+        var start = typeof editor.selectionStart === 'number' ? editor.selectionStart : current.length;
+        var end = typeof editor.selectionEnd === 'number' ? editor.selectionEnd : start;
+        var before = current.slice(0, start);
+        var after = current.slice(end);
+        var separator = withTime ? '\n\n' : ' ';
+        var inserted = (before && !/\s$/.test(before) ? separator : '') + source +
+          (after && !/^\s/.test(after) ? separator : '');
+        editor.value = before + inserted + after;
+        editor.focus();
+        editor.setSelectionRange(before.length + inserted.length, before.length + inserted.length);
+        $('#content').trigger('input');
         $.message({ message: getLLMMessage('clipSourceAdded') });
       } catch (_) {
         $.message({ message: getLLMMessage('clipCaptureFailed') });
@@ -41,11 +54,17 @@ var Clipper = (function () {
   }
 
   function init() {
-    chrome.storage.local.get({ memosClipTemplate: ClipperCore.defaultTemplate }, function (data) {
+    chrome.storage.local.get({ memosClipTemplate: ClipperCore.defaultTemplate, memosSourceIncludeTime: false }, function (data) {
       try { template = ClipperCore.validateTemplate(data.memosClipTemplate); } catch (_) { template = ClipperCore.defaultTemplate; }
       $('#clipTemplate').val(template);
+      $('#sourceIncludeTime').prop('checked', !!data.memosSourceIncludeTime);
     });
     $('#captureSource').click(addPageSource);
+    $('#sourceIncludeTime').on('change', function () {
+      chrome.storage.local.set({ memosSourceIncludeTime: !!this.checked }, function () {
+        if (chrome.runtime.lastError) $.message({ message: getLLMMessage('settingsSaveFailed') });
+      });
+    });
     $('#clipTemplate').on('change', saveTemplate);
     $('#clipTemplateReset').click(function () { $('#clipTemplate').val(ClipperCore.defaultTemplate); saveTemplate(); });
   }

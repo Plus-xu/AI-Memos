@@ -47,6 +47,24 @@ test('custom tasks require non-empty instructions and use the supplied prompt', 
   assert.equal(ai.normalizeTask(undefined), 'organize');
 });
 
+test('built-in tasks specify visibly different output structures without padding sparse material', () => {
+  const { ai } = loadRules();
+  const organize = ai.buildPrompt('organize', '', 'LEGACY_ORGANIZER_RULES');
+  const summary = ai.buildPrompt('summary');
+  const keypoints = ai.buildPrompt('keypoints');
+  const qa = ai.buildPrompt('qa');
+  assert.match(organize, /(?:do not|without|avoid).*(?:compress|shorten|summariz)/i);
+  assert.match(summary, /(?:single|one)\s+(?:short\s+)?paragraph/i);
+  assert.match(summary, /150/);
+  assert.match(summary, /100/);
+  assert.match(keypoints, /3\s*(?:[-–]|to)\s*7/);
+  assert.match(keypoints, /(?:fewer|less|do not pad|never pad)/i);
+  assert.match(qa, /3\s*(?:[-–]|to)\s*5/);
+  assert.match(qa, /(?:fewer|less|do not pad|never pad)/i);
+  assert.match(qa, /\*\*Q:\*\*/);
+  assert.match(qa, /\*\*A:\*\*/);
+});
+
 test('creating a review keeps original and result separate until an explicit apply', () => {
   const { ai } = loadRules();
   const input = 'Original note\n\n![image](/file/attachments/photo/a.png)';

@@ -10,6 +10,7 @@ const flush = () => new Promise(resolve => setImmediate(resolve));
 
 function harness(options = {}) {
   const nodes = new Map();
+  const elementNodes = new WeakMap();
   const handlers = new Map();
   const local = plain(options.local || {});
   const sync = {
@@ -40,7 +41,12 @@ function harness(options = {}) {
       html(value) { if (value === undefined) return this.htmlValue || ''; this.htmlValue = value; return this; },
       attr(key, value) { if (value === undefined) return this.attributes[key]; this.attributes[key] = value; return this; },
       removeAttr(key) { delete this.attributes[key]; return this; },
-      prop(key, value) { if (value === undefined) return this.properties[key]; this.properties[key] = value; return this; },
+      prop(key, value) {
+        if (value === undefined) return this.properties[key];
+        this.properties[key] = value; element[key] = value; return this;
+      },
+      is(query) { return query === ':checked' && !!this.properties.checked; },
+      data(key) { return this.attributes['data-' + key]; },
       on(events, delegated, callback) {
         const fn = callback || delegated;
         for (const event of events.split(' ')) {
@@ -67,10 +73,15 @@ function harness(options = {}) {
       wrapper[method] = function () { return this; };
     }
     nodes.set(selector, wrapper);
+    elementNodes.set(element, wrapper);
     return wrapper;
   }
 
-  function $(selector) { return node(selector === document ? 'document' : selector); }
+  function $(selector) {
+    if (selector === document) return node('document');
+    if (selector && typeof selector === 'object' && elementNodes.has(selector)) return elementNodes.get(selector);
+    return node(selector);
+  }
   $.message = value => messages.push(value.message);
   $.ajax = value => { requests.push(value); return {}; };
   $.each = (items, callback) => items.forEach((item, index) => callback(index, item));
@@ -82,7 +93,10 @@ function harness(options = {}) {
 
   const chrome = {
     runtime: { lastError: null },
-    i18n: { getMessage: key => key, getUILanguage: () => 'zh-CN' },
+    i18n: {
+      getMessage: key => ['aiRunTask', 'aiRunningTask', 'aiExecutedTask'].includes(key) ? key + ': {task}' : key,
+      getUILanguage: () => 'zh-CN'
+    },
     storage: {
       local: { get(keys, callback) { callback(read(local, keys)); }, set(value, callback) { Object.assign(local, plain(value)); callback?.(); } },
       sync: { get(keys, callback) { callback(read(sync, keys)); }, set(value, callback) { Object.assign(sync, plain(value)); callback?.(); } }
@@ -142,13 +156,84 @@ test('adding a page source uses only existing tabs access and preserves the draf
   state.load('clipper.js');
   let url = 'https://example.org/read(1)?id=2';
   state.context.chrome.tabs = { query(_, callback) { callback([{ title: 'An [article]', url }]); } };
+  state.node('#content')[0].setSelectionRange('Original draft'.length, 'Original draft'.length);
   state.context.Clipper.addPageSource();
-  assert.ok(state.node('#content').val().startsWith('Original draft\n\n[An \\[article\\]](https://example.org/read%281%29?id=2)'));
+  assert.match(state.node('#content').val(), /^Original draft\s*\[An \\\[article\\\]\]\(https:\/\/example\.org\/read%281%29\?id=2\)/);
   const before = state.node('#content').val();
   url = 'chrome://extensions/';
   state.context.Clipper.addPageSource();
   assert.equal(state.node('#content').val(), before);
   assert.equal(state.messages.at(-1), 'clipCaptureFailed');
+});
+
+test('the consolidated source action replaces only the selected range and omits time by default', () => {
+  const state = harness({ content: 'Before OLD after' });
+  state.load('clipper-core.js');
+  state.load('clipper.js');
+  state.context.chrome.tabs = { query(_, callback) { callback([{ title: 'Article', url: 'https://example.org/article?id=7' }]); } };
+  state.context.Clipper.init();
+  state.node('#content')[0].setSelectionRange(7, 10);
+  state.context.Clipper.addPageSource();
+  const value = state.node('#content').val();
+  assert.ok(value.startsWith('Before '));
+  assert.ok(value.endsWith(' after'));
+  assert.ok(value.includes('[Article](https://example.org/article?id=7)'));
+  assert.ok(!value.includes('OLD'));
+  assert.ok(!/\d{4}-\d{2}-\d{2}T/.test(value));
+  assert.equal(state.node('#sourceIncludeTime').prop('checked'), false);
+  assert.equal(state.inputChanges.at(-1), value, 'source insertion must use normal draft persistence');
+});
+
+test('an empty draft receives a clean source and the optional time choice persists across reopening', () => {
+  const state = harness({ content: '' });
+  state.load('clipper-core.js');
+  state.load('clipper.js');
+  state.context.chrome.tabs = { query(_, callback) { callback([{ title: 'Article', url: 'https://example.org/article' }]); } };
+  state.context.Clipper.init();
+  state.context.Clipper.addPageSource();
+  assert.equal(state.node('#content').val(), '[Article](https://example.org/article)');
+  state.node('#sourceIncludeTime').prop('checked', true).trigger('change');
+  assert.equal(state.local.memosSourceIncludeTime, true);
+  const reopened = harness({ content: '', local: state.local });
+  reopened.load('clipper-core.js');
+  reopened.load('clipper.js');
+  reopened.context.chrome.tabs = state.context.chrome.tabs;
+  reopened.context.Clipper.init();
+  assert.equal(reopened.node('#sourceIncludeTime').prop('checked'), true);
+  reopened.context.Clipper.addPageSource();
+  assert.match(reopened.node('#content').val(), /^\[Article\]\(https:\/\/example\.org\/article\)\n\n\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+});
+
+test('task guidance and main-button labels follow the selected main task', () => {
+  const state = harness();
+  const hints = [];
+  for (const task of ['organize', 'summary', 'keypoints', 'qa']) {
+    state.node('#aiTask').val(task).trigger('change');
+    hints.push(state.node('#aiTaskHelp').text());
+    assert.match(state.node('#ai_optimize').attr('title'), new RegExp('aiTask_' + task));
+  }
+  assert.ok(hints.every(value => value.length > 0));
+  assert.equal(new Set(hints).size, 4, 'each task needs its own explanation');
+});
+
+test('a named quick preset reveals its actual task and preserves the main task choice', async () => {
+  const state = harness();
+  state.node('#aiTask').val('summary').trigger('change');
+  const preset = { provider: 'openai', model: 'gpt-4.1', task: 'qa', name: 'My custom label' };
+  const label = state.context.getPresetLabel(preset, 0);
+  assert.ok(label.includes(preset.name));
+  assert.ok(label.includes('aiTask_qa'), 'a custom name must not hide the preset task');
+  state.context.optimizeWithAI(preset);
+  assert.equal(state.node('#aiTask').val(), 'summary');
+  assert.match(state.node('#aiTaskStatus').text(), /aiTask_qa/);
+  assert.equal(state.node('#aiTaskStatus').prop('hidden'), false);
+  assert.match(JSON.parse(state.requests[0].data).instructions, /\*\*Q:\*\*/);
+  state.requests[0].success({ output_text: '**Q:** Question?\n**A:** Answer.' });
+  await flush();
+  assert.match(state.node('#aiReviewTask').text(), /aiTask_qa/);
+  assert.equal(state.node('#aiTask').val(), 'summary');
+  const reopened = harness({ content: state.node('#content').val(), local: state.local });
+  assert.match(reopened.node('#aiReviewTask').text(), /aiTask_qa/);
 });
 
 test('the real AI request retains its input snapshot and cannot overwrite edits made while waiting', async () => {

@@ -303,7 +303,7 @@
       "message": "AI 結果を採用しました。元に戻すこともできます。"
    },
    "clipAddSource": {
-      "message": "出典を追加"
+      "message": "出典リンクを挿入"
    },
    "clipSelection": {
       "message": "選択範囲と出典を保存"
@@ -315,7 +315,7 @@
       "message": "このページの出典を取得できません。通常のページで再試行してください。"
    },
    "clipSourceAdded": {
-      "message": "出典を下書きに追記しました。"
+      "message": "カーソル位置に出典を挿入しました。"
    },
    "clipTemplateLabel": {
       "message": "選択範囲のテンプレート"
@@ -328,5 +328,38 @@
    },
    "clipTemplateInvalid": {
       "message": "{{content}} と {{url}} を含む、8000 文字以内のテンプレートを指定してください。"
+   },
+   "sourceIncludeTime": {
+      "message": "取得日時を付ける"
+   },
+   "settingsSaveFailed": {
+      "message": "設定を保存できません。再試行してください。"
+   },
+   "aiTaskHelp_organize": {
+      "message": "情報を残し、内容を意図的に短縮せず文章と Markdown を整えます。"
+   },
+   "aiTaskHelp_summary": {
+      "message": "短い1段落に要約します。中国語150字・英語100語を目安とし、出典は別記します。"
+   },
+   "aiTaskHelp_keypoints": {
+      "message": "3〜7項目に整理します。短い資料では項目を無理に増やしません。"
+   },
+   "aiTaskHelp_qa": {
+      "message": "資料に基づく3〜5組のQ&Aを作ります。短い資料では無理に増やしません。"
+   },
+   "aiTaskHelp_custom": {
+      "message": "このプリセットで設定した指示に従います。"
+   },
+   "aiTaskUsageHint": {
+      "message": "メインボタンは上の選択、クイックメニューは各プリセットのタスクを実行します。"
+   },
+   "aiRunTask": {
+      "message": "AI タスクを実行：{task}"
+   },
+   "aiRunningTask": {
+      "message": "実行中：{task}"
+   },
+   "aiExecutedTask": {
+      "message": "この結果のタスク：{task}"
    }
 }

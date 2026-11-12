@@ -81,7 +81,11 @@ input:focus::placeholder ,.common-editor-inputer:focus::placeholder {
 [hidden] { display: none !important; }
 .editor-actions, .feature-actions { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
 .editor-actions { margin-top: .75rem; font-size: .8125rem; }
-.editor-actions label { margin-left: auto; }
+.editor-actions label { margin-left: 0; }
+.source-actions { display: flex; align-items: center; gap: .75rem; margin-top: .75rem; flex-wrap: wrap; }
+.source-time-option { display: inline-flex; align-items: center; gap: .35rem; font-size: .8125rem; color: var(--text-secondary); cursor: pointer; }
+.source-time-option input { accent-color: #7e22ce; }
+.editor-actions #aiUndo { margin-left: auto; }
 .editor-actions select { min-width: 5rem; color: var(--text-primary); background: var(--bg-secondary); border: 1px solid var(--bg-border); border-radius: .3rem; padding: .35rem; }
 .secondary-btn { cursor: pointer; background: var(--bg-secondary); border: 1px solid var(--bg-border); color: var(--text-primary); border-radius: .3rem; padding: .35rem .6rem; font-size: .8125rem; line-height: 1.4; }
 .secondary-btn:hover { border-color: var(--text-tertiary); }
