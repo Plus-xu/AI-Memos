@@ -211,5 +211,29 @@
    },
    "llmQuickPresetNotConfigured":{
       "message": "该快捷预设尚未配置"
+   },
+   "invalidUrl": {
+      "message": "请输入以 http:// 或 https:// 开头的有效 Memos 主页网址。"
+   },
+   "permissionDenied": {
+      "message": "当前账号没有执行此操作的权限。"
+   },
+   "uploadTooLarge": {
+      "message": "文件超过了服务器允许的上传大小。"
+   },
+   "quotaExceeded": {
+      "message": "已达到 Memos 用量上限，请检查设置中的用量限制。"
+   },
+   "requestLimited": {
+      "message": "请求过于频繁，请稍后重试。"
+   },
+   "apiTimeout": {
+      "message": "请求超时，草稿已保留。"
+   },
+   "attachmentPreviewFailed": {
+      "message": "暂时无法加载此附件。"
+   },
+   "draftSaveFailed": {
+      "message": "草稿暂时无法保存到本地，请保持弹窗打开并复制内容备份。"
    }
 }

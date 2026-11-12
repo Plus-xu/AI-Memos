@@ -211,5 +211,29 @@
    },
    "llmQuickPresetNotConfigured":{
       "message": "このクイックプリセットは未設定です"
+   },
+   "invalidUrl": {
+      "message": "http:// または https:// で始まる有効な Memos の URL を入力してください。"
+   },
+   "permissionDenied": {
+      "message": "この操作を実行する権限がありません。"
+   },
+   "uploadTooLarge": {
+      "message": "ファイルがサーバーのアップロード上限を超えています。"
+   },
+   "quotaExceeded": {
+      "message": "Memos の使用量上限に達しました。設定の使用量制限を確認してください。"
+   },
+   "requestLimited": {
+      "message": "リクエストが多すぎます。しばらくしてから再試行してください。"
+   },
+   "apiTimeout": {
+      "message": "リクエストがタイムアウトしました。下書きは保持されています。"
+   },
+   "attachmentPreviewFailed": {
+      "message": "添付ファイルを読み込めません。"
+   },
+   "draftSaveFailed": {
+      "message": "下書きをローカルに保存できません。ポップアップを開いたまま内容をコピーしてください。"
    }
 }

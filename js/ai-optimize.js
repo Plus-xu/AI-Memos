@@ -622,7 +622,7 @@ function optimizeWithAI(preset, $button) {
       optimizationConfig.baseUrl
     )
       .then(function(optimizedContent) {
-        $('#content').val(optimizedContent);
+        $('#content').val(optimizedContent).trigger('input');
         $.message({
           message: getLLMMessage('aiOptimizeSuccess')
         });

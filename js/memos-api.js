@@ -1,43 +1,97 @@
 /**
  * Memos API compatibility helpers.
- * Supports current Memos API first, with narrow fallbacks for v0.25.x.
+ * Uses the unversioned API in Memos 26.10+ and detects older /api/v1 servers.
  */
 
 const MemosAPI = (function () {
+  var apiPrefixes = new Map();
+
   function normalizeBaseUrl(apiUrl) {
-    var value = (apiUrl || '').trim();
-    if (value && !value.endsWith('/')) {
-      value += '/';
+    var value = String(apiUrl || '').trim().replace(/\/+$/, '');
+    return value ? value + '/' : '';
+  }
+
+  function apiError(code, status) {
+    var error = new Error(code);
+    error.code = code;
+    error.status = status || 0;
+    return error;
+  }
+
+  function isValidBaseUrl(apiUrl) {
+    try {
+      var url = new URL(apiUrl);
+      return /^https?:$/.test(url.protocol) && !!url.hostname &&
+        !url.username && !url.password && !url.search && !url.hash;
+    } catch (_) {
+      return false;
     }
-    return value;
+  }
+
+  function isMissingRoute(xhr) {
+    if (!xhr) return false;
+    if (xhr.status === 404 || xhr.status === 410) return true;
+    // Older servers can serve their SPA instead of an unknown API route.
+    return xhr.status === 200 && xhr.getResponseHeader &&
+      /text\/html/i.test(xhr.getResponseHeader('Content-Type') || '');
+  }
+
+  function rawRequest(info, prefix, options) {
+    return Promise.resolve($.ajax({
+      url: normalizeBaseUrl(info.apiUrl) + prefix + options.path,
+      type: options.method || 'GET',
+      data: options.body === undefined ? undefined : JSON.stringify(options.body),
+      contentType: 'application/json',
+      dataType: 'json',
+      timeout: 30000,
+      headers: {
+        'Authorization': 'Bearer ' + String(info.apiTokens || '').trim(),
+        'Accept': 'application/json'
+      }
+    }));
   }
 
   function request(info, options) {
-    return $.ajax({
-      url: normalizeBaseUrl(info.apiUrl) + options.path,
-      type: options.method || 'GET',
-      data: options.body ? JSON.stringify(options.body) : undefined,
-      contentType: 'application/json',
-      dataType: 'json',
-      headers: {
-        'Authorization': 'Bearer ' + info.apiTokens
+    var baseUrl = normalizeBaseUrl(info.apiUrl);
+    if (!isValidBaseUrl(baseUrl)) return Promise.reject(apiError('invalid_url'));
+    var prefix = apiPrefixes.get(baseUrl) || 'api/';
+
+    return rawRequest(info, prefix, options).catch(function (xhr) {
+      // Only a missing route can be retried. Never replay an uncertain write,
+      // authentication failure, quota refusal, timeout, or server error.
+      if (!isMissingRoute(xhr)) throw xhr;
+      prefix = prefix === 'api/' ? 'api/v1/' : 'api/';
+      return rawRequest(info, prefix, options);
+    }).then(function (data) {
+      apiPrefixes.set(baseUrl, prefix);
+      return data;
+    });
+  }
+
+  function getInstanceProfile(info) {
+    return request(info, { path: 'instance/profile' }).then(function (data) {
+      if (!data || typeof data.version !== 'string' || !data.version.trim()) {
+        throw apiError('invalid_response');
       }
+      return { version: data.version.trim() };
     });
   }
 
   function currentUser(apiUrl, apiTokens) {
     var info = { apiUrl: normalizeBaseUrl(apiUrl), apiTokens: apiTokens };
     return request(info, {
-      path: 'api/v1/auth/me'
-    }).catch(function () {
+      path: 'auth/me'
+    }).catch(function (xhr) {
+      if (!isMissingRoute(xhr)) throw xhr;
       return request(info, {
-        path: 'api/v1/auth/sessions/current'
+        path: 'auth/sessions/current'
       });
     }).then(function (response) {
+      if (!response) throw apiError('invalid_response');
       var user = response.user || response;
       var userName = user.name || response.name || '';
-      if (!userName) {
-        throw new Error('missing_user_name');
+      if (typeof userName !== 'string' || !/^users\/[^/]+$/.test(userName)) {
+        throw apiError('invalid_response');
       }
       return {
         raw: response,
@@ -48,22 +102,49 @@ const MemosAPI = (function () {
   }
 
   function listMemos(info, query) {
-    return request(info, {
-      path: 'api/v1/memos' + (query || '')
-    }).then(function (data) {
-      return data.memos || data.items || [];
-    });
+    var params = new URLSearchParams(String(query || '').replace(/^\?/, ''));
+    if (!params.has('pageSize')) params.set('pageSize', '1000');
+    var memos = [];
+    var memoNames = new Set();
+    var pageTokens = new Set();
+    if (params.get('pageToken')) pageTokens.add(params.get('pageToken'));
+
+    function nextPage() {
+      return request(info, { path: 'memos?' + params.toString() }).then(function (data) {
+        var page = data && (data.memos || data.items || []);
+        if (!Array.isArray(page)) throw apiError('invalid_response');
+        page.forEach(function (memo) {
+          if (!memo.name || !memoNames.has(memo.name)) {
+            memos.push(memo);
+            if (memo.name) memoNames.add(memo.name);
+          }
+        });
+        var token = data.nextPageToken || data.next_page_token || '';
+        if (!token) return memos;
+        if (typeof token !== 'string' || pageTokens.has(token)) {
+          throw apiError('invalid_page_token');
+        }
+        pageTokens.add(token);
+        params.set('pageToken', token);
+        return nextPage();
+      });
+    }
+    return nextPage();
+  }
+
+  function buildContentFilter(pattern) {
+    return 'content.contains(' + JSON.stringify(String(pattern)) + ')';
   }
 
   function getMemo(info, memoName) {
     return request(info, {
-      path: 'api/v1/' + memoName
+      path: memoName
     });
   }
 
   function createMemo(info, body) {
     return request(info, {
-      path: 'api/v1/memos',
+      path: 'memos',
       method: 'POST',
       body: body
     });
@@ -71,26 +152,17 @@ const MemosAPI = (function () {
 
   function archiveMemo(info, memoName) {
     return request(info, {
-      path: 'api/v1/' + memoName + '?updateMask=state',
+      path: memoName + '?updateMask=state',
       method: 'PATCH',
       body: { state: 'ARCHIVED' }
-    }).catch(function () {
-      return request(info, {
-        path: 'api/v1/' + memoName,
-        method: 'PATCH',
-        body: {
-          state: 'ARCHIVED',
-          updateMask: ['state']
-        }
-      });
     });
   }
 
   function uploadAttachment(info, body) {
     return request(info, {
-      path: 'api/v1/attachments',
+      path: 'attachments',
       method: 'POST',
-      body: body
+      body: { filename: body.filename, type: body.type, content: body.content }
     });
   }
 
@@ -119,20 +191,123 @@ const MemosAPI = (function () {
     return memo.attachments || memo.resources || [];
   }
 
+  function encodePathSegment(value) {
+    return encodeURIComponent(value).replace(/[!'()*]/g, function (character) {
+      return '%' + character.charCodeAt(0).toString(16).toUpperCase();
+    });
+  }
+
   function buildFileUrl(apiUrl, attachment) {
     if (!attachment) return '';
     if (attachment.externalLink) return attachment.externalLink;
 
     var fileId = attachment.publicId || attachment.filename || (attachment.name || '').split('/').pop();
     if (!attachment.name || !fileId) return '';
-    return normalizeBaseUrl(apiUrl) + 'file/' + attachment.name + '/' + fileId;
+    return normalizeBaseUrl(apiUrl) + 'file/' +
+      attachment.name.split('/').map(encodePathSegment).join('/') + '/' + encodePathSegment(fileId);
+  }
+
+  function managedFile(apiUrl, value) {
+    try {
+      var base = new URL(normalizeBaseUrl(apiUrl));
+      var raw = String(value || '');
+      var url = new URL(raw.replace(/^\/?file\//, base.href + 'file/'), base);
+      var prefix = base.pathname + 'file/attachments/';
+      if (url.origin !== base.origin || !url.pathname.startsWith(prefix) || url.search || url.hash) return null;
+      var segments = url.pathname.slice(prefix.length).split('/');
+      if (segments.length !== 2 || !/^[a-zA-Z0-9_-]+$/.test(segments[0]) || !segments[1]) return null;
+      return {
+        name: 'attachments/' + segments[0],
+        filename: decodeURIComponent(segments[1]),
+        url: url.href,
+        path: '/file/attachments/' + segments[0] + '/' + segments[1]
+      };
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Only generated inline links are rewritten. Leave Markdown code examples,
+  // external images, and links to already-bound files unchanged.
+  function mapMarkdownLinks(content, transform) {
+    var fence = null;
+    return String(content).split('\n').map(function (line) {
+      var marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+      if (fence) {
+        if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = null;
+        return line;
+      }
+      if (marker) {
+        fence = marker[1];
+        return line;
+      }
+      if (/^( {4}|\t)/.test(line)) return line;
+      return line.replace(/(`+)[\s\S]*?\1|(!?\[(?:\\.|[^\]\\])*\]\()(<[^>\n]+>|[^\s)]+)(\s+(?:"[^"]*"|'[^']*'))?\)/g,
+        function (match, code, opening, destination, title) {
+          if (code) return match;
+          var angle = destination[0] === '<';
+          var url = angle ? destination.slice(1, -1) : destination;
+          var replacement = transform(url, opening[0] === '!');
+          return opening + (angle ? '<' + replacement + '>' : replacement) + (title || '') + ')';
+        });
+    }).join('\n');
+  }
+
+  function prepareMemo(info, body) {
+    var references = new Map();
+    mapMarkdownLinks(body.content, function (url, image) {
+      var file = managedFile(info.apiUrl, url);
+      if (file) {
+        var reference = references.get(file.name);
+        references.set(file.name, { file: file, image: image || !!(reference && reference.image) });
+      }
+      return url;
+    });
+
+    return Promise.all(Array.from(references.values()).map(function (reference) {
+      return request(info, { path: reference.file.name }).then(function (attachment) {
+        if (!attachment || attachment.name !== reference.file.name) throw apiError('invalid_response');
+        // Ordinary links can point at another memo's file. Managed images must
+        // belong to this memo, so let the server validate an existing binding.
+        reference.bind = !attachment.memo || reference.image;
+        return reference;
+      });
+    })).then(function (resolved) {
+      var prepared = Object.assign({}, body);
+      var attachments = resolved.filter(function (reference) { return reference.bind; });
+      prepared.content = mapMarkdownLinks(body.content, function (url, image) {
+        var file = managedFile(info.apiUrl, url);
+        return image && file ? file.path : url;
+      });
+      if (attachments.length) {
+        prepared.attachments = attachments.map(function (reference) { return { name: reference.file.name }; });
+      }
+      return prepared;
+    });
+  }
+
+  function fetchAttachmentBlob(info, url, signal) {
+    var file = managedFile(info.apiUrl, url);
+    if (!file) return Promise.reject(apiError('invalid_attachment_url'));
+    return fetch(file.url, {
+      headers: { 'Authorization': 'Bearer ' + String(info.apiTokens || '').trim() },
+      credentials: 'omit',
+      redirect: 'error',
+      signal: signal || AbortSignal.timeout(30000)
+    }).then(function (response) {
+      if (!response.ok) throw apiError('attachment_fetch_failed', response.status);
+      return response.blob();
+    });
   }
 
   return {
     normalizeBaseUrl: normalizeBaseUrl,
+    getInstanceProfile: getInstanceProfile,
     currentUser: currentUser,
     listMemos: listMemos,
+    buildContentFilter: buildContentFilter,
     getMemo: getMemo,
+    prepareMemo: prepareMemo,
     createMemo: createMemo,
     archiveMemo: archiveMemo,
     uploadAttachment: uploadAttachment,
@@ -140,6 +315,8 @@ const MemosAPI = (function () {
     getMemoPageId: getMemoPageId,
     getMemoAttachments: getMemoAttachments,
     buildMemoUrl: buildMemoUrl,
-    buildFileUrl: buildFileUrl
+    buildFileUrl: buildFileUrl,
+    managedFile: managedFile,
+    fetchAttachmentBlob: fetchAttachmentBlob
   };
 })();

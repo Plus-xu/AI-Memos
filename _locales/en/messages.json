@@ -211,5 +211,29 @@
    },
    "llmQuickPresetNotConfigured":{
       "message": "This quick preset is not configured"
+   },
+   "invalidUrl": {
+      "message": "Enter a valid Memos home URL using http:// or https://."
+   },
+   "permissionDenied": {
+      "message": "You do not have permission to perform this action."
+   },
+   "uploadTooLarge": {
+      "message": "The file exceeds the server upload limit."
+   },
+   "quotaExceeded": {
+      "message": "Your Memos usage limit has been reached. Check Settings > Usage limits."
+   },
+   "requestLimited": {
+      "message": "Too many requests. Please try again later."
+   },
+   "apiTimeout": {
+      "message": "The request timed out. Your draft has been kept."
+   },
+   "attachmentPreviewFailed": {
+      "message": "Unable to load this attachment."
+   },
+   "draftSaveFailed": {
+      "message": "The draft could not be stored locally. Keep this popup open and copy your text."
    }
 }

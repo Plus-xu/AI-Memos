@@ -1,6 +1,12 @@
 dayjs.extend(window.dayjs_plugin_relativeTime)
 dayjs.locale('zh-cn')
 
+var memoSaveInProgress = false;
+var pendingUploads = 0;
+var previewGeneration = 0;
+var previewObjectUrls = new Set();
+var previewController = null;
+
 function get_info(callback) {
   chrome.storage.sync.get(
     {
@@ -9,8 +15,6 @@ function get_info(callback) {
       hidetag: '',
       showtag: '',
       memo_lock: '',
-      open_action: '',
-      open_content: '',
       userid: '',
       userName: ''
     },
@@ -22,13 +26,15 @@ function get_info(callback) {
         hidetag: items.hidetag,
         showtag: items.showtag,
         memo_lock: items.memo_lock,
-        open_content: items.open_content,
-        open_action: items.open_action,
         userid: items.userid,
         userName: items.userName
       };
 
-      if (callback) callback(returnObject);
+      DraftStorage.load(function (draft) {
+        returnObject.open_content = draft.open_content;
+        returnObject.open_action = draft.open_action;
+        if (callback) callback(returnObject);
+      });
     }
   );
 }
@@ -37,17 +43,32 @@ function showApiError(prefix, xhr, fallbackMessage) {
   console.error(prefix, {
     status: xhr && xhr.status,
     statusText: xhr && xhr.statusText,
-    response: xhr && xhr.responseText
+    code: xhr && xhr.code
   });
 
   var errorMsg = fallbackMessage || chrome.i18n.getMessage("apiFailed") || 'API call failed';
-  if (xhr && (xhr.status === 401 || xhr.status === 403)) {
+  if (xhr && xhr.code === 'invalid_url') {
+    errorMsg = chrome.i18n.getMessage("invalidUrl");
+  } else if (xhr && xhr.status === 401) {
     errorMsg = chrome.i18n.getMessage("invalidToken");
-  } else if (xhr && xhr.status === 404) {
+  } else if (xhr && xhr.status === 403) {
+    errorMsg = chrome.i18n.getMessage("permissionDenied");
+  } else if (xhr && (xhr.status === 404 || xhr.status === 410)) {
     errorMsg = chrome.i18n.getMessage("apiNotFound");
+  } else if (xhr && xhr.status === 413) {
+    errorMsg = chrome.i18n.getMessage("uploadTooLarge");
+  } else if (xhr && xhr.status === 429) {
+    var details = xhr.responseJSON && xhr.responseJSON.details;
+    if (!Array.isArray(details)) details = [];
+    var quota = details.some(function (detail) { return detail.reason === 'QUOTA_EXCEEDED'; });
+    errorMsg = chrome.i18n.getMessage(quota ? "quotaExceeded" : "requestLimited");
+  } else if (xhr && (xhr.statusText === 'timeout' || xhr.name === 'TimeoutError')) {
+    errorMsg = chrome.i18n.getMessage("apiTimeout");
+  } else if (xhr && xhr.responseJSON && typeof xhr.responseJSON.message === 'string') {
+    errorMsg += ': ' + xhr.responseJSON.message.slice(0, 240);
   }
 
-  $.message({ message: errorMsg });
+  $.message({ message: escapeHtml(errorMsg) });
 }
 
 function resolveVisibility(info) {
@@ -76,11 +97,90 @@ function escapeHtml(value) {
     .replace(/'/g, '&#39;');
 }
 
-function renderMarkdownPreview(content) {
-  return escapeHtml(content)
-    .replace(/!\[.*?\]\((.*?)\)/g, ' <img class="random-image" src="$1"/> ')
-    .replace(/\[(.*?)\]\((.*?)\)/g, ' <a href="$2" target="_blank">$1</a> ');
+function previewUrl(info, value) {
+  var file = MemosAPI.managedFile(info.apiUrl, value);
+  if (file) return file.url;
+  try {
+    var url = new URL(value, info.apiUrl);
+    return /^https?:$/.test(url.protocol) ? url.href : '';
+  } catch (_) {
+    return '';
+  }
 }
+
+function previewImage(info, value, label) {
+  var url = previewUrl(info, value);
+  if (!url) return escapeHtml(label || '');
+  var source = MemosAPI.managedFile(info.apiUrl, url)
+    ? ' data-memos-file="' + escapeHtml(url) + '" no-view'
+    : ' src="' + escapeHtml(url) + '"';
+  return '<img class="random-image" alt="' + escapeHtml(label || '') + '"' + source + ' referrerpolicy="no-referrer"/>';
+}
+
+function previewLink(info, value, label) {
+  var url = previewUrl(info, value);
+  if (!url) return escapeHtml(label || '');
+  var file = MemosAPI.managedFile(info.apiUrl, url);
+  var attributes = file ? ' class="memos-file-link" data-url="' + escapeHtml(url) + '"' : '';
+  return '<a href="' + escapeHtml(url) + '"' + attributes + ' target="_blank" rel="noreferrer noopener">' + escapeHtml(label) + '</a>';
+}
+
+function renderMarkdownPreview(content, info) {
+  var html = '';
+  var last = 0;
+  String(content).replace(/(!?)\[((?:\\.|[^\]\\\n])*)\]\(([^\s)]+)\)/g, function (match, image, label, url, offset) {
+    html += escapeHtml(content.slice(last, offset));
+    label = label.replace(/\\([\\\[\]])/g, '$1');
+    html += image ? previewImage(info, url, label) : previewLink(info, url, label);
+    last = offset + match.length;
+    return match;
+  });
+  return html + escapeHtml(content.slice(last));
+}
+
+function releaseMemoPreviews() {
+  previewGeneration++;
+  if (previewController) previewController.abort();
+  previewController = null;
+  previewObjectUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+  previewObjectUrls.clear();
+}
+
+function clearMemoList() {
+  releaseMemoPreviews();
+  $("#randomlist").html('').hide();
+}
+
+function hydrateMemoImages(info) {
+  var generation = previewGeneration;
+  previewController = new AbortController();
+  var signal = previewController.signal;
+  var files = new Map();
+  document.querySelectorAll('#randomlist img[data-memos-file]').forEach(function (element) {
+    var url = element.getAttribute('data-memos-file');
+    if (!files.has(url)) {
+      files.set(url, MemosAPI.fetchAttachmentBlob(info, url, signal).then(function (blob) {
+        if (generation !== previewGeneration) return '';
+        if (!blob.type.startsWith('image/')) throw new Error('invalid_image_response');
+        var objectUrl = URL.createObjectURL(blob);
+        previewObjectUrls.add(objectUrl);
+        return objectUrl;
+      }));
+    }
+    files.get(url).then(function (objectUrl) {
+      if (!objectUrl || generation !== previewGeneration) return;
+      element.src = objectUrl;
+      element.removeAttribute('no-view');
+    }).catch(function (error) {
+      if (generation !== previewGeneration) return;
+      element.alt = chrome.i18n.getMessage('attachmentPreviewFailed');
+      element.title = element.alt;
+      console.error('Attachment preview failed', { status: error.status, code: error.code });
+    });
+  });
+}
+
+window.addEventListener('unload', releaseMemoPreviews);
 
 function buildMemoAttachmentHtml(info, memo) {
   var html = '';
@@ -95,9 +195,9 @@ function buildMemoAttachmentHtml(info, memo) {
     if (!fileUrl) continue;
 
     if (type.slice(0, 5) === 'image') {
-      html += '<img class="random-image" src="' + escapeHtml(fileUrl) + '"/>';
+      html += previewImage(info, fileUrl, filename);
     } else {
-      html += '<a target="_blank" rel="noreferrer" href="' + escapeHtml(fileUrl) + '">' + escapeHtml(filename) + '</a>';
+      html += previewLink(info, fileUrl, filename);
     }
   }
 
@@ -114,7 +214,7 @@ function buildMemoHtml(info, memo) {
   itemHtml += '<span class="random-link" data-uid="' + escapeHtml(memoId) + '" data-url="' + escapeHtml(memoUrl) + '"><svg class="icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path d="M864 640a32 32 0 0 1 64 0v224.096A63.936 63.936 0 0 1 864.096 928H159.904A63.936 63.936 0 0 1 96 864.096V159.904C96 124.608 124.64 96 159.904 96H384a32 32 0 0 1 0 64H192.064A31.904 31.904 0 0 0 160 192.064v639.872A31.904 31.904 0 0 0 192.064 864h639.872A31.904 31.904 0 0 0 864 831.936V640zm-485.184 52.48a31.84 31.84 0 0 1-45.12-.128 31.808 31.808 0 0 1-.128-45.12L815.04 166.048l-176.128.736a31.392 31.392 0 0 1-31.584-31.744 32.32 32.32 0 0 1 31.84-32l255.232-1.056a31.36 31.36 0 0 1 31.584 31.584L924.928 388.8a32.32 32.32 0 0 1-32 31.84 31.392 31.392 0 0 1-31.712-31.584l.736-179.392L378.816 692.48z" fill="#666" class="selected"/></svg></span>';
   itemHtml += '<span class="random-delete" data-name="' + escapeHtml(memo.name) + '" data-uid="' + escapeHtml(memoId) + '"><svg class="icon" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path d="M224 322.6h576c16.6 0 30-13.4 30-30s-13.4-30-30-30H224c-16.6 0-30 13.4-30 30 0 16.5 13.5 30 30 30zm66.1-144.2h443.8c16.6 0 30-13.4 30-30s-13.4-30-30-30H290.1c-16.6 0-30 13.4-30 30s13.4 30 30 30zm339.5 435.5H394.4c-16.6 0-30 13.4-30 30s13.4 30 30 30h235.2c16.6 0 30-13.4 30-30s-13.4-30-30-30z" fill="#666"/><path d="M850.3 403.9H173.7c-33 0-60 27-60 60v360c0 33 27 60 60 60h676.6c33 0 60-27 60-60v-360c0-33-27-60-60-60zm-.1 419.8l-.1.1H173.9l-.1-.1V464l.1-.1h676.2l.1.1v359.7z" fill="#666"/></svg></span>';
   itemHtml += escapeHtml(timeText) + '</div>';
-  itemHtml += '<div class="random-content">' + renderMarkdownPreview(memo.content || '') + '</div>';
+  itemHtml += '<div class="random-content">' + renderMarkdownPreview(memo.content || '', info) + '</div>';
   itemHtml += buildMemoAttachmentHtml(info, memo);
   itemHtml += '</div>';
 
@@ -122,12 +222,14 @@ function buildMemoHtml(info, memo) {
 }
 
 function renderMemoList(info, memos) {
+  releaseMemoPreviews();
   var memoHtml = '';
   for (var i = 0; i < memos.length; i++) {
     memoHtml += buildMemoHtml(info, memos[i]);
   }
 
   $("#randomlist").html(memoHtml).slideDown(500);
+  hydrateMemoImages(info);
   window.ViewImage && ViewImage.init('.random-image');
 }
 
@@ -163,11 +265,16 @@ get_info(function (info) {
 
 $("textarea[name=text]").focus();
 
-$("textarea[name=text]").blur(function () {
-  chrome.storage.sync.set(
-    { open_action: 'save_text', open_content: $("textarea[name=text]").val() }
+function saveCurrentDraft() {
+  DraftStorage.save(
+    { open_action: 'save_text', open_content: $("textarea[name=text]").val() },
+    function (error) {
+      if (error) $.message({ message: chrome.i18n.getMessage("draftSaveFailed") });
+    }
   );
-});
+}
+
+$("textarea[name=text]").blur(saveCurrentDraft).on('input', saveCurrentDraft);
 
 $("textarea[name=text]").on('keydown', function (ev) {
   if (ev.code === 'Enter' && (ev.ctrlKey || ev.metaKey)) {
@@ -229,53 +336,57 @@ function initDrag() {
 
 function uploadImage(file) {
   if (!file) return;
+  if (memoSaveInProgress) {
+    $.message({ message: chrome.i18n.getMessage("memoUploading") });
+    return;
+  }
+  pendingUploads++;
 
   $.message({
     message: chrome.i18n.getMessage("picUploading"),
     autoClose: false
   });
 
-  var reader = new FileReader();
-  reader.onload = function (e) {
-    var base64String = e.target.result.split(',')[1];
-    uploadImageNow(base64String, file);
-  };
-  reader.onerror = function (error) {
-    console.error('Error reading file:', error);
-    $.message({ message: chrome.i18n.getMessage("picFailed") });
-  };
-  reader.readAsDataURL(file);
+  new Promise(function (resolve, reject) {
+    var reader = new FileReader();
+    reader.onload = function (e) { resolve(e.target.result.split(',')[1]); };
+    reader.onerror = function () { reject(reader.error || new Error('file_read_failed')); };
+    reader.readAsDataURL(file);
+  }).then(function (base64String) {
+    return uploadImageNow(base64String, file);
+  }).catch(function (xhr) {
+    showApiError('Attachment upload failed', xhr, chrome.i18n.getMessage("picFailed"));
+  }).finally(function () {
+    pendingUploads--;
+  });
 }
 
 function uploadImageNow(base64String, file) {
-  get_info(function (info) {
+  return new Promise(function (resolve) { get_info(resolve); }).then(function (info) {
     if (!info.status) {
-      $.message({ message: chrome.i18n.getMessage("placeApiUrl") });
-      return;
+      throw new Error('missing_connection');
     }
 
-    var oldName = file.name.split('.');
-    var fileExt = file.name.split('.').pop();
-    var now = dayjs().format('YYYYMMDDHHmmss');
-    var newName = oldName[0] + '_' + now + '.' + fileExt;
+    var originalName = file.name || 'attachment';
+    var dot = originalName.lastIndexOf('.');
+    var suffix = '_' + Date.now();
+    var newName = dot > 0 ? originalName.slice(0, dot) + suffix + originalName.slice(dot) : originalName + suffix;
     var data = {
       content: base64String,
-      visibility: resolveVisibility(info),
       filename: newName,
       type: file.type
     };
 
-    MemosAPI.uploadAttachment(info, data).then(function (attachment) {
-      console.log('Attachment uploaded:', attachment);
+    return MemosAPI.uploadAttachment(info, data).then(function (attachment) {
       if (!attachment.name) {
-        $.message({ message: chrome.i18n.getMessage("picFailed") });
-        return;
+        throw new Error('missing_attachment_name');
       }
 
       var fileUrl = MemosAPI.buildFileUrl(info.apiUrl, attachment);
-      var insertText = attachment.type && attachment.type.startsWith('image/')
-        ? '![' + newName + '](' + fileUrl + ')'
-        : '[' + newName + '](' + fileUrl + ')';
+      var label = newName.replace(/[\\\[\]]/g, '\\$&');
+      var insertText = (attachment.type || file.type || '').startsWith('image/')
+        ? '![' + label + '](' + fileUrl + ')'
+        : '[' + label + '](' + fileUrl + ')';
 
       var textarea = $("textarea[name=text]")[0];
       var startPos = textarea.selectionStart;
@@ -287,27 +398,31 @@ function uploadImageNow(base64String, file) {
       textarea.setSelectionRange(startPos + insertText.length, startPos + insertText.length);
       textarea.focus();
 
-      chrome.storage.sync.set(
+      DraftStorage.save(
         {
           open_action: '',
           open_content: newValue
         },
-        function () {
-          $.message({ message: chrome.i18n.getMessage("picSuccess") });
+        function (error) {
+          $.message({ message: chrome.i18n.getMessage(error ? "draftSaveFailed" : "picSuccess") });
         }
       );
-    }).catch(function (xhr) {
-      chrome.storage.sync.set({ open_action: '', open_content: '' });
-      showApiError('Attachment upload failed', xhr, chrome.i18n.getMessage("picFailed"));
     });
   });
 }
 
 $('#saveKey').click(function () {
   var apiUrl = MemosAPI.normalizeBaseUrl($('#apiUrl').val());
-  var apiTokens = $('#apiTokens').val();
+  var apiTokens = $('#apiTokens').val().trim();
 
   MemosAPI.currentUser(apiUrl, apiTokens).then(function (userInfo) {
+    // Version discovery is informational; an older profile endpoint must not
+    // prevent an otherwise valid PAT from being saved.
+    return MemosAPI.getInstanceProfile({ apiUrl: apiUrl, apiTokens: apiTokens })
+      .catch(function () { return { version: '' }; })
+      .then(function (profile) { return { user: userInfo, version: profile.version }; });
+  }).then(function (connection) {
+    var userInfo = connection.user;
     if (typeof saveLLMConfig === 'function') {
       saveLLMConfig();
     }
@@ -317,15 +432,17 @@ $('#saveKey').click(function () {
         apiUrl: apiUrl,
         apiTokens: apiTokens,
         userid: userInfo.userId,
-        userName: userInfo.userName
+        userName: userInfo.userName,
+        memosVersion: connection.version
       },
       function () {
-        $.message({ message: chrome.i18n.getMessage("saveSuccess") });
+        var versionText = connection.version ? ' · Memos ' + connection.version : '';
+        $.message({ message: escapeHtml(chrome.i18n.getMessage("saveSuccess") + versionText) });
         $('#blog_info').hide();
       }
     );
-  }).catch(function () {
-    $.message({ message: chrome.i18n.getMessage("invalidToken") });
+  }).catch(function (xhr) {
+    showApiError('Connection check failed', xhr, chrome.i18n.getMessage("apiFailed"));
   });
 });
 
@@ -410,16 +527,10 @@ $('#search').click(function () {
       return;
     }
 
-    var escapedPattern = pattern
-      .replace(/\\/g, '\\\\')
-      .replace(/'/g, "\\'")
-      .replace(/\n/g, '\\n')
-      .replace(/\r/g, '\\r')
-      .replace(/\t/g, '\\t');
-    var filterExpr = "visibility in ['PUBLIC','PROTECTED'] && content.contains('" + escapedPattern + "')";
+    var filterExpr = MemosAPI.buildContentFilter(pattern);
     var filter = "?filter=" + encodeURIComponent(filterExpr);
 
-    $("#randomlist").html('').hide();
+    clearMemoList();
     MemosAPI.listMemos(info, filter).then(function (memos) {
       if (!memos.length) {
         $.message({ message: chrome.i18n.getMessage("noSearchResults") });
@@ -439,11 +550,8 @@ $('#random').click(function () {
       return;
     }
 
-    var filterExpr = "visibility in ['PUBLIC','PROTECTED']";
-    var filter = "?filter=" + encodeURIComponent(filterExpr);
-
-    $("#randomlist").html('').hide();
-    MemosAPI.listMemos(info, filter).then(function (memos) {
+    clearMemoList();
+    MemosAPI.listMemos(info).then(function (memos) {
       if (!memos.length) {
         $.message({ message: chrome.i18n.getMessage("noMemosFound") });
         return;
@@ -475,10 +583,27 @@ $(document).on("click", ".random-delete", function () {
   var memosName = $(this).data('name');
   get_info(function (info) {
     MemosAPI.archiveMemo(info, memosName).then(function () {
-      $("#randomlist").html('').hide();
+      clearMemoList();
       $.message({ message: chrome.i18n.getMessage("archiveSuccess") });
     }).catch(function (xhr) {
       showApiError('Archive API failed', xhr, chrome.i18n.getMessage("archiveFailed"));
+    });
+  });
+});
+
+$(document).on("click", ".memos-file-link", function (event) {
+  event.preventDefault();
+  var url = $(this).attr('data-url');
+  get_info(function (info) {
+    MemosAPI.fetchAttachmentBlob(info, url).then(function (blob) {
+      var objectUrl = URL.createObjectURL(blob);
+      var link = document.createElement('a');
+      link.href = objectUrl;
+      link.download = MemosAPI.managedFile(info.apiUrl, url).filename;
+      link.click();
+      setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 10000);
+    }).catch(function (xhr) {
+      showApiError('Attachment download failed', xhr, chrome.i18n.getMessage("apiFailed"));
     });
   });
 });
@@ -527,6 +652,7 @@ function add(str) {
       str +
       tc.value.substring(tc.selectionStart, tclen);
   }
+  saveCurrentDraft();
 }
 
 $('#blog_info_edit').click(function () {
@@ -549,7 +675,7 @@ function getOne(memosName) {
       return;
     }
 
-    $("#randomlist").html('').hide();
+    clearMemoList();
     MemosAPI.getMemo(info, memosName).then(function (data) {
       randDom(data);
     }).catch(function (xhr) {
@@ -559,9 +685,18 @@ function getOne(memosName) {
 }
 
 function sendText() {
+  if (memoSaveInProgress) return;
+  if (pendingUploads) {
+    $.message({ message: chrome.i18n.getMessage("picUploading") });
+    return;
+  }
+  memoSaveInProgress = true;
+  $("textarea[name=text]").prop('readOnly', true);
+  $('#content_submit_text').attr('aria-disabled', 'true');
   get_info(function (info) {
     if (!info.status) {
       $.message({ message: chrome.i18n.getMessage("placeApiUrl") });
+      finishMemoSave();
       return;
     }
 
@@ -573,23 +708,32 @@ function sendText() {
       visibility: resolveVisibility(info)
     };
 
-    MemosAPI.createMemo(info, body).then(function (data) {
-      console.log('Memo saved:', data);
+    MemosAPI.prepareMemo(info, body).then(function (prepared) {
+      return MemosAPI.createMemo(info, prepared);
+    }).then(function (data) {
       getOne(data.name);
-      chrome.storage.sync.set(
-        { open_action: '', open_content: '' },
-        function () {
-          $.message({ message: chrome.i18n.getMessage("memoSuccess") });
-          $("textarea[name=text]").val('');
+      var current = $("textarea[name=text]").val();
+      var remaining = current === content ? '' : current;
+      $("textarea[name=text]").val(remaining);
+      DraftStorage.save(
+        { open_action: remaining ? 'save_text' : '', open_content: remaining },
+        function (error) {
+          $.message({ message: chrome.i18n.getMessage(error ? "draftSaveFailed" : "memoSuccess") });
         }
       );
     }).catch(function (xhr) {
-      chrome.storage.sync.set(
-        { open_action: '', open_content: '' },
+      DraftStorage.save(
+        { open_action: 'save_text', open_content: $("textarea[name=text]").val() },
         function () {
           showApiError('Create memo API failed', xhr, chrome.i18n.getMessage("memoFailed"));
         }
       );
-    });
+    }).finally(finishMemoSave);
   });
+}
+
+function finishMemoSave() {
+  memoSaveInProgress = false;
+  $("textarea[name=text]").prop('readOnly', false);
+  $('#content_submit_text').removeAttr('aria-disabled');
 }

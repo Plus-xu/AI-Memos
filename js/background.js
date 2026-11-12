@@ -1,3 +1,5 @@
+importScripts('draft-storage.js');
+
 chrome.runtime.onInstalled.addListener(() => {
     chrome.contextMenus.create(
       {
@@ -54,11 +56,11 @@ chrome.contextMenus.onClicked.addListener(info => {
         tempCont = `![](${info.srcUrl})` + '\n'
         break
     }
-    chrome.storage.sync.get({open_action: "save_text", open_content: ''}, function(items) {
+    DraftStorage.load(function(items) {
       if(items.open_action === 'upload_image') {
         alert(chrome.i18n.getMessage("picPending"));
       } else {
-        chrome.storage.sync.set({open_action: "save_text", open_content: items.open_content + tempCont});
+        DraftStorage.save({open_action: "save_text", open_content: items.open_content + tempCont});
       }
     })
 })

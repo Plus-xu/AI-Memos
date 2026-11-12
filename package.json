@@ -1,0 +1,12 @@
+{
+  "name": "ai-memos",
+  "version": "2026.11.12",
+  "private": true,
+  "description": "Compatibility checks for the AI-MEMOS browser extension",
+  "scripts": {
+    "test": "node --test --test-isolation=none tests/*.test.cjs"
+  },
+  "engines": {
+    "node": ">=22.8.0"
+  }
+}
