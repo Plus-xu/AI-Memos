@@ -4,69 +4,126 @@
  */
 
 const LLM_CONFIG = {
-  // 模型提供商配置
+  // Text generation catalog verified 2026-11-19. Account-specific entries are loaded on request.
   providers: {
-    openai: {
-      name: 'OpenAI',
-      endpointType: 'openai-responses',
-      apiUrl: 'https://api.openai.com/v1/responses',
-      models: [
-        { value: 'gpt-5.5', label: 'GPT-5.5', description: 'OpenAI 最新旗舰模型' },
-        { value: 'gpt-5.5-pro', label: 'GPT-5.5 Pro', description: '复杂推理与高价值任务' },
-        { value: 'gpt-5.4-mini', label: 'GPT-5.4 Mini', description: '平衡成本、速度与质量' },
-        { value: 'gpt-5.4-nano', label: 'GPT-5.4 Nano', description: '轻量、低延迟模型' },
-        { value: 'gpt-4.1', label: 'GPT-4.1', description: '稳定通用模型' },
-        { value: 'custom', label: '自定义模型', description: '输入自定义模型名称' }
+    "openai": {
+      "name": "OpenAI",
+      "endpointType": "openai-responses",
+      "apiUrl": "https://api.openai.com/v1/responses",
+      "modelsUrl": "https://api.openai.com/v1/models",
+      "models": [
+        {
+          "value": "gpt-6.2-sol",
+          "label": "GPT-6.2 Sol"
+        },
+        {
+          "value": "gpt-6.2-astra",
+          "label": "GPT-6.2 Astra"
+        },
+        {
+          "value": "gpt-6.1-terra",
+          "label": "GPT-6.1 Terra"
+        },
+        {
+          "value": "gpt-6-luna",
+          "label": "GPT-6 Luna"
+        },
+        {
+          "value": "custom",
+          "label": "Custom"
+        }
       ]
     },
-    deepseek: {
-      name: 'DeepSeek',
-      endpointType: 'chat-completions',
-      apiUrl: 'https://api.deepseek.com/v1/chat/completions',
-      models: [
-        { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', description: '快速模型' },
-        { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', description: '高质量模型' },
-        { value: 'custom', label: '自定义模型', description: '输入自定义模型名称' }
+    "deepseek": {
+      "name": "DeepSeek",
+      "endpointType": "chat-completions",
+      "apiUrl": "https://api.deepseek.com/v1/chat/completions",
+      "modelsUrl": "https://api.deepseek.com/models",
+      "models": [
+        {
+          "value": "deepseek-flash",
+          "label": "DeepSeek V4.1 Flash"
+        },
+        {
+          "value": "deepseek-v4-pro",
+          "label": "DeepSeek V4 Pro"
+        },
+        {
+          "value": "custom",
+          "label": "Custom"
+        }
       ]
     },
-    gemini: {
-      name: 'Gemini',
-      endpointType: 'gemini',
-      apiUrl: 'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent',
-      models: [
-        { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', description: '当前稳定主力模型' },
-        { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview', description: '复杂推理与智能体任务' },
-        { value: 'gemini-3-flash-preview', label: 'Gemini 3 Flash Preview', description: '高性能多模态预览模型' },
-        { value: 'gemini-3.1-flash-lite', label: 'Gemini 3.1 Flash-Lite', description: '低延迟高性价比模型' },
-        { value: 'custom', label: '自定义模型', description: '输入自定义模型名称' }
+    "gemini": {
+      "name": "Gemini",
+      "endpointType": "gemini",
+      "apiUrl": "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+      "modelsUrl": "https://generativelanguage.googleapis.com/v1beta/models",
+      "models": [
+        {
+          "value": "gemini-4-hydrogen",
+          "label": "Gemini 4 Hydrogen"
+        },
+        {
+          "value": "gemini-4-neon",
+          "label": "Gemini 4 Neon"
+        },
+        {
+          "value": "gemini-4-argon",
+          "label": "Gemini 4 Argon"
+        },
+        {
+          "value": "gemini-4-carbon",
+          "label": "Gemini 4 Carbon"
+        },
+        {
+          "value": "gemini-3.5-flash-lite",
+          "label": "Gemini 3.5 Flash-Lite"
+        },
+        {
+          "value": "custom",
+          "label": "Custom"
+        }
       ]
     },
-    anthropic: {
-      name: 'Anthropic',
-      endpointType: 'anthropic',
-      apiUrl: 'https://api.anthropic.com/v1/messages',
-      anthropicVersion: '2023-06-01',
-      models: [
-        { value: 'claude-opus-4-8', label: 'Claude Opus 4.8', description: 'Anthropic 最新旗舰模型' },
-        { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', description: '速度与智能平衡模型' },
-        { value: 'claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5', description: '快速轻量模型' },
-        { value: 'custom', label: '自定义模型', description: '输入自定义模型名称' }
+    "anthropic": {
+      "name": "Anthropic",
+      "endpointType": "anthropic",
+      "apiUrl": "https://api.anthropic.com/v1/messages",
+      "modelsUrl": "https://api.anthropic.com/v1/models",
+      "anthropicVersion": "2023-06-01",
+      "models": [
+        {
+          "value": "claude-sonnet-5-5",
+          "label": "Claude Sonnet 5.5"
+        },
+        {
+          "value": "claude-haiku-5-5",
+          "label": "Claude Haiku 5.5"
+        },
+        {
+          "value": "claude-opus-5-5",
+          "label": "Claude Opus 5.5"
+        },
+        {
+          "value": "claude-fable-5-2",
+          "label": "Claude Fable 5.2"
+        },
+        {
+          "value": "custom",
+          "label": "Custom"
+        }
       ]
     },
-    newapi: {
-      name: 'New API',
-      endpointType: 'chat-completions',
-      requiresBaseUrl: true,
-      models: [
-        { value: 'gpt-5.5', label: 'GPT-5.5', description: '由 New API 渠道配置决定可用性' },
-        { value: 'gpt-5.5-pro', label: 'GPT-5.5 Pro', description: '由 New API 渠道配置决定可用性' },
-        { value: 'deepseek-v4-flash', label: 'DeepSeek V4 Flash', description: '由 New API 渠道配置决定可用性' },
-        { value: 'deepseek-v4-pro', label: 'DeepSeek V4 Pro', description: '由 New API 渠道配置决定可用性' },
-        { value: 'claude-opus-4-8', label: 'Claude Opus 4.8', description: '由 New API 渠道配置决定可用性' },
-        { value: 'claude-sonnet-4-6', label: 'Claude Sonnet 4.6', description: '由 New API 渠道配置决定可用性' },
-        { value: 'gemini-3.5-flash', label: 'Gemini 3.5 Flash', description: '由 New API 渠道配置决定可用性' },
-        { value: 'gemini-3.1-pro-preview', label: 'Gemini 3.1 Pro Preview', description: '由 New API 渠道配置决定可用性' },
-        { value: 'custom', label: '自定义模型', description: '输入自定义模型名称' }
+    "newapi": {
+      "name": "New API",
+      "endpointType": "chat-completions",
+      "requiresBaseUrl": true,
+      "models": [
+        {
+          "value": "custom",
+          "label": "Custom"
+        }
       ]
     }
   },
@@ -377,7 +434,7 @@ def quicksort(arr):
   // 默认配置
   defaults: {
     provider: 'openai',
-    model: 'gpt-5.5',
+    model: 'gpt-6.2-sol',
     temperature: 0.7,
     maxTokens: 2000
   }

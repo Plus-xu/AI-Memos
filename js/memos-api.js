@@ -101,6 +101,32 @@ const MemosAPI = (function () {
     });
   }
 
+  async function listMemoPage(info, query) {
+    const params = new URLSearchParams(String(query || '').replace(/^\?/, ''));
+    if (!params.has('pageSize')) params.set('pageSize', '25');
+    const response = await request(info, { path: 'memos?' + params });
+    const memos = response?.memos || response?.items || [];
+    const next = response?.nextPageToken || response?.next_page_token || '';
+    if (!response || !Array.isArray(memos) || typeof next !== 'string') throw apiError('invalid_response');
+    return { memos, next };
+  }
+
+  async function listSpaces(info) {
+    let token = '';
+    const seen = new Set(), spaces = [];
+    do {
+      const query = new URLSearchParams({ pageSize: '100' });
+      if (token) query.set('pageToken', token);
+      const response = await request(info, { path: 'spaces?' + query });
+      if (!response || (response.spaces && !Array.isArray(response.spaces))) throw apiError('invalid_response');
+      spaces.push(...(response.spaces || []).filter(space => /^spaces\/[^/]+$/.test(space.name)));
+      token = response.nextPageToken || '';
+      if (token && (typeof token !== 'string' || seen.has(token))) throw apiError('invalid_page_token');
+      seen.add(token);
+    } while (token);
+    return spaces;
+  }
+
   function listMemos(info, query) {
     var params = new URLSearchParams(String(query || '').replace(/^\?/, ''));
     if (!params.has('pageSize')) params.set('pageSize', '1000');
@@ -142,9 +168,9 @@ const MemosAPI = (function () {
     });
   }
 
-  function createMemo(info, body) {
+  function createMemo(info, body, memoId) {
     return request(info, {
-      path: 'memos',
+      path: 'memos' + (memoId ? '?memoId=' + encodeURIComponent(memoId) : ''),
       method: 'POST',
       body: body
     });
@@ -304,7 +330,7 @@ const MemosAPI = (function () {
     normalizeBaseUrl: normalizeBaseUrl,
     getInstanceProfile: getInstanceProfile,
     currentUser: currentUser,
-    listMemos: listMemos,
+    listMemos, listMemoPage, listSpaces, isMissingRoute,
     buildContentFilter: buildContentFilter,
     getMemo: getMemo,
     prepareMemo: prepareMemo,

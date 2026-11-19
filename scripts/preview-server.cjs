@@ -21,22 +21,22 @@ function chromeRuntime(messages) {
   const initial = {
     sync: {
       apiUrl: origin + '/__memos/', apiTokens: 'preview-public-fake-pat', userName: 'users/preview', userid: 'preview',
-      memo_lock: 'PRIVATE', userLanguage: 'zh_CN', theme: 'light',
-      llmActiveProvider: 'openai', llmProvider: 'openai', llmModel: 'gpt-5.5', llmApiKey: 'preview-public-fake-key',
-      llmProviderConfigs: { openai: { model: 'gpt-5.5', customModel: '', apiKey: 'preview-public-fake-key', baseUrl: '' } },
+      memosVersion: '26.11.1', memo_lock: 'PRIVATE', userLanguage: 'zh_CN', theme: 'light',
+      llmActiveProvider: 'openai', llmProvider: 'openai', llmModel: 'gpt-6.2-sol', llmApiKey: 'preview-public-fake-key',
+      llmProviderConfigs: { openai: { model: 'gpt-6.2-sol', customModel: '', apiKey: 'preview-public-fake-key', baseUrl: '' } },
       llmQuickPresets: [
-        { provider: 'openai', model: 'gpt-5.5' },
-        { provider: 'openai', model: 'gpt-5.5' },
-        { provider: 'openai', model: 'gpt-5.5' }
+        { provider: 'openai', model: 'gpt-6.2-sol' },
+        { provider: 'openai', model: 'gpt-6.2-sol' },
+        { provider: 'openai', model: 'gpt-6.2-sol' }
       ]
     },
     local: {
       memosAITask: 'organize', memosAIReview: null, memosAIUndo: null,
       memosDraft: { open_action: 'save_text', open_content: '数字化治理阅读笔记：\\n1. 服务流程应以群众需求为导向。\\n2. 数据共享需要明确责任和边界。\\n\\n来源：https://example.org/articles/digital-governance\\n#学习 #素材' },
       llmTaskPresets: [
-        { name: '阅读摘要', task: 'summary', prompt: '', provider: 'openai', model: 'gpt-5.5', customModel: '' },
-        { name: '提取要点', task: 'keypoints', prompt: '', provider: 'openai', model: 'gpt-5.5', customModel: '' },
-        { name: '学习问答', task: 'qa', prompt: '', provider: 'openai', model: 'gpt-5.5', customModel: '' }
+        { name: '阅读摘要', task: 'summary', prompt: '', provider: 'openai', model: 'gpt-6.2-sol', customModel: '' },
+        { name: '提取要点', task: 'keypoints', prompt: '', provider: 'openai', model: 'gpt-6.2-sol', customModel: '' },
+        { name: '学习问答', task: 'qa', prompt: '', provider: 'openai', model: 'gpt-6.2-sol', customModel: '' }
       ]
     }
   };
@@ -46,6 +46,17 @@ function chromeRuntime(messages) {
     catch (_) { stores[area] = clone(initial[area]); }
   }
   const listeners = new Set();
+  window.addEventListener('storage', event => {
+    const area = (event.key || '').slice(storagePrefix.length);
+    if (!event.key?.startsWith(storagePrefix) || !stores[area]) return;
+    const after = event.newValue ? JSON.parse(event.newValue) : clone(initial[area]);
+    const changes = {};
+    for (const key of new Set([...Object.keys(after), ...Object.keys(stores[area])])) {
+      if (JSON.stringify(stores[area][key]) !== JSON.stringify(after[key])) changes[key] = { oldValue: stores[area][key], newValue: after[key] };
+    }
+    stores[area] = after;
+    for (const listener of listeners) listener(changes, area);
+  });
   const later = callback => queueMicrotask(callback);
   const storageArea = area => ({
     get(keys, callback) {
@@ -80,10 +91,19 @@ function chromeRuntime(messages) {
   const runtime = {
     lastError: null, id: 'ai-memos-local-preview', onInstalled: noopEvent, onMessage: noopEvent,
     getURL: file => new URL('/' + String(file).replace(/^\\/+/, ''), origin).href,
-    getManifest: () => ({ name: 'AI-MEMOS 本地预览', version: '2026.11.12.1' }), reload: () => location.reload()
+    openOptionsPage: async () => { window.open('/options.html','_blank','noopener'); },
+    async sendMessage(request) {
+      if (request.type !== 'capture') return { error:'clipCaptureFailed' };
+      const { url, title, content } = sample;
+      const source = { url, title };
+      const { memosClipTemplate: template } = await DraftStorage.get('local', { memosClipTemplate:ClipperCore.defaultTemplate });
+      await DraftStorage.append(ClipperCore.format({ url, title, content }, template), null, [source]);
+      return { result:{ kind:request.mode === 'selection' ? 'selection' : 'article', source } };
+    },
+    getManifest: () => ({ name: 'AI-MEMOS 本地预览', version: '2026.11.19.1' }), reload: () => location.reload()
   };
   const chrome = {
-    runtime,
+    runtime, windows:{ getCurrent:async () => ({ id:1 }) }, sidePanel:{ open:async () => { window.open('/panel.html','_blank','noopener'); } },
     i18n: {
       getUILanguage: () => 'zh-CN',
       getMessage(key, substitutions) {
@@ -105,12 +125,17 @@ function chromeRuntime(messages) {
     },
     contextMenus: { create() {}, removeAll(callback) { if (callback) later(callback); }, onClicked: noopEvent }
   };
-  Object.defineProperty(window, 'chrome', { configurable: true, value: chrome });
+  if (window.chrome) Object.assign(window.chrome, chrome);
+  else window.chrome = chrome;
   const preview = { failAI: false, failSave: false, sample, stores, memos: new Map(), attachments: new Map(), requests: [] };
   window.__AI_MEMOS_PREVIEW__ = preview;
   const nativeFetch = window.fetch.bind(window);
   window.fetch = (input, options) => {
-    const url = new URL(typeof input === 'string' ? input : input.url, location.href);
+    const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    if (url.pathname.endsWith('/models')) {
+      const data = url.hostname.includes('googleapis') ? { models:[{ name:'models/preview-text', supportedGenerationMethods:['generateContent'] }] } : { data:[{ id:'preview-text' }] };
+      return Promise.resolve(Response.json(data));
+    }
     if (url.origin !== origin) return Promise.reject(new Error('Local preview blocks external requests'));
     if (url.pathname.startsWith('/__memos/file/attachments/')) {
       return Promise.resolve(new Response('<svg xmlns="http://www.w3.org/2000/svg" width="180" height="120"><rect width="180" height="120" fill="#e5e7eb"/><text x="20" y="65" fill="#374151">Preview attachment</text></svg>', { headers: { 'Content-Type': 'image/svg+xml' } }));
@@ -161,17 +186,23 @@ function ajaxRuntime() {
     if (links.length) result += '\\n\\n来源：\\n' + links.map(link => '- ' + link).join('\\n');
     return { output_text: result, output: [{ type: 'message', content: [{ type: 'output_text', text: result }] }], choices: [{ message: { content: result } }], candidates: [{ content: { parts: [{ text: result }] } }], content: [{ type: 'text', text: result }] };
   }
-  function memosResult(route, method, body) {
+  function memosResult(route, method, body, params) {
     if (route === 'auth/me' || route === 'auth/sessions/current') return { user: { name: 'users/preview', username: 'preview', displayName: '本地预览' } };
-    if (route === 'instance/profile') return { version: '26.11.0' };
-    if (route === 'memos' && method === 'GET') return { memos: Array.from(preview.memos.values()).filter(memo => memo.state !== 'ARCHIVED'), nextPageToken: '' };
+    if (route === 'instance/profile') return { version: '26.11.1' };
+    if (route === 'memos' && method === 'GET') {
+      const filter = params.get('filter') || '', keyword = filter.match(/content\\.contains\\(("(?:\\\\.|[^"\\\\])*")\\)/);
+      const tag = filter.match(/("(?:\\\\.|[^"\\\\])*") in tags/);
+      return { memos: Array.from(preview.memos.values()).filter(m => m.state !== 'ARCHIVED' &&
+        (!keyword || m.content.includes(JSON.parse(keyword[1]))) && (!tag || m.tags?.includes(JSON.parse(tag[1])))), nextPageToken:'' };
+    }
     if (route === 'memos' && method === 'POST') {
       if (preview.failSave) { preview.failSave = false; throw { status: 429, message: '模拟保存失败：达到用量限制', details: [{ reason: 'QUOTA_EXCEEDED' }] }; }
-      const memo = { ...body, name: 'memos/preview-' + Date.now(), creator: 'users/preview', createTime: new Date().toISOString(), tags: ['学习'], attachments: [] };
+      const memo = { ...body, name: 'memos/' + (params.get('memoId') || 'preview-' + Date.now()), creator: 'users/preview', createTime: new Date().toISOString(), tags: ['学习'], attachments: body.attachments || [] };
       preview.memos.set(memo.name, memo); return memo;
     }
     if (/^memos\\/[^/]+$/.test(route)) {
-      const memo = preview.memos.get(route) || { ...initialMemo, name: route };
+      const memo = preview.memos.get(route);
+      if (!memo) throw { status:404, message:'找不到此笔记' };
       if (method === 'PATCH') Object.assign(memo, body);
       preview.memos.set(route, memo); return memo;
     }
@@ -181,7 +212,7 @@ function ajaxRuntime() {
     }
     if (/^attachments\\/[^/]+$/.test(route)) return preview.attachments.get(route) || { name: route, filename: 'preview.png', type: 'image/png' };
     if (/^users\\/[^/]+\\/views$/.test(route)) return { memoViews: [] };
-    if (route === 'spaces') return { spaces: [], nextPageToken: '' };
+    if (route === 'spaces') return { spaces:[{ name:'spaces/reading', title:'阅读小组' }], nextPageToken: '' };
     throw { status: 404, message: '本地预览未模拟该接口：' + route };
   }
   $.ajax = function (options) {
@@ -206,7 +237,7 @@ function ajaxRuntime() {
       try {
         if (ai && preview.failAI) { preview.failAI = false; throw { status: 503, message: '模拟 AI 服务暂时不可用' }; }
         const body = bodyOf(options);
-        const data = ai ? aiResult(body) : memosResult(match[1], method, body);
+        const data = ai ? aiResult(body) : memosResult(match[1], method, body, url.searchParams);
         settled = true; xhr.status = 200; xhr.statusText = 'OK'; xhr.responseJSON = clone(data); xhr.responseText = JSON.stringify(data);
         if (options.success) options.success(clone(data), 'success', xhr);
         deferred.resolve(clone(data), 'success', xhr);
@@ -219,7 +250,7 @@ function ajaxRuntime() {
 }
 
 const previewStyle = `
-.body{box-sizing:content-box;width:460px;max-width:460px;min-width:460px;margin:0 auto;padding-top:0.6rem;}
+html[data-view=popup]{margin:0 auto} #previewBanner{max-width:665px;margin-inline:auto!important}
 #previewBanner{position:relative;margin:0 0 0.7rem;padding:0.6rem 0.7rem;border:1px solid #d6c69d;border-radius:0.4rem;background:#fff7dd;color:#654d17;font:12px/1.5 system-ui,sans-serif;}
 #previewBanner strong{display:block;font-size:13px;}#previewBanner .preview-controls{display:flex;gap:0.4rem;flex-wrap:wrap;margin-top:0.3rem;}
 #previewBanner button{padding:0.18rem 0.4rem;border:1px solid #d6c69d;border-radius:0.25rem;background:#fffdf7;color:#654d17;cursor:pointer;font-size:11px;}
@@ -245,8 +276,9 @@ function createPreviewServer() {
       }
       if (pathname === '/__preview-ajax.js') return respond(200, contentTypes['.js'], ajaxRuntime());
       if (pathname === '/__preview-style.css') return respond(200, contentTypes['.css'], previewStyle);
-      if (pathname === '/' || pathname === '/popup.html') {
-        let html = fs.readFileSync(path.join(root, 'popup.html'), 'utf8');
+      if (pathname === '/panel.html') return respond(200, contentTypes['.html'], fs.readFileSync(path.join(root, 'panel.html'), 'utf8'));
+      if (['/', '/popup.html', '/options.html'].includes(pathname)) {
+        let html = fs.readFileSync(path.join(root, pathname === '/options.html' ? 'options.html' : 'popup.html'), 'utf8');
         html = html.replace(/<head>/i, '<head>\n<script src="/__preview-chrome.js"></script>\n<link rel="stylesheet" href="/__preview-style.css">');
         html = html.replace(/<title>[^<]*<\/title>/i, '<title>AI-MEMOS 本地预览（模拟数据）</title>');
         html = html.replace(/(<body\b[^>]*>)/i, '$1\n<aside id="previewBanner" aria-label="本地模拟环境"><strong>AI-MEMOS 本地预览 · 仅模拟数据</strong>不会连接真实 Memos 或 AI 服务，也不会读取 Chrome 扩展配置。<div class="preview-controls"><button type="button" id="previewReset">重置模拟数据</button><button type="button" id="previewFailAI">模拟下次 AI 失败</button><button type="button" id="previewFailSave">模拟下次保存失败</button></div><span id="previewStatus" role="status">所有服务请求均在本页模拟，外网请求已阻止。</span></aside>');

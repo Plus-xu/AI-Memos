@@ -24,10 +24,12 @@ var Clipper = (function () {
         var separator = withTime ? '\n\n' : ' ';
         var inserted = (before && !/\s$/.test(before) ? separator : '') + source +
           (after && !/^\s/.test(after) ? separator : '');
+        if (typeof DraftEditor !== 'undefined') DraftEditor.note({ url, title: tab.title || url });
         editor.value = before + inserted + after;
         editor.focus();
         editor.setSelectionRange(before.length + inserted.length, before.length + inserted.length);
         $('#content').trigger('input');
+        if (typeof Workspace !== 'undefined') Workspace.refreshHistory(url);
         $.message({ message: getLLMMessage('clipSourceAdded') });
       } catch (_) {
         $.message({ message: getLLMMessage('clipCaptureFailed') });
@@ -47,6 +49,7 @@ var Clipper = (function () {
           return;
         }
         template = next;
+        $.message({ message: getLLMMessage('settingsSaved') });
       });
     } catch (_) {
       $.message({ message: getLLMMessage('clipTemplateInvalid') });
@@ -66,6 +69,7 @@ var Clipper = (function () {
       });
     });
     $('#clipTemplate').on('change', saveTemplate);
+    $('#saveTemplate').click(saveTemplate);
     $('#clipTemplateReset').click(function () { $('#clipTemplate').val(ClipperCore.defaultTemplate); saveTemplate(); });
   }
 

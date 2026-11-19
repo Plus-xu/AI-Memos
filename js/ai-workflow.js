@@ -24,7 +24,7 @@ var AIWorkflow = (function () {
 
   function references(text) {
     var input = String(text);
-    var starts = /https?:\/\/|\/file\/attachments\//g;
+    var starts = /https?:\/\/|memos-local:\/\/|\/file\/attachments\//g;
     var urls = [];
     var match;
     while ((match = starts.exec(input))) {

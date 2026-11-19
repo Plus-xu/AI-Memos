@@ -28,7 +28,9 @@ var AIReview = (function () {
   function refreshTaskHint() {
     var selected = AIWorkflow.normalizeTask($('#aiTask').val());
     $('#aiTaskHelp').text(message('aiTaskHelp_' + selected));
-    $('#ai_optimize').attr('title', message('aiRunTask').replace('{task}', taskName(selected)));
+    const taskLabel = message('aiRunTask').replace('{task}', taskName(selected));
+    $('#ai_optimize').attr('title', taskLabel).attr('aria-label', taskLabel);
+    $('#ai_optimize span').text('AI · ' + taskName(selected));
     $('#aiTaskStatus').text(message('aiRunningTask').replace('{task}', taskName(runningTask))).prop('hidden', !busy);
     $('#aiReviewTask').text(currentReview ? message('aiExecutedTask').replace('{task}', taskName(currentReview.task)) : '');
   }
@@ -48,7 +50,7 @@ var AIReview = (function () {
     $('#aiReviewPanel').prop('hidden', !currentReview);
     if (currentReview) {
       $('#aiReviewOriginal').val(currentReview.input);
-      $('#aiReviewResult').val(currentReview.result);
+      if ($('#aiReviewResult').val() !== currentReview.result) $('#aiReviewResult').val(currentReview.result);
     }
     renderWarning();
     refreshTaskHint();
@@ -93,8 +95,44 @@ var AIReview = (function () {
     render();
   }
 
+  const jobKey = 'memosAIJob';
+  const jobLock = 'memos-ai-generation';
+
+  function setBusy(value, task) {
+    busy = value;
+    if (task) runningTask = AIWorkflow.normalizeTask(task);
+    $('#ai_optimize, #ai_quick_toggle').prop('disabled', busy);
+    renderWarning();
+    refreshTaskHint();
+  }
+
+  // A closed editor releases its Web Lock even if its request never finished.
+  async function observeJob(job) {
+    if (!job || typeof navigator === 'undefined' || !navigator.locks) return;
+    setBusy(true, job.task);
+    await navigator.locks.request(jobLock, async () => {
+      const data = await DraftStorage.get('local', { [jobKey]: null });
+      if (data[jobKey]?.id === job.id) {
+        await DraftStorage.put('local', { [jobKey]: null });
+        $.message({ message: message('aiInterrupted') });
+      }
+      setBusy(false);
+    });
+  }
+
+  function withJob(task, work) {
+    if (typeof navigator === 'undefined' || !navigator.locks) return work();
+    return navigator.locks.request(jobLock, { ifAvailable: true }, async lock => {
+      if (!lock) { $.message({ message: message('aiOptimizing') }); return; }
+      const job = { id: crypto.randomUUID(), task };
+      await DraftStorage.put('local', { [jobKey]: job });
+      try { return await work(); }
+      finally { await DraftStorage.put('local', { [jobKey]: null }); }
+    });
+  }
+
   function init() {
-    chrome.storage.local.get({ memosAIReview: null, memosAIUndo: null, memosAITask: 'organize' }, function (data) {
+    chrome.storage.local.get({ memosAIReview: null, memosAIUndo: null, memosAITask: 'organize', memosAIJob: null }, function (data) {
       var value = data.memosAIReview;
       if (value && typeof value.input === 'string' && typeof value.result === 'string') currentReview = value;
       var transaction = data.memosAIUndo;
@@ -102,6 +140,15 @@ var AIReview = (function () {
       $('#aiTask').val(AIWorkflow.normalizeTask(data.memosAITask));
       render();
       refreshTexts();
+      observeJob(data.memosAIJob);
+    });
+    chrome.storage.onChanged?.addListener((changes, area) => {
+      if (area !== 'local') return;
+      if (changes.memosAIJob?.newValue) observeJob(changes.memosAIJob.newValue);
+      if (changes.memosAIReview) currentReview = changes.memosAIReview.newValue || null;
+      if (changes.memosAIUndo) lastTransaction = changes.memosAIUndo.newValue || null;
+      if (changes.memosAITask) $('#aiTask').val(AIWorkflow.normalizeTask(changes.memosAITask.newValue));
+      if (changes.memosAIReview || changes.memosAIUndo || changes.memosAITask) render();
     });
     $('#aiTask').on('change', function () {
       chrome.storage.local.set({ memosAITask: AIWorkflow.normalizeTask(this.value) });
@@ -121,10 +168,5 @@ var AIReview = (function () {
   }
 
   return { init: init, show: show, refresh: renderWarning, refreshTaskHint: refreshTaskHint, refreshTexts: refreshTexts, onMemoSaved: onMemoSaved,
-    isBusy: function () { return busy; }, setBusy: function (value, task) {
-      busy = value;
-      if (task) runningTask = AIWorkflow.normalizeTask(task);
-      renderWarning();
-      refreshTaskHint();
-    } };
+    isBusy: function () { return busy; }, setBusy, withJob };
 })();

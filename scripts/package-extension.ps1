@@ -35,7 +35,7 @@ function Assert-NoLink([string]$LiteralPath) {
 
 Assert-NoLink $taskRoot
 $taskCandidates = [System.Collections.Generic.List[string]]::new()
-foreach ($taskRootFile in @('manifest.json', 'popup.html')) {
+foreach ($taskRootFile in @('manifest.json', 'popup.html', 'panel.html', 'options.html')) {
     $taskFilePath = Get-SafeSourcePath $taskRootFile
     if (-not (Test-Path -LiteralPath $taskFilePath -PathType Leaf)) { throw "Missing extension file: $taskRootFile" }
     Assert-NoLink $taskFilePath
@@ -115,11 +115,15 @@ if ($taskManifest.default_locale) {
     Assert-PackagedResource ('_locales/' + $taskManifest.default_locale + '/messages.json') 'default_locale'
 }
 
-$taskPopup = Get-Content -LiteralPath (Get-SafeSourcePath 'popup.html') -Raw -Encoding utf8
-foreach ($taskReference in [regex]::Matches($taskPopup, '(?i)\b(?:src|href)\s*=\s*["'']([^"'']+)["'']')) {
-    $taskResource = $taskReference.Groups[1].Value
-    if ($taskResource.StartsWith('#')) { continue }
-    Assert-PackagedResource $taskResource 'popup.html'
+foreach ($taskPage in @('popup.html','options.html','panel.html')) {
+    $taskHtml = Get-Content -LiteralPath (Get-SafeSourcePath $taskPage) -Raw -Encoding utf8
+    foreach ($taskReference in [regex]::Matches($taskHtml, '(?i)\b(?:src|href)\s*=\s*["'']([^"'']+)["'']')) {
+        $taskResource = $taskReference.Groups[1].Value
+        if (-not $taskResource.StartsWith('#')) { Assert-PackagedResource $taskResource $taskPage }
+    }
+}
+foreach ($taskInjected in @('js/vendor/clipper-libraries.js','js/page-capture.js')) {
+    Assert-PackagedResource $taskInjected 'user-initiated capture'
 }
 
 # CSS dependencies are resolved relative to the stylesheet instead of the root.

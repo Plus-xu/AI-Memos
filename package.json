@@ -1,6 +1,6 @@
 {
   "name": "ai-memos",
-  "version": "2026.11.12-2",
+  "version": "2026.11.19-1",
   "private": true,
   "description": "Development and packaging tools for the AI-MEMOS browser extension",
   "scripts": {
@@ -10,5 +10,10 @@
   },
   "engines": {
     "node": ">=22.8.0"
+  },
+  "devDependencies": {
+    "@mozilla/readability": "0.6.0",
+    "turndown": "7.2.5",
+    "turndown-plugin-gfm": "1.0.2"
   }
 }

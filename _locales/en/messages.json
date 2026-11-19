@@ -1,365 +1,575 @@
 {
-   "extName": {
-      "message": "AI-MEMOS"
-   },
-   "actionTitle": {
-      "message": "Send to AI-MEMOS"
-   },
-   "extDescription": {
-      "message": "AI-powered Memos browser extension - Quickly capture, intelligently organize, and elegantly manage your thoughts and knowledge"
-   },
-   "sendTo": {
-      "message": "SendTo Memos \"%s\""
-   },
-   "sendLinkTo": {
-      "message": "Send link to Memos"
-   },
-   "sendImageTo": {
-      "message": "Send image to Memos"
-   },
-   "saveBtn":{
-      "message": "Save"
-   },
-   "placeApiUrl":{
-      "message": "Memos Self Home Url"
-   },
-   "placeApiTokens":{
-      "message": "Memos Access Tokens"
-   },
-   "placeContent":{
-      "message": "Any thoughts..."
-   },
-   "lockPrivate":{
-      "message": "Only you"
-   },
-   "lockProtected":{
-      "message": "Members"
-   },
-   "lockPublic":{
-      "message": "Everyone"
-   },
-   "visibilityTooltip":{
-      "message": "Set visibility scope"
-   },
-   "submitBtn":{
-      "message": "Save"
-   },
-   "placeHideInput":{
-      "message": "Default 'Only visible to you' Tag name"
-   },
-   "placeShowInput":{
-      "message": "Default 'Everyone can see' Tag name"
-   },
-   "picDrag":{
-      "message": "Drag upload the image"
-   },
-   "picCancelDrag":{
-      "message": "Cancel upload"
-   },
-   "picUploading":{
-      "message": "Upload the picture..."
-   },
-   "picSuccess":{
-      "message": "Upload completed"
-   },
-   "picFailed":{
-      "message": "Uploading failed"
-   },
-   "picPending":{
-      "message": "Image uploading is in progress"
-   },
-   "saveSuccess":{
-      "message": "Save Info Success!"
-   },
-   "searchNow":{
-      "message": "What are you looking for?"
-   },
-   "searchNone":{
-      "message": "Try another word!"
-   },
-   "archiveSuccess":{
-      "message": "Archive Success 😊"
-   },
-   "archiveFailed":{
-      "message": "Archive Failed 😭"
-   },
-   "getTabFailed":{
-      "message": "Get Tab Failed 😭"
-   },
-   "memoUploading":{
-      "message": "Sending"
-   },
-   "memoSuccess":{
-      "message": "Success! 😊"
-   },
-   "memoFailed":{
-      "message": "Failed! 😭"
-   },
-   "invalidToken":{
-      "message": "Invalid token or url 😭"
-   },
-   "languageLabel":{
-      "message": "Language"
-   },
-   "themeAuto":{
-      "message": "Auto"
-   },
-   "themeLight":{
-      "message": "Light"
-   },
-   "themeDark":{
-      "message": "Dark"
-   },
-   "languageChangeConfirm":{
-      "message": "Change language?"
-   },
-   "languageChanged":{
-      "message": "Language changed"
-   },
-   "settingsBtn":{
-      "message": "Settings"
-   },
-   "tagsTooltip":{
-      "message": "Add tags"
-   },
-   "todoTooltip":{
-      "message": "Add todo"
-   },
-   "uploadTooltip":{
-      "message": "Upload resource"
-   },
-   "linkTooltip":{
-      "message": "Get link"
-   },
-   "randomTooltip":{
-      "message": "Random review"
-   },
-   "searchTooltip":{
-      "message": "Search"
-   },
-   "noMemosFound":{
-      "message": "No memos found"
-   },
-   "noTagsFound":{
-      "message": "No tags found"
-   },
-   "noSearchResults":{
-      "message": "No matching memos found"
-   },
-   "apiFailed":{
-      "message": "API call failed"
-   },
-   "apiNotFound":{
-      "message": "API endpoint not found, please check Memos version"
-   },
-   "llmProviderLabel":{
-      "message": "AI Model Provider"
-   },
-   "llmModelLabel":{
-      "message": "AI Model"
-   },
-   "llmApiKeyLabel":{
-      "message": "API Key"
-   },
-   "llmCustomModelPlaceholder":{
-      "message": "Enter custom model name"
-   },
-   "llmApiKeyPlaceholder":{
-      "message": "Enter API key"
-   },
-   "aiOptimizeTooltip":{
-      "message": "Optimize with AI"
-   },
-   "aiOptimizing":{
-      "message": "AI is optimizing..."
-   },
-   "aiOptimizeSuccess":{
-      "message": "AI optimization completed!"
-   },
-   "aiOptimizeFailed":{
-      "message": "AI optimization failed"
-   },
-   "aiNoContent":{
-      "message": "Please enter content first"
-   },
-   "aiNotConfigured":{
-      "message": "Please configure AI model first"
-   },
-   "aiApiKeyRequired":{
-      "message": "Please enter API key"
-   },
-   "llmBaseUrlLabel":{
-      "message": "New API Base URL"
-   },
-   "llmBaseUrlPlaceholder":{
-      "message": "For example https://your-new-api.example.com/v1"
-   },
-   "aiBaseUrlRequired":{
-      "message": "Please enter New API Base URL"
-   },
-   "llmQuickPresetsLabel":{
-      "message": "Quick AI optimization presets"
-   },
-   "llmQuickPresetPrefix":{
-      "message": "Quick"
-   },
-   "llmQuickPresetEmpty":{
-      "message": "Not set"
-   },
-   "llmQuickPresetMenuTooltip":{
-      "message": "Choose a quick AI optimization preset"
-   },
-   "llmQuickPresetNotConfigured":{
-      "message": "This quick preset is not configured"
-   },
-   "invalidUrl": {
-      "message": "Enter a valid Memos home URL using http:// or https://."
-   },
-   "permissionDenied": {
-      "message": "You do not have permission to perform this action."
-   },
-   "uploadTooLarge": {
-      "message": "The file exceeds the server upload limit."
-   },
-   "quotaExceeded": {
-      "message": "Your Memos usage limit has been reached. Check Settings > Usage limits."
-   },
-   "requestLimited": {
-      "message": "Too many requests. Please try again later."
-   },
-   "apiTimeout": {
-      "message": "The request timed out. Your draft has been kept."
-   },
-   "attachmentPreviewFailed": {
-      "message": "Unable to load this attachment."
-   },
-   "draftSaveFailed": {
-      "message": "The draft could not be stored locally. Keep this popup open and copy your text."
-   },
-   "aiTaskLabel": {
-      "message": "AI task"
-   },
-   "aiTask_organize": {
-      "message": "Organize"
-   },
-   "aiTask_summary": {
-      "message": "Summarize"
-   },
-   "aiTask_keypoints": {
-      "message": "Key points"
-   },
-   "aiTask_qa": {
-      "message": "Study Q&A"
-   },
-   "aiTask_custom": {
-      "message": "Custom prompt"
-   },
-   "aiPresetName": {
-      "message": "Preset name (optional)"
-   },
-   "aiCustomPrompt": {
-      "message": "Describe the task for this preset"
-   },
-   "aiCustomPromptRequired": {
-      "message": "Enter a prompt for this custom task."
-   },
-   "aiReviewTitle": {
-      "message": "Review AI result"
-   },
-   "aiReviewHelp": {
-      "message": "Your draft stays unchanged until you choose an action."
-   },
-   "aiOriginal": {
-      "message": "Original"
-   },
-   "aiResult": {
-      "message": "AI result (editable)"
-   },
-   "aiReplace": {
-      "message": "Use result"
-   },
-   "aiAppend": {
-      "message": "Append to draft"
-   },
-   "aiDiscard": {
-      "message": "Discard result"
-   },
-   "aiUndo": {
-      "message": "Undo AI edit"
-   },
-   "aiUndoConflict": {
-      "message": "The draft changed after the AI edit. Undo will not overwrite newer text."
-   },
-   "aiEditConflict": {
-      "message": "The draft changed. Append the result or discard it and run AI again."
-   },
-   "aiMissingLinks": {
-      "message": "Some original links are missing. Check before adopting this result."
-   },
-   "aiReviewReady": {
-      "message": "AI result is ready for review."
-   },
-   "aiResultApplied": {
-      "message": "AI result applied. You can undo this edit."
-   },
-   "clipAddSource": {
-      "message": "Insert page source"
-   },
-   "clipSelection": {
-      "message": "Clip selection with source"
-   },
-   "clipSelectionHelp": {
-      "message": "Select text on a webpage, then right-click “Clip selection with source”."
-   },
-   "clipCaptureFailed": {
-      "message": "Cannot read this page source. Try a normal webpage."
-   },
-   "clipSourceAdded": {
-      "message": "Page source inserted at the cursor."
-   },
-   "clipTemplateLabel": {
-      "message": "Selection clip template"
-   },
-   "clipTemplateHelp": {
-      "message": "Use {{content}}, {{title}}, {{url}} and {{date}}. Content and URL are required. Saved locally on change."
-   },
-   "clipTemplateReset": {
-      "message": "Reset template"
-   },
-   "clipTemplateInvalid": {
-      "message": "Include {{content}} and {{url}} in a template of at most 8000 characters."
-   },
-   "sourceIncludeTime": {
-      "message": "Include capture time"
-   },
-   "settingsSaveFailed": {
-      "message": "Could not save this setting. Please try again."
-   },
-   "aiTaskHelp_organize": {
-      "message": "Keep the information; polish paragraphs and Markdown without intentionally shortening."
-   },
-   "aiTaskHelp_summary": {
-      "message": "One short paragraph: target 150 Chinese characters or 100 English words; sources separately."
-   },
-   "aiTaskHelp_keypoints": {
-      "message": "Extract 3–7 structured points; use fewer when the material is short."
-   },
-   "aiTaskHelp_qa": {
-      "message": "Create 3–5 evidence-based Q&A pairs; do not pad short material."
-   },
-   "aiTaskHelp_custom": {
-      "message": "Follow the prompt configured in this quick preset."
-   },
-   "aiTaskUsageHint": {
-      "message": "The main AI button uses this selection; quick presets display and run their own tasks."
-   },
-   "aiRunTask": {
-      "message": "Run AI task: {task}"
-   },
-   "aiRunningTask": {
-      "message": "Running task: {task}"
-   },
-   "aiExecutedTask": {
-      "message": "Task for this result: {task}"
-   }
+  "extName": {
+    "message": "AI-MEMOS"
+  },
+  "actionTitle": {
+    "message": "Send to AI-MEMOS"
+  },
+  "extDescription": {
+    "message": "AI-powered Memos browser extension - Quickly capture, intelligently organize, and elegantly manage your thoughts and knowledge"
+  },
+  "sendTo": {
+    "message": "SendTo Memos \"%s\""
+  },
+  "sendLinkTo": {
+    "message": "Send link to Memos"
+  },
+  "sendImageTo": {
+    "message": "Send image to Memos"
+  },
+  "saveBtn": {
+    "message": "Save"
+  },
+  "placeApiUrl": {
+    "message": "Memos Self Home Url"
+  },
+  "placeApiTokens": {
+    "message": "Memos Access Tokens"
+  },
+  "placeContent": {
+    "message": "Any thoughts..."
+  },
+  "lockPrivate": {
+    "message": "Only you"
+  },
+  "lockProtected": {
+    "message": "Signed-in users"
+  },
+  "lockPublic": {
+    "message": "Public"
+  },
+  "visibilityTooltip": {
+    "message": "Visibility"
+  },
+  "submitBtn": {
+    "message": "Save to Memos"
+  },
+  "placeHideInput": {
+    "message": "Default 'Only visible to you' Tag name"
+  },
+  "placeShowInput": {
+    "message": "Default 'Everyone can see' Tag name"
+  },
+  "picDrag": {
+    "message": "Drag upload the image"
+  },
+  "picCancelDrag": {
+    "message": "Cancel upload"
+  },
+  "picUploading": {
+    "message": "Upload the picture..."
+  },
+  "picSuccess": {
+    "message": "Upload completed"
+  },
+  "picFailed": {
+    "message": "Uploading failed"
+  },
+  "picPending": {
+    "message": "Image uploading is in progress"
+  },
+  "saveSuccess": {
+    "message": "Save Info Success!"
+  },
+  "searchNow": {
+    "message": "What are you looking for?"
+  },
+  "searchNone": {
+    "message": "Try another word!"
+  },
+  "archiveSuccess": {
+    "message": "Archive Success 😊"
+  },
+  "archiveFailed": {
+    "message": "Archive Failed 😭"
+  },
+  "getTabFailed": {
+    "message": "Get Tab Failed 😭"
+  },
+  "memoUploading": {
+    "message": "Sending"
+  },
+  "memoSuccess": {
+    "message": "Saved to Memos"
+  },
+  "memoFailed": {
+    "message": "Failed! 😭"
+  },
+  "invalidToken": {
+    "message": "Invalid token or url 😭"
+  },
+  "languageLabel": {
+    "message": "Language"
+  },
+  "themeAuto": {
+    "message": "Auto"
+  },
+  "themeLight": {
+    "message": "Light"
+  },
+  "themeDark": {
+    "message": "Dark"
+  },
+  "languageChangeConfirm": {
+    "message": "Change language?"
+  },
+  "languageChanged": {
+    "message": "Language changed"
+  },
+  "settingsBtn": {
+    "message": "Settings"
+  },
+  "tagsTooltip": {
+    "message": "Add tags"
+  },
+  "todoTooltip": {
+    "message": "Add todo"
+  },
+  "uploadTooltip": {
+    "message": "Add a local attachment"
+  },
+  "linkTooltip": {
+    "message": "Get link"
+  },
+  "randomTooltip": {
+    "message": "Random review"
+  },
+  "searchTooltip": {
+    "message": "Search"
+  },
+  "noMemosFound": {
+    "message": "No memos found"
+  },
+  "noTagsFound": {
+    "message": "No tags found"
+  },
+  "noSearchResults": {
+    "message": "No matching memos found"
+  },
+  "apiFailed": {
+    "message": "API call failed"
+  },
+  "apiNotFound": {
+    "message": "API endpoint not found, please check Memos version"
+  },
+  "llmProviderLabel": {
+    "message": "AI Model Provider"
+  },
+  "llmModelLabel": {
+    "message": "AI Model"
+  },
+  "llmApiKeyLabel": {
+    "message": "API Key"
+  },
+  "llmCustomModelPlaceholder": {
+    "message": "Enter custom model name"
+  },
+  "llmApiKeyPlaceholder": {
+    "message": "Enter API key"
+  },
+  "aiOptimizeTooltip": {
+    "message": "Optimize with AI"
+  },
+  "aiOptimizing": {
+    "message": "AI is optimizing..."
+  },
+  "aiOptimizeSuccess": {
+    "message": "AI optimization completed!"
+  },
+  "aiOptimizeFailed": {
+    "message": "AI optimization failed"
+  },
+  "aiNoContent": {
+    "message": "Please enter content first"
+  },
+  "aiNotConfigured": {
+    "message": "Please configure AI model first"
+  },
+  "aiApiKeyRequired": {
+    "message": "Please enter API key"
+  },
+  "llmBaseUrlLabel": {
+    "message": "New API Base URL"
+  },
+  "llmBaseUrlPlaceholder": {
+    "message": "For example https://your-new-api.example.com/v1"
+  },
+  "aiBaseUrlRequired": {
+    "message": "Please enter New API Base URL"
+  },
+  "llmQuickPresetsLabel": {
+    "message": "Quick AI optimization presets"
+  },
+  "llmQuickPresetPrefix": {
+    "message": "Quick"
+  },
+  "llmQuickPresetEmpty": {
+    "message": "Not set"
+  },
+  "llmQuickPresetMenuTooltip": {
+    "message": "Choose a quick AI optimization preset"
+  },
+  "llmQuickPresetNotConfigured": {
+    "message": "This quick preset is not configured"
+  },
+  "invalidUrl": {
+    "message": "Enter a valid Memos home URL using http:// or https://."
+  },
+  "permissionDenied": {
+    "message": "You do not have permission to perform this action."
+  },
+  "uploadTooLarge": {
+    "message": "The file exceeds the server upload limit."
+  },
+  "quotaExceeded": {
+    "message": "Your Memos usage limit has been reached. Check Settings > Usage limits."
+  },
+  "requestLimited": {
+    "message": "Too many requests. Please try again later."
+  },
+  "apiTimeout": {
+    "message": "The request timed out. Your draft has been kept."
+  },
+  "attachmentPreviewFailed": {
+    "message": "Unable to load this attachment."
+  },
+  "draftSaveFailed": {
+    "message": "The draft could not be stored locally. Keep this popup open and copy your text."
+  },
+  "aiTaskLabel": {
+    "message": "AI task"
+  },
+  "aiTask_organize": {
+    "message": "Organize"
+  },
+  "aiTask_summary": {
+    "message": "Summarize"
+  },
+  "aiTask_keypoints": {
+    "message": "Key points"
+  },
+  "aiTask_qa": {
+    "message": "Study Q&A"
+  },
+  "aiTask_custom": {
+    "message": "Custom prompt"
+  },
+  "aiPresetName": {
+    "message": "Preset name (optional)"
+  },
+  "aiCustomPrompt": {
+    "message": "Describe the task for this preset"
+  },
+  "aiCustomPromptRequired": {
+    "message": "Enter a prompt for this custom task."
+  },
+  "aiReviewTitle": {
+    "message": "Review AI result"
+  },
+  "aiReviewHelp": {
+    "message": "Your draft stays unchanged until you choose an action."
+  },
+  "aiOriginal": {
+    "message": "Original"
+  },
+  "aiResult": {
+    "message": "AI result (editable)"
+  },
+  "aiReplace": {
+    "message": "Use result"
+  },
+  "aiAppend": {
+    "message": "Append to draft"
+  },
+  "aiDiscard": {
+    "message": "Discard result"
+  },
+  "aiUndo": {
+    "message": "Undo AI edit"
+  },
+  "aiUndoConflict": {
+    "message": "The draft changed after the AI edit. Undo will not overwrite newer text."
+  },
+  "aiEditConflict": {
+    "message": "The draft changed. Append the result or discard it and run AI again."
+  },
+  "aiMissingLinks": {
+    "message": "Some original links are missing. Check before adopting this result."
+  },
+  "aiReviewReady": {
+    "message": "AI result is ready for review."
+  },
+  "aiResultApplied": {
+    "message": "AI result applied. You can undo this edit."
+  },
+  "clipAddSource": {
+    "message": "Insert page source"
+  },
+  "clipSelection": {
+    "message": "Clip selection with source"
+  },
+  "clipSelectionHelp": {
+    "message": "Select text on a webpage, then right-click “Clip selection with source”."
+  },
+  "clipCaptureFailed": {
+    "message": "Cannot read this page source. Try a normal webpage."
+  },
+  "clipSourceAdded": {
+    "message": "Page source inserted at the cursor."
+  },
+  "clipTemplateLabel": {
+    "message": "Clip template"
+  },
+  "clipTemplateHelp": {
+    "message": "Use {{content}}, {{title}}, {{url}} and {{date}}. Content and URL are required. Saved locally on change."
+  },
+  "clipTemplateReset": {
+    "message": "Reset template"
+  },
+  "clipTemplateInvalid": {
+    "message": "Include {{content}} and {{url}} in a template of at most 8000 characters."
+  },
+  "sourceIncludeTime": {
+    "message": "Include capture time"
+  },
+  "settingsSaveFailed": {
+    "message": "Could not save this setting. Please try again."
+  },
+  "aiTaskHelp_organize": {
+    "message": "Keep the information; polish paragraphs and Markdown without intentionally shortening."
+  },
+  "aiTaskHelp_summary": {
+    "message": "One short paragraph: target 150 Chinese characters or 100 English words; sources separately."
+  },
+  "aiTaskHelp_keypoints": {
+    "message": "Extract 3–7 structured points; use fewer when the material is short."
+  },
+  "aiTaskHelp_qa": {
+    "message": "Create 3–5 evidence-based Q&A pairs; do not pad short material."
+  },
+  "aiTaskHelp_custom": {
+    "message": "Follow the prompt configured in this quick preset."
+  },
+  "aiTaskUsageHint": {
+    "message": "The main AI button uses this selection; quick presets display and run their own tasks."
+  },
+  "aiRunTask": {
+    "message": "Run AI task: {task}"
+  },
+  "aiRunningTask": {
+    "message": "Running task: {task}"
+  },
+  "aiExecutedTask": {
+    "message": "Task for this result: {task}"
+  },
+  "navWrite": {
+    "message": "Write"
+  },
+  "navSearch": {
+    "message": "Find"
+  },
+  "navHistory": {
+    "message": "Clip history"
+  },
+  "navigation": {
+    "message": "Note navigation"
+  },
+  "openMemos": {
+    "message": "Open Memos"
+  },
+  "openPanel": {
+    "message": "Open side panel"
+  },
+  "connectHint": {
+    "message": "Your draft stays on this device."
+  },
+  "connectMemos": {
+    "message": "Connect Memos"
+  },
+  "capturePage": {
+    "message": "Clip page"
+  },
+  "captureOptions": {
+    "message": "More clip options"
+  },
+  "captureSelection": {
+    "message": "Clip selection"
+  },
+  "aiAction": {
+    "message": "AI edit"
+  },
+  "saveConnection": {
+    "message": "Verify and save connection"
+  },
+  "instanceUrl": {
+    "message": "Memos URL"
+  },
+  "tokenLabel": {
+    "message": "Personal access token (PAT)"
+  },
+  "aiSettings": {
+    "message": "AI models and presets"
+  },
+  "saveAI": {
+    "message": "Save AI settings"
+  },
+  "refreshModels": {
+    "message": "Refresh models"
+  },
+  "modelRecommended": {
+    "message": "Built-in recommendations"
+  },
+  "modelAccount": {
+    "message": "Other account models"
+  },
+  "modelCount": {
+    "message": "{n} candidate models from this account"
+  },
+  "modelCustom": {
+    "message": "Custom model"
+  },
+  "modelInvalid": {
+    "message": "Could not read the model list. Check the endpoint and key."
+  },
+  "working": {
+    "message": "Working…"
+  },
+  "captureSettings": {
+    "message": "Web clipping"
+  },
+  "tagRules": {
+    "message": "Visibility rules by tag"
+  },
+  "appearance": {
+    "message": "Appearance and language"
+  },
+  "themeLabel": {
+    "message": "Theme"
+  },
+  "spaceLabel": {
+    "message": "Space"
+  },
+  "noSpace": {
+    "message": "Unassigned"
+  },
+  "lockSpace": {
+    "message": "Space members"
+  },
+  "ruleEffective": {
+    "message": "Tag rule · {value}"
+  },
+  "spaceUnavailable": {
+    "message": "This space is unavailable. Choose a destination before saving."
+  },
+  "spaceCheckFailed": {
+    "message": "Could not load spaces. Try again."
+  },
+  "retry": {
+    "message": "Retry"
+  },
+  "keyword": {
+    "message": "Keyword"
+  },
+  "tagFilter": {
+    "message": "Tag"
+  },
+  "tagPlaceholder": {
+    "message": "Optional, e.g. reading"
+  },
+  "searchPlaceholder": {
+    "message": "Search memo text"
+  },
+  "loadMore": {
+    "message": "Load more"
+  },
+  "searchHistory": {
+    "message": "Find a source title or URL"
+  },
+  "historyEmpty": {
+    "message": "After you save a clip, find its source and memo here."
+  },
+  "savedBefore": {
+    "message": "You have saved this page before."
+  },
+  "openSaved": {
+    "message": "Open memo"
+  },
+  "openSource": {
+    "message": "Source page"
+  },
+  "archiveAction": {
+    "message": "Archive"
+  },
+  "draftConflict": {
+    "message": "Another editor changed the same passage. Keep both or load the saved draft."
+  },
+  "draftKeepBoth": {
+    "message": "Append my version"
+  },
+  "draftUseLatest": {
+    "message": "Use saved version"
+  },
+  "stagedFileMissing": {
+    "message": "A local attachment is missing. Add the file again."
+  },
+  "fileStaged": {
+    "message": "Attachment added to local draft"
+  },
+  "imageCaptureFailed": {
+    "message": "Could not read this image. Paste it into the draft."
+  },
+  "emptySelection": {
+    "message": "Select text on the page first."
+  },
+  "addedArticle": {
+    "message": "Article added to draft"
+  },
+  "addedSelection": {
+    "message": "Selection added to draft"
+  },
+  "addedSummary": {
+    "message": "No article found. Added the page summary and source."
+  },
+  "imagePartial": {
+    "message": "Some images could not be read. Check the draft before saving."
+  },
+  "clipImage": {
+    "message": "Add image to draft"
+  },
+  "clipLink": {
+    "message": "Add link to draft"
+  },
+  "aiTruncated": {
+    "message": "Output limit reached. Shorten the input and retry."
+  },
+  "aiInterrupted": {
+    "message": "AI request interrupted. Your draft is available for retry."
+  },
+  "aiEmpty": {
+    "message": "The model returned no usable text."
+  },
+  "aiUnavailable": {
+    "message": "This key cannot use the selected model. Check access and model ID."
+  },
+  "modelSavedKey": {
+    "message": "Saved · leave blank to keep"
+  },
+  "draftChanged": {
+    "message": "The draft changed. Review it before saving."
+  },
+  "unconfirmedSave": {
+    "message": "Save was not confirmed. Check Memos before retrying."
+  },
+  "historyWriteFailed": {
+    "message": "Memo saved. Could not update local clip history."
+  },
+  "settingsSaved": {
+    "message": "Settings saved"
+  },
+  "modelGatewayUrl": {
+    "message": "Enter a valid HTTP or HTTPS gateway URL."
+  },
+  "clipContextFailed": {
+    "message": "The last context-menu clip failed. Try again on the page."
+  }
 }

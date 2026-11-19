@@ -207,16 +207,19 @@ test('invalid base URLs fail before any request', async () => {
   assert.equal(calls.length, 0);
 });
 
-function loadPopup(overrides = {}, saved = {}) {
+async function loadPopup(overrides = {}, saved = {}) {
   const { api, context } = loadApi();
   const nodes = new Map();
   const handlers = new Map();
   const messages = [];
   const storage = { ...info, memo_lock: 'PRIVATE', open_action: 'save_text', open_content: 'draft text', ...saved };
-  const document = { addEventListener() {}, querySelectorAll: () => [], getElementById: id => node('#' + id)[0] };
+  const ready = [];
+  const document = { documentElement: { lang: 'en' }, addEventListener(event, fn) { if (event === 'DOMContentLoaded') ready.push(fn); },
+    querySelectorAll: () => [], getElementById: id => node('#' + id)[0] };
   function node(selector) {
+    if (selector === 'textarea[name=text]') selector = '#content';
     if (nodes.has(selector)) return nodes.get(selector);
-    const element = { value: '', selectionStart: 0, selectionEnd: 0, focus() {}, setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } };
+    const element = { value: '', selectionStart: 0, selectionEnd: 0, focus() {}, replaceChildren() {}, add() {}, setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; } };
     const wrapper = {
       0: element, attributes: {}, properties: {},
       val(value) { if (value === undefined) return element.value; element.value = value; return this; },
@@ -224,7 +227,7 @@ function loadPopup(overrides = {}, saved = {}) {
       html(value) { this.htmlValue = value; return this; },
       attr(key, value) { if (value === undefined) return this.attributes[key]; this.attributes[key] = value; return this; },
       removeAttr(key) { delete this.attributes[key]; return this; },
-      prop(key, value) { if (value === undefined) return this.properties[key]; this.properties[key] = value; return this; },
+      prop(key, value) { if (value === undefined) return this.properties[key]; this.properties[key] = value; element[key] = value; return this; },
       on(event, delegated, fn) { handlers.set(selector + ':' + event + (typeof delegated === 'string' ? ':' + delegated : ''), fn || delegated); return this; },
       click(fn) { if (fn) handlers.set(selector + ':click', fn); else handlers.get(selector + ':click')?.(); return this; },
       blur(fn) { handlers.set(selector + ':blur', fn); return this; }
@@ -239,18 +242,20 @@ function loadPopup(overrides = {}, saved = {}) {
   const dayjs = () => ({ fromNow: () => 'now' });
   dayjs.extend = dayjs.locale = () => {};
   Object.assign(api, {
+    listSpaces: async () => [],
+    getInstanceProfile: async () => ({ version:'0.31.0' }),
     prepareMemo: async (_, body) => body,
     createMemo: async (_, body) => ({ name: 'memos/saved', ...body }),
     getMemo: async () => ({ name: 'memos/saved', content: 'saved' })
   }, overrides);
   Object.assign(context, {
-    $, MemosAPI: api, document, dayjs,
+    $, MemosAPI: api, document, dayjs, crypto:require('node:crypto').webcrypto, TextEncoder, uiMessage: key => key, Option: class {}, AIReview: { isBusy: () => false, onMemoSaved() {}, refresh() {} },
     window: { addEventListener() {} },
     setTimeout() {},
     chrome: {
       runtime: { lastError: null },
-      i18n: { getMessage: key => key },
-      storage: {
+      i18n: { getMessage: key => key }, tabs: { query: async () => [] },
+      storage: { onChanged: { addListener() {} },
         sync: {
           get(defaults, callback) { callback({ ...defaults, ...storage }); },
           set(values, callback) {
@@ -259,74 +264,85 @@ function loadPopup(overrides = {}, saved = {}) {
           }
         },
         local: {
-          get(defaults, callback) { callback({ ...defaults, memosDraft: storage.memosDraft || null }); },
+          get(defaults, callback) { callback({ ...defaults, ...Object.fromEntries(Object.keys(defaults).filter(key => Object.hasOwn(storage,key)).map(key => [key, storage[key]])) }); },
           set(values, callback) { Object.assign(storage, plain(values)); callback?.(); }
         }
       }
     }
   });
-  vm.runInContext(fs.readFileSync(path.join(root, 'js/draft-storage.js'), 'utf8'), context);
+  for (const file of ['draft-storage','editor-draft','staged-files','workspace'])
+    vm.runInContext(fs.readFileSync(path.join(root, 'js', file + '.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(root, 'js/oper.js'), 'utf8'), context);
+  ready.forEach(fn => fn()); await flush();
   return { context, api, node, handlers, messages, storage, document };
 }
 
 test('failed memo saves preserve text and permit retry with the same draft', async () => {
   let attempts = 0;
-  const popup = loadPopup({ createMemo: async (_, body) => {
+  const popup = await loadPopup({ createMemo: async (_, body) => {
     attempts++;
     assert.equal(body.content, 'draft text');
     if (attempts === 1) throw refused(429);
     return { name: 'memos/saved', ...body };
   } });
-  popup.context.sendText();
-  await flush();
+  await popup.context.sendText();
   assert.equal(popup.node('textarea[name=text]').val(), 'draft text');
   assert.equal(popup.storage.memosDraft.open_content, 'draft text');
   assert.equal(popup.context.memoSaveInProgress, false);
-  popup.context.sendText();
-  await flush();
+  await popup.context.sendText();
   assert.equal(attempts, 2);
   assert.equal(popup.storage.memosDraft.open_content, '');
 });
 
 test('repeated clicks cannot create duplicate memos and newer draft text survives a successful save', async () => {
   let complete;
-  let posts = 0;
-  const popup = loadPopup({ createMemo: () => { posts++; return new Promise(resolve => { complete = resolve; }); } });
-  popup.context.sendText();
-  popup.context.sendText();
-  await flush();
+  let posts = 0, started;
+  const pending = new Promise(resolve => { started = resolve; });
+  const popup = await loadPopup({ createMemo: () => { posts++; started(); return new Promise(resolve => { complete = resolve; }); } });
+  const first = popup.context.sendText();
+  await popup.context.sendText();
+  await pending;
   assert.equal(posts, 1);
   assert.equal(popup.node('textarea[name=text]').prop('readOnly'), true);
   popup.node('textarea[name=text]').val('newer AI edit');
   complete({ name: 'memos/saved', content: 'draft text' });
-  await flush();
+  await first;
   assert.equal(popup.storage.memosDraft.open_content, 'newer AI edit');
   assert.equal(popup.node('textarea[name=text]').prop('readOnly'), false);
 });
 
 test('pending uploads block save; upload failure keeps the existing draft', async () => {
-  const popup = loadPopup({ uploadAttachment: async () => { throw refused(500); } });
+  const popup = await loadPopup({ uploadAttachment: async () => { throw refused(500); } });
   popup.context.pendingUploads = 1;
   popup.context.sendText();
   assert.equal(popup.context.memoSaveInProgress, false);
   assert.equal(popup.messages.at(-1), 'picUploading');
-  await assert.rejects(popup.context.uploadImageNow('AA==', { name: 'a.png', type: 'image/png' }));
+  popup.context.pendingUploads = 0;
+  popup.context.StagedFiles.resolve = async () => { throw refused(500); };
+  await popup.context.sendText();
+  assert.equal(popup.storage.memosDraft.open_content, 'draft text');
   assert.equal(popup.storage.open_content, 'draft text');
 });
 
 test('popup search and random review use server permissions instead of visibility exclusions', async () => {
   const queries = [];
-  const popup = loadPopup({ listMemos: async (_, query) => { queries.push(query); return []; } });
-  popup.handlers.get('#search:click')();
+  const popup = await loadPopup({
+    listMemoPage: async (_, query) => { queries.push(query); return { memos: [], next: '' }; },
+    listMemos: async (_, query) => { queries.push(query); return []; }
+  });
+  popup.node('#searchQuery').val('needle');
+  popup.node('#searchTag').val('#reading');
+  popup.document.getElementById('searchForm').onsubmit({ preventDefault() {} });
+  await flush();
   popup.handlers.get('#random:click')();
   await flush();
-  assert.equal(new URLSearchParams(queries[0].slice(1)).get('filter'), 'content.contains("draft text")');
+  assert.equal(new URLSearchParams(queries[0]).get('filter'), 'content.contains("needle") && "reading" in tags');
+  assert.equal(popup.node('#content').val(), 'draft text');
   assert.equal(queries[1], undefined);
 });
 
-test('private preview markup never embeds PATs or unsafe link protocols', () => {
-  const popup = loadPopup();
+test('private preview markup never embeds PATs or unsafe link protocols', async () => {
+  const popup = await loadPopup();
   const html = popup.context.renderMarkdownPreview('![private](/file/attachments/photo/a.png) [bad](javascript:evil) [safe](https://example.org/?a="quoted")', info);
   assert.ok(html.includes('data-memos-file="https://memos.example/file/attachments/photo/a.png"'));
   assert.ok(!html.includes('src="https://memos.example/file/'));
@@ -338,7 +354,7 @@ test('private preview markup never embeds PATs or unsafe link protocols', () => 
 test('private image previews authenticate once, share a Blob URL and release it on clearing', async () => {
   let reads = 0;
   const revoked = [];
-  const popup = loadPopup({ fetchAttachmentBlob: async () => { reads++; return new Blob(['image'], { type: 'image/png' }); } });
+  const popup = await loadPopup({ fetchAttachmentBlob: async () => { reads++; return new Blob(['image'], { type: 'image/png' }); } });
   const images = Array.from({ length: 2 }, () => ({ getAttribute: () => '/file/attachments/photo/a.png', removeAttribute() {} }));
   popup.context.URL.createObjectURL = () => 'blob:test-preview';
   popup.context.URL.revokeObjectURL = url => revoked.push(url);
@@ -352,8 +368,8 @@ test('private image previews authenticate once, share a Blob URL and release it 
   assert.deepEqual(revoked, ['blob:test-preview']);
 });
 
-test('quota and permission errors are distinct from invalid-token errors', () => {
-  const popup = loadPopup();
+test('quota and permission errors are distinct from invalid-token errors', async () => {
+  const popup = await loadPopup();
   popup.context.showApiError('test', refused(403));
   assert.equal(popup.messages.at(-1), 'permissionDenied');
   popup.context.showApiError('test', { status: 429, responseJSON: { details: [{ reason: 'QUOTA_EXCEEDED' }] } });
@@ -361,25 +377,23 @@ test('quota and permission errors are distinct from invalid-token errors', () =>
 });
 
 test('legacy drafts load, long drafts persist locally, and an empty local draft does not revive old synced text', async () => {
-  const popup = loadPopup({ createMemo: async () => { throw refused(413); } });
+  const popup = await loadPopup({ createMemo: async () => { throw refused(413); } });
   assert.equal(popup.node('textarea[name=text]').val(), 'draft text');
   const longDraft = '长草稿'.repeat(6000);
   popup.node('textarea[name=text]').val(longDraft);
-  popup.handlers.get('textarea[name=text]:input')();
+  await popup.handlers.get('#content:input')();
   assert.equal(popup.storage.memosDraft.open_content, longDraft);
-  popup.context.sendText();
-  await flush();
-  const reopened = loadPopup({}, { memosDraft: popup.storage.memosDraft });
+  await popup.context.sendText();
+  const reopened = await loadPopup({}, { memosDraft: popup.storage.memosDraft });
   assert.equal(reopened.node('textarea[name=text]').val(), longDraft);
-  reopened.context.sendText();
-  await flush();
-  const empty = loadPopup({}, { memosDraft: reopened.storage.memosDraft });
+  await reopened.context.sendText();
+  const empty = await loadPopup({}, { memosDraft: reopened.storage.memosDraft });
   assert.equal(empty.node('textarea[name=text]').val(), '');
   assert.equal(empty.storage.open_content, 'draft text', 'legacy text must not resurrect after a successful save');
 });
 
 test('the service worker appends context-menu captures with source to the popup draft', async () => {
-  const popup = loadPopup({}, { memosDraft: { open_action: 'save_text', open_content: 'existing\n' } });
+  const popup = await loadPopup({}, { memosDraft: { open_action: 'save_text', open_content: 'existing\n' } });
   let onClicked;
   popup.context.importScripts = (...sources) => {
     for (const source of sources) vm.runInContext(fs.readFileSync(path.join(root, 'js', source), 'utf8'), popup.context);
@@ -390,6 +404,6 @@ test('the service worker appends context-menu captures with source to the popup 
   onClicked({ menuItemId: 'Memos-send-selection', selectionText: 'captured text', pageUrl: 'https://example.org/article' }, { title: 'Article' });
   await flush();
   assert.ok(popup.storage.memosDraft.open_content.startsWith('existing\n\n> captured text\n\n[Article](https://example.org/article)'));
-  const reopened = loadPopup({}, { memosDraft: popup.storage.memosDraft });
+  const reopened = await loadPopup({}, { memosDraft: popup.storage.memosDraft });
   assert.equal(reopened.node('textarea[name=text]').val(), popup.storage.memosDraft.open_content);
 });

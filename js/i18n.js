@@ -1,15 +1,26 @@
-document.getElementById("saveKey").textContent = chrome.i18n.getMessage("saveBtn");
-document.getElementById("saveTag").textContent = chrome.i18n.getMessage("saveBtn");
-
-document.getElementById("apiUrl").placeholder = chrome.i18n.getMessage("placeApiUrl");
-document.getElementById("apiTokens").placeholder = chrome.i18n.getMessage("placeApiTokens");
-document.getElementById("content").placeholder = chrome.i18n.getMessage("placeContent");
-
-document.getElementById("lockPrivate").textContent = chrome.i18n.getMessage("lockPrivate");
-document.getElementById("lockProtected").textContent = chrome.i18n.getMessage("lockProtected");
-document.getElementById("lockPublic").textContent = chrome.i18n.getMessage("lockPublic");
-
-document.getElementById("content_submit_text").textContent = chrome.i18n.getMessage("submitBtn");
-
-document.getElementById("hideInput").placeholder = chrome.i18n.getMessage("placeHideInput");
-document.getElementById("showInput").placeholder = chrome.i18n.getMessage("placeShowInput");
+let uiMessages = {};
+let uiLanguage = '';
+function uiMessage(key) { return uiMessages[key]?.message || chrome.i18n.getMessage(key) || key; }
+async function setUiLanguage(language) {
+  const raw = language || chrome.i18n.getUILanguage();
+  const lang = raw.startsWith('zh') ? 'zh_CN' : raw.startsWith('ja') ? 'ja' : 'en';
+  uiLanguage = lang;
+  const response = await fetch(chrome.runtime.getURL('_locales/' + lang + '/messages.json'));
+  const messages = await response.json();
+  if (uiLanguage !== lang) return;
+  uiMessages = messages;
+  document.documentElement.lang = lang.replace('_', '-');
+  const attrs = { 'data-feature-message': 'textContent', 'data-placeholder': 'placeholder', 'data-title': 'title', 'data-label': 'aria-label' };
+  for (const [attr, target] of Object.entries(attrs)) {
+    document.querySelectorAll('[' + attr + ']').forEach(node => {
+      const value = uiMessage(node.getAttribute(attr));
+      if (target === 'textContent') node.textContent = value;
+      else node.setAttribute(target, value);
+      if (target === 'title') node.setAttribute('aria-label', value);
+    });
+  }
+  $('#languageSelect').val(lang);
+  if (typeof refreshLLMTexts === 'function') refreshLLMTexts(messages);
+  if (typeof Workspace !== 'undefined') Workspace.translate();
+  if (typeof dayjs !== 'undefined') dayjs.locale(lang === 'zh_CN' ? 'zh-cn' : lang);
+}

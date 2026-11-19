@@ -1,89 +1,62 @@
 # AI-MEMOS
 
-带 AI 优化功能的 Chrome Memos 扩展。当前扩展版本为 **2026.11.12.2**，基于 `codex/newfeatures`，以 **Memos 26.11.0** 为兼容目标。此前用户验证通过的兼容版保留在标签 `v2026.11.12`。
+在 Chrome 中速记、剪藏网页，并用 AI 整理 Memos 笔记。当前扩展版本 **2026.11.19.1**，适配 Memos 26.11.1，支持仍使用 `/api/v1` 的旧实例。剪藏流程参考官方 Memos Web Clipper 0.6.1。[Memos 发行说明](https://github.com/usememos/memos/releases/tag/26.11.1) · [官方 Chrome 扩展](https://chromewebstore.google.com/detail/memos-web-clipper/nebaoebnljalfegiidibihhkebeiklbl)
 
-## AI 审阅、任务预设与选区剪藏
+## 开始使用
 
-- 在编辑器上方选择 AI 任务，再点击主 AI 按钮。选项旁会显示一句用途说明，按钮提示、处理状态和结果预览会标明实际执行的任务。原文保持不变，可先编辑结果，再选择采用、追加或取消。
-- 采用或追加后可用“撤销 AI”还原。若等待期间修改了原文，“采用结果”会禁用；若采用后又修改正文，撤销也不会覆盖新内容。待确认结果和最近一次撤销记录保存在本地，重开弹窗可以恢复；AI 请求进行中关闭弹窗不会让请求继续在后台运行，原草稿仍在。
-- 系统会检查结果是否缺少原有来源链接或图片地址并给出提醒；该检查不能替代事实核对。
-- 设置中的三个快捷预设可以分别指定名称、任务、模型及自定义提示词。菜单始终显示该预设实际使用的任务，即使预设已有自定义名称；点击后不会改变上方主按钮的任务选择。界面明确说明“主按钮使用上方任务；快捷预设使用各自配置”，处理中和结果预览会另外标明实际执行任务。旧模型预设继续有效，默认执行“整理格式”。新增任务配置保存在本地，旧同步记录只保留兼容的提供商与模型字段；连接和模型密钥仍沿用此前的存储方式。
-- 在网页选中文字后，右键选择“摘录选区并附来源”。选文按多行引用保存，并附上标题、原链接和 ISO 8601 UTC 采集时间；再次采集会追加到原草稿。多次快速采集按队列处理。
-- 弹窗仅保留一个“插入网页来源”入口，原工具栏“获取链接”按钮已移除。它在编辑器光标或选区位置插入当前网页的标题链接；空草稿直接插入，不增加多余空行。旁边的“附带采集时间”默认关闭，选择后会在来源中附上 ISO 8601 UTC 时间，并在本地记住选择。
-- “附带采集时间”只控制“插入网页来源”按钮。右键选区剪藏仍由下方模板决定是否包含 `{{date}}`，不会被这个开关改写。两种来源采集均沿用现有 Chrome 权限，不读取整页正文。
-- 设置中可修改剪藏模板，支持 `{{content}}`、`{{title}}`、`{{url}}`、`{{date}}`；内容和来源占位符必须保留。模板失效时右键采集回退默认模板，不会写入空选文。
+1. 解压发布包，在 Chrome 扩展程序页启用开发者模式，选择「加载已解压的扩展程序」并选中解压目录。更新时覆盖原目录，再点击扩展卡片上的重新加载。
+2. 点击 AI-MEMOS 图标即可写草稿。第一次保存笔记前，打开右上角设置，填入 Memos 主页地址和个人访问令牌，点击「验证并保存连接」。连接成功后会显示账号和可读取的服务器版本。
+3. 输入正文或点击「剪藏网页」，选择空间和可见范围，点击「保存到 Memos」。也可按 `Ctrl+Enter`，macOS 使用 `⌘+Enter`。读长文时点击「在侧栏打开」，可边看原网页边续写。
+4. 需要 AI 时，在设置中选择提供商、填写 API 密钥并保存。New API 还需要填写网关地址。在编辑器中运行 AI，审阅结果后可采用、追加，或保留原稿。
 
-四种内置 AI 任务的处理目标如下：
+## 记录与剪藏
 
-| 任务 | 输出目标 | 适用内容 |
+| 操作 | 结果 |
+| --- | --- |
+| 剪藏网页 | 优先读取选区；无选区时提取正文，保留 Markdown 标题、链接、列表、代码和表格。正文不足时使用网页简介或标题，并附上来源。 |
+| 右键剪藏 | 网页选区、图片或链接都追加到当前草稿。点击保存才会向 Memos 创建笔记。浏览器内部页面和扩展商店页面可能不支持读取。 |
+| 仅插入来源 | 展开剪藏按钮旁的菜单，在光标或选区位置插入当前页链接。可为这次操作开启采集时间。 |
+| 添加附件 | 支持粘贴截图、拖放和选择文件。图片与文件先存入本机 IndexedDB，保存时上传，并把附件与笔记绑定。上传失败可从当前草稿重试。 |
+| 修改草稿 | 弹窗、侧栏与右键共用本机草稿。不同位置的改动会自动合并；同一位置发生冲突时可保留两份或采用已保存版本。 |
+| 空间和可见范围 | 支持空间的账号可选择保存位置。选择空间后可使用「空间成员」范围。保存前会显示标签规则的实际影响；空间失效时保留草稿，等你重新选择。 |
+| 查找与回顾 | 「查找」按关键词和标签请求服务端，可加载下一页、随机回顾或归档自己的笔记。「剪藏历史」按实例和账号保存最近 300 条来源记录，支持打开原网页或笔记。 |
+| 自定义剪藏模板 | 支持 `{{content}}`、`{{title}}`、`{{url}}` 和 `{{date}}`。模板必须保留内容和网址；删除日期占位符即可省略模板里的时间。 |
+
+扩展支持简体中文、英语、日语，以及浅色、深色和跟随系统。首次打开沿用浏览器语言，旧有连接、模型选择、快捷预设和草稿可继续使用。
+
+## AI 模型与审阅
+
+2026 年 11 月 19 日核对的内置文本模型如下。设置中的「刷新可用模型」读取当前凭据对应的目录，主模型和三个快捷预设共用候选列表。你也可以手动输入模型 ID。推理访问权限由服务商或网关决定。
+
+| 服务 | 新配置的默认项 | 其他内置选项 |
 | --- | --- | --- |
-| 整理格式 | 保留原有信息，不主动压缩；润色、分段、整理 Markdown，待办使用复选框 | 杂乱笔记、口述记录 |
-| 摘要 | 将主要结论压缩为一个短段落；中文目标 150 字以内，英文目标 100 词以内，来源链接另列 | 快速了解长文大意 |
-| 提取要点 | 用 3–7 条要点保留概念、依据、关键数字和区别；材料不足时允许少于 3 条，不凑数 | 材料精读、备考摘记 |
-| 生成问答 | 输出 3–5 组有原文依据的 Q/A；材料不足时减少组数，不补编事实 | 自测、复习 |
+| OpenAI | `gpt-6.2-sol` | `gpt-6.2-astra`、`gpt-6.1-terra`、`gpt-6-luna`。[模型目录](https://developers.openai.com/api/docs/models) |
+| Anthropic | `claude-sonnet-5-5` | `claude-haiku-5-5`、`claude-opus-5-5`、`claude-fable-5-2`。[模型目录](https://platform.claude.com/docs/en/models/overview) |
+| Gemini | `gemini-4-hydrogen` | `gemini-4-neon`、`gemini-4-argon`、`gemini-4-carbon`、`gemini-3.5-flash-lite`。[模型目录](https://aistudio.google.com/docs/models) |
+| DeepSeek | `deepseek-flash` | `deepseek-v4-pro`。旧配置可继续使用 `deepseek-v4-flash` 兼容别名。[模型说明](https://api-docs.deepseek.com/quick_start/pricing/) |
+| New API | 选择网关返回的模型，或填写 ID | 使用网关的 `/v1/models` 和 Chat Completions 接口。[模型列表接口](https://docs.newapi.ai/zh/docs/api/ai-model/models/list/listmodels) |
 
-这些数量和长度是提示词要求，不是客户端强制截断。来源链接、图片地址和重要事实仍需核对。主按钮按上方任务和当前模型运行；快捷菜单按预设自己的任务和模型运行，并在处理状态及预览中明确显示。
+「AI」主按钮显示当前任务。展开菜单可切换整理格式、摘要、提取要点和生成问答，也可运行单独配置了模型、任务和提示词的快捷预设。生成结果可编辑，缺少来源或图片引用时会提示。采用结果后可以撤销；等待时若改过原稿，可将结果追加到最新稿件。关闭生成窗口后，可重开并从原稿重试。
 
-当前范围是上述三项优先功能及界面澄清。全文提取、侧栏、剪藏历史去重、Space/Views 控件、待发送箱与外部笔记同步尚未加入。
+## 本机数据与权限
 
-## 打包与本地预览
+- 正文草稿、待审 AI 结果、撤销记录、剪藏历史和图片暂存于当前浏览器配置。历史仅保存标题、来源网址、笔记资源名和保存时间。
+- Memos 个人访问令牌、模型凭据和连接设置沿用扩展原有的 Chrome 同步存储。模型目录按提供商、接口地址和凭据隔离缓存。点击 AI 任务时，正文会发送至所选服务。
+- `scripting` 用于在用户发起剪藏时从目标标签页或选中框架提取内容，`sidePanel` 用于打开侧栏。正文解析库随安装包提供。HTTP/HTTPS 站点权限用于访问用户指定的网页、Memos 实例和模型服务。[Chrome 脚本 API](https://developer.chrome.com/docs/extensions/reference/api/scripting) · [Chrome 侧栏 API](https://developer.chrome.com/docs/extensions/reference/api/sidePanel)
+- 服务端笔记搜索与权限由 Memos 决定。受保护附件按实例认证读取，现代实例通过客户端笔记 ID 确认重试，旧实例按其支持的接口保存。[Memos API](https://usememos.com/docs/integrations/api-access) · [Space 与可见性](https://usememos.com/docs/usage/spaces)
 
-```powershell
-npm.cmd run package
-npm.cmd run preview
-```
+## 开发与验收
 
-打包需要 PowerShell 7，输出 `artifacts/ai-memos-<扩展版本>.zip` 及 `.zip.sha256`。仅包含运行文件，排除浏览器商店签名元数据、测试、预览工具及开发文档；打包时验证资源路径并逐文件核对 ZIP 内容。
-
-预览地址为 `http://127.0.0.1:4311/popup.html`，仅使用公开的虚拟配置与模拟服务，外网访问受 CSP 阻止，不读取或修改 Chrome 扩展配置，也不连接真实 Memos 或 AI。此页面用于开发验证，不是部署版本。
-
-## 本次兼容更新
-
-- 优先使用 `/api/...`。旧服务器返回 404 或 HTML 页面时尝试 `/api/v1/...`，缓存每个实例使用的路径；升级后遇到 410 会重新探测。认证失败、配额限制、超时和服务器错误不会自动重发写请求。
-- 保存连接时检查当前用户和 PAT，并尝试读取服务器版本。版本读取失败不影响已通过认证的连接。
-- 标签、搜索和随机回顾读取完整分页，保留筛选条件和不透明的 `nextPageToken`，避免只处理前 50 或 1000 条。搜索及回顾覆盖当前账号有权读取的笔记，包括 PRIVATE 和 SPACE。
-- 创建 Memo 前解析草稿中的本实例附件引用，查询附件状态并提交 `attachments`。正文图片改为服务端要求的相对路径；指向其他 Memo 已绑定文件的普通链接保留引用。
-- 附件文件名进行 URL 编码。私密图片通过携带 Bearer 头的请求读取，再使用临时 Blob URL 展示；私密文件链接通过同样的方式下载。凭据不会放进文件 URL，也不会随附件请求发给外站或跟随重定向。
-- 保存过程中阻止重复提交，等候进行中的上传。上传或保存失败保留草稿，服务器拒绝请求时区分权限、配额、频率限制和超时。
-- 草稿使用 `chrome.storage.local`，避开同步存储的单项 8 KiB 限制；首次使用时兼容读取旧同步草稿。输入、工具栏插入、AI 优化结果和右键采集共用草稿。草稿不再跨设备同步，连接和 AI 设置仍沿用原来的存储方式。
-
-## 在 Chrome 中使用
-
-1. 打开 `chrome://extensions/` 并启用开发者模式。
-2. 选择“加载已解压的扩展程序”，指向本项目目录；更新已加载的同一目录后，点击扩展卡片上的重新加载。
-3. 填入 Memos 主页网址和个人访问令牌（PAT），点击保存。26.11.0 服务器使用 `/api`，网址栏仍填写主页地址。
-
-现有 Chrome 使用的独立副本不会随项目目录修改而更新。若继续使用独立副本，需要同步更新全部运行文件，包括新增的 `js/draft-storage.js`，然后重新加载扩展。
-
-## 验证
-
-需要 Node.js 22.8 或更新版本，无需安装第三方依赖。在项目目录运行：
+需要 Node.js 22.8 或以上。打包使用 PowerShell 7。
 
 ```powershell
 npm.cmd test
-node --check js/memos-api.js
-node --check js/oper.js
-node --check js/draft-storage.js
-node --check js/background.js
-node --check js/ai-optimize.js
-git diff --check
+npm.cmd run preview
+npm.cmd run package
 ```
 
-自动测试使用官方接口契约的模拟响应和弹窗事件环境，覆盖新旧路径切换、分页、附件绑定与鉴权、草稿迁移和失败重试，不会连接或修改真实 Memos。
+预览地址由终端输出。预览使用本机模拟数据，可测试记录、查找、设置及 AI 审阅。ZIP 和 SHA-256 校验文件生成在 `artifacts/`。要从锁文件重新生成正文解析依赖，运行 `npm.cmd ci --ignore-scripts` 和 `node scripts/vendor-clipper.cjs`。
 
-真实实例联调时检查：
+浏览器验收脚本 `scripts/check-chrome.cjs` 使用临时配置及回环地址上的 Memos、New API 测试服务。先解压待验收的 ZIP，设置 `EXTENSION_PATH` 为该目录、`CHROMIUM_PATH` 为支持扩展的 Chromium 可执行文件。如果环境中没有可直接导入的 `playwright-core`，将 `PLAYWRIGHT_MODULE` 指向它的安装目录。运行 `node scripts/check-chrome.cjs` 后，截图和检查结果保存在 `artifacts/acceptance-<版本>/`。
 
-1. 用 PAT 保存连接，确认成功提示中的服务器版本。
-2. 粘贴或上传一张图片，关闭并重开弹窗，确认草稿仍在；保存为私密 Memo 后检查图片预览、附件关联和文件下载。
-3. 用包含引号、反斜杠的文本搜索，确认自己可访问的私密和 Space 笔记能找到。
-4. 检查标签列表、随机回顾和归档。查看服务器中归档结果是否与弹窗一致。
-5. 在空草稿、正文中间和选区位置使用“插入网页来源”，分别验证采集时间开关的关闭、开启及重开后的记忆；右键剪藏的模板时间应保持独立。
-6. 依次检查四种 AI 任务的用途说明和输出结构；点击名称与任务不同的快捷预设，确认上方主按钮选择保持原值，处理状态和预览标记显示该快捷预设的实际任务。
-
-## 接口依据
-
-- [Memos 26.10.0 API 迁移说明](https://github.com/usememos/memos/releases/tag/26.10.0)
-- [Memos 26.11.0 Memo 接口](https://github.com/usememos/memos/blob/26.11.0/proto/api/memo_service.proto)
-- [Memos 26.11.0 附件校验](https://github.com/usememos/memos/blob/26.11.0/server/api/memo_attachment_service.go)
-- [官方 Web Clipper 请求层参考](https://github.com/usememos/web-clipper/blob/5f9c8ab07172bcb58b0b609dedd8211de88feb08/src/lib/memos-client.ts)
-- [Chrome storage 配额](https://developer.chrome.com/docs/extensions/reference/api/storage#property-sync-QUOTA_BYTES_PER_ITEM)
+如需实测 Memos 26.11.1，可另外将 `MEMOS_BINARY` 指向从官方发行包解压的可执行文件。脚本会启动仅监听本机的临时 SQLite 实例，创建测试账号和临时令牌，从扩展界面保存、搜索、预览并归档测试笔记，随后关闭实例并清理测试库。[官方发行包及校验值](https://github.com/usememos/memos/releases/expanded_assets/26.11.1)

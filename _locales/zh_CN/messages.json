@@ -1,365 +1,575 @@
 {
-   "extName": {
-      "message": "AI-MEMOS"
-   },
-   "actionTitle": {
-      "message": "发送到 AI-MEMOS"
-   },
-   "extDescription": {
-      "message": "AI赋能的Memos浏览器扩展 - 快速记录、智能整理、优雅管理你的想法与知识"
-   },
-   "sendTo": {
-      "message": "发送至 Memos “%s”"
-   },
-   "sendLinkTo": {
-      "message": "发送链接至 Memos"
-   },
-   "sendImageTo": {
-      "message": "发送图片至 Memos"
-   },
-   "saveBtn":{
-      "message": "保存"
-   },
-   "placeApiUrl":{
-      "message": "请填入 Memos 主页网址"
-   },
-   "placeApiTokens":{
-      "message": "请填入 Memos Access Tokens"
-   },
-   "placeContent":{
-      "message": "现在的想法是..."
-   },
-   "lockPrivate":{
-      "message": "仅自己"
-   },
-   "lockProtected":{
-      "message": "成员"
-   },
-   "lockPublic":{
-      "message": "所有人"
-   },
-   "visibilityTooltip":{
-      "message": "设置可见范围"
-   },
-   "submitBtn":{
-      "message": "记下"
-   },
-   "placeHideInput":{
-      "message": "默认“仅自己可见”标签名"
-   },
-   "placeShowInput":{
-      "message": "默认“所有人可见”标签名"
-   },
-   "picDrag":{
-      "message": "拖拽到窗口上传该图片"
-   },
-   "picCancelDrag":{
-      "message": "取消上传"
-   },
-   "picUploading":{
-      "message": "图片上传中……"
-   },
-   "picSuccess":{
-      "message": "上传完成"
-   },
-   "picFailed":{
-      "message": "上传图片失败"
-   },
-   "picPending":{
-      "message": "有图片等待上传"
-   },
-   "saveSuccess":{
-      "message": "保存信息成功"
-   },
-   "searchNow":{
-      "message": "想搜点啥？"
-   },
-   "searchNone":{
-      "message": "搜不到，换个词试试"
-   },
-   "archiveSuccess":{
-      "message": "归档成功！😊"
-   },
-   "archiveFailed":{
-      "message": "归档失败 😭"
-   },
-   "getTabFailed":{
-      "message": "获取标签失败 😭"
-   },
-   "memoUploading":{
-      "message": "发送中……"
-   },
-   "memoSuccess":{
-      "message": "发送成功！😊"
-   },
-   "memoFailed":{
-      "message": "发送失败 😭"
-   },
-   "invalidToken":{
-      "message": "无效的 token 或 url 😭"
-   },
-   "languageLabel":{
-      "message": "语言"
-   },
-   "themeAuto":{
-      "message": "自动"
-   },
-   "themeLight":{
-      "message": "亮色"
-   },
-   "themeDark":{
-      "message": "暗黑"
-   },
-   "languageChangeConfirm":{
-      "message": "确定要切换语言吗？"
-   },
-   "languageChanged":{
-      "message": "语言已切换"
-   },
-   "settingsBtn":{
-      "message": "设置"
-   },
-   "tagsTooltip":{
-      "message": "添加标签"
-   },
-   "todoTooltip":{
-      "message": "添加待办"
-   },
-   "uploadTooltip":{
-      "message": "上传资源"
-   },
-   "linkTooltip":{
-      "message": "获取链接"
-   },
-   "randomTooltip":{
-      "message": "随机回顾"
-   },
-   "searchTooltip":{
-      "message": "搜索"
-   },
-   "noMemosFound":{
-      "message": "没有找到任何 memos"
-   },
-   "noTagsFound":{
-      "message": "没有找到任何标签"
-   },
-   "noSearchResults":{
-      "message": "没有找到匹配的 memos"
-   },
-   "apiFailed":{
-      "message": "API 调用失败"
-   },
-   "apiNotFound":{
-      "message": "API 端点不存在，请检查 Memos 版本"
-   },
-   "llmProviderLabel":{
-      "message": "AI 模型提供商"
-   },
-   "llmModelLabel":{
-      "message": "AI 模型"
-   },
-   "llmApiKeyLabel":{
-      "message": "API 密钥"
-   },
-   "llmCustomModelPlaceholder":{
-      "message": "输入自定义模型名称"
-   },
-   "llmApiKeyPlaceholder":{
-      "message": "输入 API 密钥"
-   },
-   "aiOptimizeTooltip":{
-      "message": "使用 AI 优化内容"
-   },
-   "aiOptimizing":{
-      "message": "AI 正在优化中..."
-   },
-   "aiOptimizeSuccess":{
-      "message": "AI 优化完成！"
-   },
-   "aiOptimizeFailed":{
-      "message": "AI 优化失败"
-   },
-   "aiNoContent":{
-      "message": "请先输入内容"
-   },
-   "aiNotConfigured":{
-      "message": "请先配置 AI 模型"
-   },
-   "aiApiKeyRequired":{
-      "message": "请输入 API 密钥"
-   },
-   "llmBaseUrlLabel":{
-      "message": "New API Base URL"
-   },
-   "llmBaseUrlPlaceholder":{
-      "message": "例如 https://your-new-api.example.com/v1"
-   },
-   "aiBaseUrlRequired":{
-      "message": "请输入 New API Base URL"
-   },
-   "llmQuickPresetsLabel":{
-      "message": "快捷 AI 优化预设"
-   },
-   "llmQuickPresetPrefix":{
-      "message": "快捷"
-   },
-   "llmQuickPresetEmpty":{
-      "message": "未设置"
-   },
-   "llmQuickPresetMenuTooltip":{
-      "message": "选择快捷 AI 优化预设"
-   },
-   "llmQuickPresetNotConfigured":{
-      "message": "该快捷预设尚未配置"
-   },
-   "invalidUrl": {
-      "message": "请输入以 http:// 或 https:// 开头的有效 Memos 主页网址。"
-   },
-   "permissionDenied": {
-      "message": "当前账号没有执行此操作的权限。"
-   },
-   "uploadTooLarge": {
-      "message": "文件超过了服务器允许的上传大小。"
-   },
-   "quotaExceeded": {
-      "message": "已达到 Memos 用量上限，请检查设置中的用量限制。"
-   },
-   "requestLimited": {
-      "message": "请求过于频繁，请稍后重试。"
-   },
-   "apiTimeout": {
-      "message": "请求超时，草稿已保留。"
-   },
-   "attachmentPreviewFailed": {
-      "message": "暂时无法加载此附件。"
-   },
-   "draftSaveFailed": {
-      "message": "草稿暂时无法保存到本地，请保持弹窗打开并复制内容备份。"
-   },
-   "aiTaskLabel": {
-      "message": "AI 任务"
-   },
-   "aiTask_organize": {
-      "message": "整理格式"
-   },
-   "aiTask_summary": {
-      "message": "摘要"
-   },
-   "aiTask_keypoints": {
-      "message": "提取要点"
-   },
-   "aiTask_qa": {
-      "message": "生成问答"
-   },
-   "aiTask_custom": {
-      "message": "自定义提示词"
-   },
-   "aiPresetName": {
-      "message": "预设名称（可选）"
-   },
-   "aiCustomPrompt": {
-      "message": "填写此预设要执行的任务"
-   },
-   "aiCustomPromptRequired": {
-      "message": "请先填写自定义任务的提示词。"
-   },
-   "aiReviewTitle": {
-      "message": "确认 AI 结果"
-   },
-   "aiReviewHelp": {
-      "message": "原文保持不变，请查看后选择采用或追加。"
-   },
-   "aiOriginal": {
-      "message": "原文"
-   },
-   "aiResult": {
-      "message": "AI 结果（可编辑）"
-   },
-   "aiReplace": {
-      "message": "采用结果"
-   },
-   "aiAppend": {
-      "message": "追加到草稿"
-   },
-   "aiDiscard": {
-      "message": "取消结果"
-   },
-   "aiUndo": {
-      "message": "撤销 AI"
-   },
-   "aiUndoConflict": {
-      "message": "采用结果后正文已有修改，撤销不会覆盖你的新内容。"
-   },
-   "aiEditConflict": {
-      "message": "正文已修改，请追加结果，或取消后重新处理。"
-   },
-   "aiMissingLinks": {
-      "message": "结果缺少部分原始链接，请核对后再采用。"
-   },
-   "aiReviewReady": {
-      "message": "AI 结果已生成，请预览确认。"
-   },
-   "aiResultApplied": {
-      "message": "已采用 AI 结果，可使用“撤销 AI”恢复。"
-   },
-   "clipAddSource": {
-      "message": "插入网页来源"
-   },
-   "clipSelection": {
-      "message": "摘录选区并附来源"
-   },
-   "clipSelectionHelp": {
-      "message": "选中文本后，右键选择“摘录选区并附来源”，再打开扩展查看。"
-   },
-   "clipCaptureFailed": {
-      "message": "此页面暂时无法读取来源，请在普通网页重试。"
-   },
-   "clipSourceAdded": {
-      "message": "已在光标位置插入网页来源。"
-   },
-   "clipTemplateLabel": {
-      "message": "选区剪藏模板"
-   },
-   "clipTemplateHelp": {
-      "message": "支持 {{content}}、{{title}}、{{url}}、{{date}}，必须保留内容和来源。修改后保存在本地。"
-   },
-   "clipTemplateReset": {
-      "message": "恢复默认模板"
-   },
-   "clipTemplateInvalid": {
-      "message": "模板必须包含 {{content}} 和 {{url}}，且不超过 8000 字符。"
-   },
-   "sourceIncludeTime": {
-      "message": "附带采集时间"
-   },
-   "settingsSaveFailed": {
-      "message": "设置保存失败，请重试。"
-   },
-   "aiTaskHelp_organize": {
-      "message": "保留原有信息，调整分段和 Markdown，不主动压缩内容。"
-   },
-   "aiTaskHelp_summary": {
-      "message": "压缩成一段短文：中文目标 150 字内，英文 100 词内；来源另列。"
-   },
-   "aiTaskHelp_keypoints": {
-      "message": "按条目提取 3–7 个要点；材料不足时少列，不凑数。"
-   },
-   "aiTaskHelp_qa": {
-      "message": "生成 3–5 组有原文依据的问答；材料不足时不凑数。"
-   },
-   "aiTaskHelp_custom": {
-      "message": "按该快捷预设中填写的提示词执行。"
-   },
-   "aiTaskUsageHint": {
-      "message": "主 AI 按钮使用上方任务；快捷菜单显示并执行各预设自己的任务。"
-   },
-   "aiRunTask": {
-      "message": "执行 AI 任务：{task}"
-   },
-   "aiRunningTask": {
-      "message": "正在执行：{task}"
-   },
-   "aiExecutedTask": {
-      "message": "本次结果的任务：{task}"
-   }
+  "extName": {
+    "message": "AI-MEMOS"
+  },
+  "actionTitle": {
+    "message": "发送到 AI-MEMOS"
+  },
+  "extDescription": {
+    "message": "AI赋能的Memos浏览器扩展 - 快速记录、智能整理、优雅管理你的想法与知识"
+  },
+  "sendTo": {
+    "message": "发送至 Memos “%s”"
+  },
+  "sendLinkTo": {
+    "message": "发送链接至 Memos"
+  },
+  "sendImageTo": {
+    "message": "发送图片至 Memos"
+  },
+  "saveBtn": {
+    "message": "保存"
+  },
+  "placeApiUrl": {
+    "message": "请填入 Memos 主页网址"
+  },
+  "placeApiTokens": {
+    "message": "请填入 Memos Access Tokens"
+  },
+  "placeContent": {
+    "message": "现在的想法是..."
+  },
+  "lockPrivate": {
+    "message": "仅自己"
+  },
+  "lockProtected": {
+    "message": "已登录用户"
+  },
+  "lockPublic": {
+    "message": "公开"
+  },
+  "visibilityTooltip": {
+    "message": "可见范围"
+  },
+  "submitBtn": {
+    "message": "保存到 Memos"
+  },
+  "placeHideInput": {
+    "message": "默认“仅自己可见”标签名"
+  },
+  "placeShowInput": {
+    "message": "默认“所有人可见”标签名"
+  },
+  "picDrag": {
+    "message": "拖拽到窗口上传该图片"
+  },
+  "picCancelDrag": {
+    "message": "取消上传"
+  },
+  "picUploading": {
+    "message": "图片上传中……"
+  },
+  "picSuccess": {
+    "message": "上传完成"
+  },
+  "picFailed": {
+    "message": "上传图片失败"
+  },
+  "picPending": {
+    "message": "有图片等待上传"
+  },
+  "saveSuccess": {
+    "message": "保存信息成功"
+  },
+  "searchNow": {
+    "message": "想搜点啥？"
+  },
+  "searchNone": {
+    "message": "搜不到，换个词试试"
+  },
+  "archiveSuccess": {
+    "message": "归档成功！😊"
+  },
+  "archiveFailed": {
+    "message": "归档失败 😭"
+  },
+  "getTabFailed": {
+    "message": "获取标签失败 😭"
+  },
+  "memoUploading": {
+    "message": "发送中……"
+  },
+  "memoSuccess": {
+    "message": "已保存到 Memos"
+  },
+  "memoFailed": {
+    "message": "发送失败 😭"
+  },
+  "invalidToken": {
+    "message": "无效的 token 或 url 😭"
+  },
+  "languageLabel": {
+    "message": "语言"
+  },
+  "themeAuto": {
+    "message": "自动"
+  },
+  "themeLight": {
+    "message": "亮色"
+  },
+  "themeDark": {
+    "message": "暗黑"
+  },
+  "languageChangeConfirm": {
+    "message": "确定要切换语言吗？"
+  },
+  "languageChanged": {
+    "message": "语言已切换"
+  },
+  "settingsBtn": {
+    "message": "设置"
+  },
+  "tagsTooltip": {
+    "message": "添加标签"
+  },
+  "todoTooltip": {
+    "message": "添加待办"
+  },
+  "uploadTooltip": {
+    "message": "添加本机附件"
+  },
+  "linkTooltip": {
+    "message": "获取链接"
+  },
+  "randomTooltip": {
+    "message": "随机回顾"
+  },
+  "searchTooltip": {
+    "message": "搜索"
+  },
+  "noMemosFound": {
+    "message": "没有找到任何 memos"
+  },
+  "noTagsFound": {
+    "message": "没有找到任何标签"
+  },
+  "noSearchResults": {
+    "message": "没有找到匹配的 memos"
+  },
+  "apiFailed": {
+    "message": "API 调用失败"
+  },
+  "apiNotFound": {
+    "message": "API 端点不存在，请检查 Memos 版本"
+  },
+  "llmProviderLabel": {
+    "message": "AI 模型提供商"
+  },
+  "llmModelLabel": {
+    "message": "AI 模型"
+  },
+  "llmApiKeyLabel": {
+    "message": "API 密钥"
+  },
+  "llmCustomModelPlaceholder": {
+    "message": "输入自定义模型名称"
+  },
+  "llmApiKeyPlaceholder": {
+    "message": "输入 API 密钥"
+  },
+  "aiOptimizeTooltip": {
+    "message": "使用 AI 优化内容"
+  },
+  "aiOptimizing": {
+    "message": "AI 正在优化中..."
+  },
+  "aiOptimizeSuccess": {
+    "message": "AI 优化完成！"
+  },
+  "aiOptimizeFailed": {
+    "message": "AI 优化失败"
+  },
+  "aiNoContent": {
+    "message": "请先输入内容"
+  },
+  "aiNotConfigured": {
+    "message": "请先配置 AI 模型"
+  },
+  "aiApiKeyRequired": {
+    "message": "请输入 API 密钥"
+  },
+  "llmBaseUrlLabel": {
+    "message": "New API Base URL"
+  },
+  "llmBaseUrlPlaceholder": {
+    "message": "例如 https://your-new-api.example.com/v1"
+  },
+  "aiBaseUrlRequired": {
+    "message": "请输入 New API Base URL"
+  },
+  "llmQuickPresetsLabel": {
+    "message": "快捷 AI 优化预设"
+  },
+  "llmQuickPresetPrefix": {
+    "message": "快捷"
+  },
+  "llmQuickPresetEmpty": {
+    "message": "未设置"
+  },
+  "llmQuickPresetMenuTooltip": {
+    "message": "选择快捷 AI 优化预设"
+  },
+  "llmQuickPresetNotConfigured": {
+    "message": "该快捷预设尚未配置"
+  },
+  "invalidUrl": {
+    "message": "请输入以 http:// 或 https:// 开头的有效 Memos 主页网址。"
+  },
+  "permissionDenied": {
+    "message": "当前账号没有执行此操作的权限。"
+  },
+  "uploadTooLarge": {
+    "message": "文件超过了服务器允许的上传大小。"
+  },
+  "quotaExceeded": {
+    "message": "已达到 Memos 用量上限，请检查设置中的用量限制。"
+  },
+  "requestLimited": {
+    "message": "请求过于频繁，请稍后重试。"
+  },
+  "apiTimeout": {
+    "message": "请求超时，草稿已保留。"
+  },
+  "attachmentPreviewFailed": {
+    "message": "暂时无法加载此附件。"
+  },
+  "draftSaveFailed": {
+    "message": "草稿暂时无法保存到本地，请保持弹窗打开并复制内容备份。"
+  },
+  "aiTaskLabel": {
+    "message": "AI 任务"
+  },
+  "aiTask_organize": {
+    "message": "整理格式"
+  },
+  "aiTask_summary": {
+    "message": "摘要"
+  },
+  "aiTask_keypoints": {
+    "message": "提取要点"
+  },
+  "aiTask_qa": {
+    "message": "生成问答"
+  },
+  "aiTask_custom": {
+    "message": "自定义提示词"
+  },
+  "aiPresetName": {
+    "message": "预设名称（可选）"
+  },
+  "aiCustomPrompt": {
+    "message": "填写此预设要执行的任务"
+  },
+  "aiCustomPromptRequired": {
+    "message": "请先填写自定义任务的提示词。"
+  },
+  "aiReviewTitle": {
+    "message": "确认 AI 结果"
+  },
+  "aiReviewHelp": {
+    "message": "原文保持不变，请查看后选择采用或追加。"
+  },
+  "aiOriginal": {
+    "message": "原文"
+  },
+  "aiResult": {
+    "message": "AI 结果（可编辑）"
+  },
+  "aiReplace": {
+    "message": "采用结果"
+  },
+  "aiAppend": {
+    "message": "追加到草稿"
+  },
+  "aiDiscard": {
+    "message": "取消结果"
+  },
+  "aiUndo": {
+    "message": "撤销 AI"
+  },
+  "aiUndoConflict": {
+    "message": "采用结果后正文已有修改，撤销不会覆盖你的新内容。"
+  },
+  "aiEditConflict": {
+    "message": "正文已修改，请追加结果，或取消后重新处理。"
+  },
+  "aiMissingLinks": {
+    "message": "结果缺少部分原始链接，请核对后再采用。"
+  },
+  "aiReviewReady": {
+    "message": "AI 结果已生成，请预览确认。"
+  },
+  "aiResultApplied": {
+    "message": "已采用 AI 结果，可使用“撤销 AI”恢复。"
+  },
+  "clipAddSource": {
+    "message": "插入网页来源"
+  },
+  "clipSelection": {
+    "message": "摘录选区并附来源"
+  },
+  "clipSelectionHelp": {
+    "message": "选中文本后，右键选择“摘录选区并附来源”，再打开扩展查看。"
+  },
+  "clipCaptureFailed": {
+    "message": "此页面暂时无法读取来源，请在普通网页重试。"
+  },
+  "clipSourceAdded": {
+    "message": "已在光标位置插入网页来源。"
+  },
+  "clipTemplateLabel": {
+    "message": "剪藏模板"
+  },
+  "clipTemplateHelp": {
+    "message": "支持 {{content}}、{{title}}、{{url}}、{{date}}，必须保留内容和来源。修改后保存在本地。"
+  },
+  "clipTemplateReset": {
+    "message": "恢复默认模板"
+  },
+  "clipTemplateInvalid": {
+    "message": "模板必须包含 {{content}} 和 {{url}}，且不超过 8000 字符。"
+  },
+  "sourceIncludeTime": {
+    "message": "附带采集时间"
+  },
+  "settingsSaveFailed": {
+    "message": "设置保存失败，请重试。"
+  },
+  "aiTaskHelp_organize": {
+    "message": "保留原有信息，调整分段和 Markdown，不主动压缩内容。"
+  },
+  "aiTaskHelp_summary": {
+    "message": "压缩成一段短文：中文目标 150 字内，英文 100 词内；来源另列。"
+  },
+  "aiTaskHelp_keypoints": {
+    "message": "按条目提取 3–7 个要点；材料不足时少列，不凑数。"
+  },
+  "aiTaskHelp_qa": {
+    "message": "生成 3–5 组有原文依据的问答；材料不足时不凑数。"
+  },
+  "aiTaskHelp_custom": {
+    "message": "按该快捷预设中填写的提示词执行。"
+  },
+  "aiTaskUsageHint": {
+    "message": "主 AI 按钮使用上方任务；快捷菜单显示并执行各预设自己的任务。"
+  },
+  "aiRunTask": {
+    "message": "执行 AI 任务：{task}"
+  },
+  "aiRunningTask": {
+    "message": "正在执行：{task}"
+  },
+  "aiExecutedTask": {
+    "message": "本次结果的任务：{task}"
+  },
+  "navWrite": {
+    "message": "记录"
+  },
+  "navSearch": {
+    "message": "查找"
+  },
+  "navHistory": {
+    "message": "剪藏历史"
+  },
+  "navigation": {
+    "message": "笔记导航"
+  },
+  "openMemos": {
+    "message": "打开 Memos 实例"
+  },
+  "openPanel": {
+    "message": "在侧栏打开"
+  },
+  "connectHint": {
+    "message": "草稿保存在本机。"
+  },
+  "connectMemos": {
+    "message": "连接 Memos"
+  },
+  "capturePage": {
+    "message": "剪藏网页"
+  },
+  "captureOptions": {
+    "message": "更多剪藏方式"
+  },
+  "captureSelection": {
+    "message": "摘录选区"
+  },
+  "aiAction": {
+    "message": "AI 整理"
+  },
+  "saveConnection": {
+    "message": "验证并保存连接"
+  },
+  "instanceUrl": {
+    "message": "Memos 网址"
+  },
+  "tokenLabel": {
+    "message": "个人访问令牌（PAT）"
+  },
+  "aiSettings": {
+    "message": "AI 模型与预设"
+  },
+  "saveAI": {
+    "message": "保存 AI 设置"
+  },
+  "refreshModels": {
+    "message": "刷新可用模型"
+  },
+  "modelRecommended": {
+    "message": "内置推荐"
+  },
+  "modelAccount": {
+    "message": "账号返回的其他模型"
+  },
+  "modelCount": {
+    "message": "账号返回 {n} 个候选模型"
+  },
+  "modelCustom": {
+    "message": "自定义模型"
+  },
+  "modelInvalid": {
+    "message": "无法读取模型列表，请检查地址和密钥。"
+  },
+  "working": {
+    "message": "处理中…"
+  },
+  "captureSettings": {
+    "message": "网页剪藏"
+  },
+  "tagRules": {
+    "message": "按标签设置可见范围"
+  },
+  "appearance": {
+    "message": "外观与语言"
+  },
+  "themeLabel": {
+    "message": "主题"
+  },
+  "spaceLabel": {
+    "message": "空间"
+  },
+  "noSpace": {
+    "message": "不指定空间"
+  },
+  "lockSpace": {
+    "message": "空间成员"
+  },
+  "ruleEffective": {
+    "message": "标签规则生效 · {value}"
+  },
+  "spaceUnavailable": {
+    "message": "所选空间不可用，请重新选择目标后保存。"
+  },
+  "spaceCheckFailed": {
+    "message": "无法读取空间，请重试。"
+  },
+  "retry": {
+    "message": "重试"
+  },
+  "keyword": {
+    "message": "关键词"
+  },
+  "tagFilter": {
+    "message": "标签"
+  },
+  "tagPlaceholder": {
+    "message": "可选，例如 学习"
+  },
+  "searchPlaceholder": {
+    "message": "搜索笔记正文"
+  },
+  "loadMore": {
+    "message": "加载更多"
+  },
+  "searchHistory": {
+    "message": "搜索来源标题或网址"
+  },
+  "historyEmpty": {
+    "message": "保存网页剪藏后，可以在这里找回原网页和笔记。"
+  },
+  "savedBefore": {
+    "message": "这个网页已经保存过。"
+  },
+  "openSaved": {
+    "message": "查看笔记"
+  },
+  "openSource": {
+    "message": "原网页"
+  },
+  "archiveAction": {
+    "message": "归档"
+  },
+  "draftConflict": {
+    "message": "另一处也修改了这段草稿。可保留两份，或使用已保存的版本。"
+  },
+  "draftKeepBoth": {
+    "message": "追加我的版本"
+  },
+  "draftUseLatest": {
+    "message": "使用已保存版本"
+  },
+  "stagedFileMissing": {
+    "message": "找不到草稿中的本机附件，请重新添加文件。"
+  },
+  "fileStaged": {
+    "message": "附件已加入本机草稿"
+  },
+  "imageCaptureFailed": {
+    "message": "无法读取这张图片，请将图片粘贴到草稿。"
+  },
+  "emptySelection": {
+    "message": "请先在网页上选中文字。"
+  },
+  "addedArticle": {
+    "message": "正文已加入草稿"
+  },
+  "addedSelection": {
+    "message": "选区已加入草稿"
+  },
+  "addedSummary": {
+    "message": "未识别到正文，已加入网页简介和来源。"
+  },
+  "imagePartial": {
+    "message": "部分图片无法读取，请在保存前核对草稿。"
+  },
+  "clipImage": {
+    "message": "将图片加入草稿"
+  },
+  "clipLink": {
+    "message": "将链接加入草稿"
+  },
+  "aiTruncated": {
+    "message": "模型达到了输出上限，请缩短原文后重试。"
+  },
+  "aiInterrupted": {
+    "message": "AI 请求中断，草稿仍在，可以重试。"
+  },
+  "aiEmpty": {
+    "message": "模型没有返回可用的文本。"
+  },
+  "aiUnavailable": {
+    "message": "当前密钥无法调用所选模型，请检查模型和权限。"
+  },
+  "modelSavedKey": {
+    "message": "已保存 · 留空沿用"
+  },
+  "draftChanged": {
+    "message": "草稿已更新，请核对后再次保存。"
+  },
+  "unconfirmedSave": {
+    "message": "未收到保存回执，请先在 Memos 检查再重试。"
+  },
+  "historyWriteFailed": {
+    "message": "笔记已保存，剪藏历史暂未写入。"
+  },
+  "settingsSaved": {
+    "message": "设置已保存"
+  },
+  "modelGatewayUrl": {
+    "message": "请输入有效的 HTTP 或 HTTPS 网关地址。"
+  },
+  "clipContextFailed": {
+    "message": "上次右键剪藏失败，请从网页重试。"
+  }
 }

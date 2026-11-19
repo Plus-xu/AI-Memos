@@ -315,9 +315,12 @@ test('the actual draft-load callback refreshes adoption after a review restores 
   assert.equal(state.node('#aiReviewReplace').prop('disabled'), true);
   let finishDraftLoad;
   state.context.DraftStorage = {
-    load(callback) { finishDraftLoad = callback; },
+    get: async () => ({}),
+    load(callback) { finishDraftLoad = callback; return Promise.resolve(); },
     save(value, callback) { state.local.memosDraft = plain(value); callback?.(); }
   };
+  state.context.Workspace = { configure() {}, refreshVisibility() {} };
+  state.load('editor-draft.js');
   state.load('oper.js');
   assert.equal(typeof finishDraftLoad, 'function');
   finishDraftLoad({ open_content: 'Restored draft', open_action: 'save_text' });
