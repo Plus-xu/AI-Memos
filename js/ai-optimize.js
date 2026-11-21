@@ -991,6 +991,11 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
   });
 }
 
+function llmStateChanged(changes, area) {
+  return !!((area === 'sync' && (changes.llmProviderConfigs || changes.llmActiveProvider || changes.llmMaxOutputTokens)) ||
+    (area === 'local' && changes.llmTaskPresets));
+}
+
 // 页面加载完成后初始化
 $(document).ready(function() {
   // 初始化LLM配置界面
@@ -998,7 +1003,7 @@ $(document).ready(function() {
   if (document.getElementById('content')) AIReview.init();
   Clipper.init();
   if (!document.getElementById('llmProvider')) chrome.storage.onChanged?.addListener((changes, area) => {
-    if ((area === 'sync' && (changes.llmProviderConfigs || changes.llmActiveProvider)) || (area === 'local' && changes.llmTaskPresets)) loadLLMState(updateQuickPresetMenu);
+    if (llmStateChanged(changes, area)) loadLLMState(updateQuickPresetMenu);
   });
   
   // 绑定AI优化按钮点击事件

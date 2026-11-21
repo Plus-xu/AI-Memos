@@ -558,3 +558,10 @@ test('relative times follow the interface language, including Japanese', async (
   const html = popup.context.buildMemoHtml(info, { name: 'memos/a', content: 'x', createTime: new Date(Date.now() - 7200e3).toISOString() });
   assert.match(html, /2 時間前/);
 });
+
+test('the post-save check also recognises a child of the hidden tag', async () => {
+  const popup = await loadPopup({ createMemo: async (_, body) => ({ name: 'memos/saved', ...body, tags: ['work/secret'], visibility: 'PUBLIC' }) },
+    { hidetag: 'work', memo_lock: 'PUBLIC' });
+  await popup.context.sendText();
+  assert.equal(popup.node('#visibilityWarning')[0].hidden, false);
+});

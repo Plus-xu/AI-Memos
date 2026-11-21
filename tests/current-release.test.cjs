@@ -186,3 +186,12 @@ test('request errors rejected by the provider show its reason, capped at 240 cha
   ctx.$.ajax = options => options.error({ status:500, responseJSON:{ error:{ message:'internal detail' } } });
   await assert.rejects(request(), error => !error.message.includes('internal detail'));
 });
+
+test('an open editor reloads AI settings when the output limit changes', () => {
+  const { ctx } = runtime();
+  assert.equal(ctx.llmStateChanged({ llmMaxOutputTokens: {} }, 'sync'), true);
+  assert.equal(ctx.llmStateChanged({ llmProviderConfigs: {} }, 'sync'), true);
+  assert.equal(ctx.llmStateChanged({ llmTaskPresets: {} }, 'local'), true);
+  assert.equal(ctx.llmStateChanged({ llmMaxOutputTokens: {} }, 'local'), false);
+  assert.equal(ctx.llmStateChanged({ theme: {} }, 'sync'), false);
+});

@@ -85,7 +85,8 @@ var exposedMemo = '';
 // Second check: the server's own tag list decides whether the rule applied.
 function checkSavedVisibility(info, memo) {
   var hidden = MemoTags.normalize(info.hidetag);
-  var exposed = !!hidden && Array.isArray(memo.tags) && memo.tags.includes(hidden) &&
+  var exposed = !!hidden && Array.isArray(memo.tags) &&
+    memo.tags.some(function (tag) { return tag === hidden || String(tag).startsWith(hidden + '/'); }) &&
     typeof memo.visibility === 'string' && memo.visibility !== 'PRIVATE';
   exposedMemo = exposed ? memo.name : '';
   $('#visibilityWarning').prop('hidden', !exposed);
