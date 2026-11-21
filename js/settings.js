@@ -31,7 +31,9 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   el('saveTag').onclick = async () => {
     try {
-      await DraftStorage.put('sync', { hidetag: el('hideInput').value.trim(), showtag: el('showInput').value.trim() });
+      el('hideInput').value = MemoTags.normalize(el('hideInput').value);
+      el('showInput').value = MemoTags.normalize(el('showInput').value);
+      await DraftStorage.put('sync', { hidetag: el('hideInput').value, showtag: el('showInput').value });
       $.message({ message: uiMessage('settingsSaved') });
     } catch (_) { $.message({ message: uiMessage('settingsSaveFailed') }); }
   };

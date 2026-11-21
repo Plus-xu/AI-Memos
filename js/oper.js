@@ -68,20 +68,7 @@ function showApiError(prefix, xhr, fallbackMessage) {
 }
 
 function resolveVisibility(info) {
-  var hideTag = info.hidetag;
-  var showTag = info.showtag;
-  var nowTag = $("textarea[name=text]").val().match(/(#[^\s#]+)/);
-  var sendvisi = info.memo_lock || 'PRIVATE';
-
-  if (nowTag) {
-    if (nowTag[1] === showTag) {
-      sendvisi = 'PUBLIC';
-    } else if (nowTag[1] === hideTag) {
-      sendvisi = 'PRIVATE';
-    }
-  }
-
-  return sendvisi;
+  return MemoTags.visibility($("textarea[name=text]").val(), info);
 }
 
 function escapeHtml(value) {

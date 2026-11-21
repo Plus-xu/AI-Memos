@@ -270,7 +270,7 @@ async function loadPopup(overrides = {}, saved = {}) {
       }
     }
   });
-  for (const file of ['draft-storage','editor-draft','staged-files','workspace'])
+  for (const file of ['draft-storage','editor-draft','staged-files','memo-tags','workspace'])
     vm.runInContext(fs.readFileSync(path.join(root, 'js', file + '.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(root, 'js/oper.js'), 'utf8'), context);
   ready.forEach(fn => fn()); await flush();
@@ -292,6 +292,14 @@ test('failed memo saves preserve text and permit retry with the same draft', asy
   await popup.context.sendText();
   assert.equal(attempts, 2);
   assert.equal(popup.storage.memosDraft.open_content, '');
+});
+
+test('a hidden tag after a URL fragment saves the memo as private', async () => {
+  const bodies = [];
+  const popup = await loadPopup({ createMemo: async (_, body) => { bodies.push(body); return { name: 'memos/saved', ...body }; } },
+    { hidetag: '私密', memo_lock: 'PUBLIC', open_content: '见 https://a.com/p#top 然后 #私密' });
+  await popup.context.sendText();
+  assert.equal(bodies[0].visibility, 'PRIVATE');
 });
 
 test('repeated clicks cannot create duplicate memos and newer draft text survives a successful save', async () => {
