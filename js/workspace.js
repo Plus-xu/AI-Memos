@@ -3,7 +3,7 @@ var Workspace = (function () {
   const el = id => document.getElementById(id);
   let account, space = '', visibility = 'PRIVATE', spaces = [], missing = false;
   let configuring = Promise.resolve();
-  let destinationGeneration = 0, searchGeneration = 0, nextPage = '', query = '', results = [], seen = new Set();
+  let destinationGeneration = 0, searchGeneration = 0, listGeneration = 0, nextPage = '', query = '', results = [], seen = new Set();
   let selectedTab = 'write', browserWindow, historyGeneration = 0;
   const labels = { PRIVATE: 'lockPrivate', PROTECTED: 'lockProtected', PUBLIC: 'lockPublic', SPACE: 'lockSpace' };
 
@@ -98,11 +98,34 @@ var Workspace = (function () {
   }
 
   function resetSearch() {
-    searchGeneration++;
+    searchGeneration++; listGeneration++;
     seen = new Set(); nextPage = ''; results = [];
     el('searchMore').hidden = true;
     el('searchStatus').textContent = '';
+    dismissArchiveNotice();
     clearMemoList();
+  }
+
+  function renderResults() {
+    if (results.length) renderMemoList(account, results);
+    else clearMemoList();
+  }
+
+  function show(memos) { results = memos.slice(); renderResults(); }
+
+  // Removes one displayed memo and keeps the pagination state.
+  function remove(name) {
+    const index = results.findIndex(item => item.name === name);
+    if (index < 0) return null;
+    const memo = results.splice(index, 1)[0];
+    renderResults();
+    return { memo, index, list: listGeneration };
+  }
+
+  function restore(entry) {
+    if (!entry || entry.list !== listGeneration || results.some(item => item.name === entry.memo.name)) return;
+    results.splice(Math.min(entry.index, results.length), 0, entry.memo);
+    renderResults();
   }
 
   async function search(more = false) {
@@ -224,5 +247,5 @@ var Workspace = (function () {
     });
     StagedFiles.collect().catch(() => {});
   });
-  return { configure, destination, refreshVisibility, refreshHistory, resetSearch, translate, tab };
+  return { configure, destination, refreshVisibility, refreshHistory, resetSearch, show, remove, restore, translate, tab };
 })();

@@ -580,5 +580,14 @@
   },
   "madePrivate": {
     "message": "Memo is now private"
+  },
+  "archiveUndo": {
+    "message": "Undo"
+  },
+  "archiveUndone": {
+    "message": "Archive undone"
+  },
+  "archiveDone": {
+    "message": "Archived"
   }
 }

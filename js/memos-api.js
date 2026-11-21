@@ -177,11 +177,11 @@ const MemosAPI = (function () {
   }
 
   function archiveMemo(info, memoName) {
-    return request(info, {
-      path: memoName + '?updateMask=state',
-      method: 'PATCH',
-      body: { state: 'ARCHIVED' }
-    });
+    return patchMemo(info, memoName, 'state', 'ARCHIVED');
+  }
+
+  function restoreMemo(info, memoName) {
+    return patchMemo(info, memoName, 'state', 'NORMAL');
   }
 
   function patchMemo(info, memoName, field, value) {
@@ -348,6 +348,7 @@ const MemosAPI = (function () {
     prepareMemo: prepareMemo,
     createMemo: createMemo,
     archiveMemo: archiveMemo,
+    restoreMemo: restoreMemo,
     setMemoVisibility: setMemoVisibility,
     uploadAttachment: uploadAttachment,
     getMemoId: getMemoId,

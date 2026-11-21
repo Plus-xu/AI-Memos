@@ -580,5 +580,14 @@
   },
   "madePrivate": {
     "message": "自分のみに変更しました"
+  },
+  "archiveUndo": {
+    "message": "元に戻す"
+  },
+  "archiveUndone": {
+    "message": "アーカイブを取り消しました"
+  },
+  "archiveDone": {
+    "message": "アーカイブしました"
   }
 }

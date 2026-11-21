@@ -456,3 +456,88 @@ test('the visibility warning stays when the fix fails and never appears for priv
     assert.equal(popup.node('#visibilityWarning')[0].hidden, true);
   }
 });
+
+async function searchedPopup(overrides = {}) {
+  const calls = { restored: [], archived: [] };
+  const popup = await loadPopup({
+    listMemoPage: async (_, query) => new URLSearchParams(query).get('pageToken')
+      ? { memos: [{ name: 'memos/c', content: 'c' }], next: '' }
+      : { memos: [{ name: 'memos/a', content: 'a' }, { name: 'memos/b', content: 'b' }], next: 'p2' },
+    archiveMemo: async (_, name) => { calls.archived.push(name); return {}; },
+    restoreMemo: async (_, name) => { calls.restored.push(name); return {}; },
+    ...overrides
+  });
+  popup.document.getElementById('searchForm').onsubmit({ preventDefault() {} });
+  await flush();
+  const shown = () => (popup.node('#randomlist').htmlValue.match(/data-uid="[^"]+"/g) || []).map(value => value.slice(10, -1));
+  return { popup, calls, shown };
+}
+
+test('restoring a memo patches only its state back to NORMAL', async () => {
+  const { api, calls } = loadApi(() => ({}));
+  await api.restoreMemo(info, 'memos/x');
+  assert.equal(calls[0].type, 'PATCH');
+  assert.equal(new URL(calls[0].url).searchParams.get('updateMask'), 'state');
+  assert.deepEqual(JSON.parse(calls[0].data), { state: 'NORMAL' });
+});
+
+test('archiving removes one result, keeps pagination, and loading more never brings it back', async () => {
+  const { popup, calls, shown } = await searchedPopup();
+  assert.deepEqual(shown(), ['a', 'b']);
+  await popup.context.archiveMemoByName('memos/a');
+  assert.deepEqual(calls.archived, ['memos/a']);
+  assert.deepEqual(shown(), ['b']);
+  assert.equal(popup.document.getElementById('searchMore').hidden, false);
+  assert.equal(popup.document.getElementById('archiveNotice').hidden, false);
+  popup.document.getElementById('searchMore').onclick();
+  await flush();
+  assert.deepEqual(shown(), ['b', 'c']);
+});
+
+test('undoing an archive restores the memo on the server and at its place in the list', async () => {
+  const { popup, calls, shown } = await searchedPopup();
+  await popup.context.archiveMemoByName('memos/a');
+  await popup.context.undoArchive();
+  assert.deepEqual(calls.restored, ['memos/a']);
+  assert.deepEqual(shown(), ['a', 'b']);
+  assert.equal(popup.document.getElementById('archiveNotice').hidden, true);
+  assert.equal(popup.messages.at(-1), 'archiveUndone');
+  await popup.context.undoArchive();
+  assert.equal(calls.restored.length, 1);
+});
+
+test('a failed undo leaves the archived memo out of the list and keeps the notice', async () => {
+  const { popup, shown } = await searchedPopup({ restoreMemo: async () => { throw refused(500); } });
+  await popup.context.archiveMemoByName('memos/a');
+  await popup.context.undoArchive();
+  assert.deepEqual(shown(), ['b']);
+  assert.equal(popup.document.getElementById('archiveNotice').hidden, false);
+});
+
+test('a failed archive leaves the list untouched; a new search drops the pending undo', async () => {
+  const { popup, calls, shown } = await searchedPopup({ archiveMemo: async () => { throw refused(500); } });
+  await popup.context.archiveMemoByName('memos/a');
+  assert.deepEqual(shown(), ['a', 'b']);
+  const next = await searchedPopup();
+  await next.popup.context.archiveMemoByName('memos/a');
+  next.popup.document.getElementById('searchForm').onsubmit({ preventDefault() {} });
+  await flush();
+  assert.equal(next.popup.document.getElementById('archiveNotice').hidden, true);
+  await next.popup.context.undoArchive();
+  assert.deepEqual(next.calls.restored, []);
+  assert.equal(calls.restored.length, 0);
+});
+
+test('archiving the single random memo empties the list and can be undone', async () => {
+  const popup = await loadPopup({
+    listMemos: async () => [{ name: 'memos/r', content: 'r' }],
+    archiveMemo: async () => ({}), restoreMemo: async () => ({})
+  });
+  popup.handlers.get('#random:click')();
+  await flush();
+  assert.match(popup.node('#randomlist').htmlValue, /data-uid="r"/);
+  await popup.context.archiveMemoByName('memos/r');
+  assert.equal(popup.node('#randomlist').htmlValue, '');
+  await popup.context.undoArchive();
+  assert.match(popup.node('#randomlist').htmlValue, /data-uid="r"/);
+});

@@ -319,7 +319,7 @@ $('#random').click(() => get_info(async info => {
   Workspace.resetSearch();
   try {
     const memos = await MemosAPI.listMemos(info);
-    if (memos.length) renderMemoList(info, [memos[Math.floor(Math.random() * memos.length)]]);
+    if (memos.length) Workspace.show([memos[Math.floor(Math.random() * memos.length)]]);
     else $('#searchStatus').text(uiMessage('noMemosFound'));
   } catch (error) { showApiError('Random memo', error, uiMessage('apiFailed')); }
 }));
@@ -332,17 +332,44 @@ $(document).on("click", ".random-link", function () {
   });
 });
 
+var archivedEntry = null;
+
+function dismissArchiveNotice() {
+  archivedEntry = null;
+  $('#archiveNotice').prop('hidden', true);
+}
+
+async function archiveMemoByName(name) {
+  var info = await new Promise(function (resolve) { get_info(resolve); });
+  try {
+    await MemosAPI.archiveMemo(info, name);
+  } catch (xhr) {
+    showApiError('Archive API failed', xhr, uiMessage("archiveFailed"));
+    return;
+  }
+  archivedEntry = { name: name, removed: Workspace.remove(name) };
+  $('#archiveNotice').prop('hidden', false);
+}
+
+async function undoArchive() {
+  var entry = archivedEntry;
+  if (!entry) return;
+  var info = await new Promise(function (resolve) { get_info(resolve); });
+  try {
+    await MemosAPI.restoreMemo(info, entry.name);
+  } catch (xhr) {
+    showApiError('Restore API failed', xhr, uiMessage("apiFailed"));
+    return;
+  }
+  if (archivedEntry === entry) dismissArchiveNotice();
+  Workspace.restore(entry.removed);
+  $.message({ message: uiMessage("archiveUndone") });
+}
+
 $(document).on("click", ".random-delete", function () {
-  var memosName = $(this).data('name');
-  get_info(function (info) {
-    MemosAPI.archiveMemo(info, memosName).then(function () {
-      clearMemoList();
-      $.message({ message: uiMessage("archiveSuccess") });
-    }).catch(function (xhr) {
-      showApiError('Archive API failed', xhr, uiMessage("archiveFailed"));
-    });
-  });
+  archiveMemoByName($(this).data('name'));
 });
+$('#archiveUndo').click(undoArchive);
 
 $(document).on("click", ".memos-file-link", function (event) {
   event.preventDefault();

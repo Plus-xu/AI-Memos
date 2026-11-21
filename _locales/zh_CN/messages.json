@@ -580,5 +580,14 @@
   },
   "madePrivate": {
     "message": "已改为仅自己可见"
+  },
+  "archiveUndo": {
+    "message": "撤销"
+  },
+  "archiveUndone": {
+    "message": "已撤销归档"
+  },
+  "archiveDone": {
+    "message": "已归档"
   }
 }
