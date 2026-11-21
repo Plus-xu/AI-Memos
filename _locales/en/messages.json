@@ -45,10 +45,10 @@
     "message": "Save to Memos"
   },
   "placeHideInput": {
-    "message": "Default 'Only visible to you' Tag name"
+    "message": "Hidden tags: memos containing any of these are saved as only visible to you (separate with spaces or commas)"
   },
   "placeShowInput": {
-    "message": "Default 'Everyone can see' Tag name"
+    "message": "Public tags: memos containing any of these are saved as visible to everyone (separate with spaces or commas)"
   },
   "picDrag": {
     "message": "Drag upload the image"

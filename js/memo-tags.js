@@ -49,16 +49,28 @@ var MemoTags = (function () {
     return Array.from(found);
   }
 
+  // A rule holds one or more tag names separated by spaces or commas.
+  function list(value) {
+    var names = String(value || '').split(/[\s,，、]+/).map(function (name) {
+      return name.replace(/^#/, '');
+    }).filter(Boolean);
+    return Array.from(new Set(names));
+  }
+
   function normalize(value) {
-    return String(value || '').trim().replace(/^#/, '').trim();
+    return list(value).join(' ');
+  }
+
+  function matches(tags, names) {
+    return names.some(function (name) { return tags.includes(name); });
   }
 
   function visibility(content, rules) {
-    var hidden = normalize(rules.hidetag), shown = normalize(rules.showtag);
-    if (hidden && extract(content, false).includes(hidden)) return 'PRIVATE';
-    if (shown && extract(content, true).includes(shown)) return 'PUBLIC';
+    var hidden = list(rules.hidetag), shown = list(rules.showtag);
+    if (hidden.length && matches(extract(content, false), hidden)) return 'PRIVATE';
+    if (shown.length && matches(extract(content, true), shown)) return 'PUBLIC';
     return rules.memo_lock || 'PRIVATE';
   }
 
-  return { extract: extract, normalize: normalize, visibility: visibility };
+  return { extract: extract, list: list, normalize: normalize, visibility: visibility };
 })();

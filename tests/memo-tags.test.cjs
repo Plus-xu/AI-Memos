@@ -74,3 +74,14 @@ test('long unbroken drafts are scanned quickly', () => {
   assert.ok(performance.now() - started < 400, 'took ' + (performance.now() - started) + 'ms');
   assert.equal(extract('#' + 'a/'.repeat(40) + 'b').length, 1);
 });
+
+test('a rule accepts several tags separated by spaces or commas', () => {
+  assert.deepEqual(Array.from(tags.list(' #日记, 工作，健康、#a/b  c ')), ['日记', '工作', '健康', 'a/b', 'c']);
+  assert.deepEqual(Array.from(tags.list('日记 日记 #')), ['日记']);
+  assert.equal(tags.normalize(' #日记, 工作，#健康 '), '日记 工作 健康');
+  const many = { hidetag: '日记, 工作', showtag: '分享 博客', memo_lock: 'PROTECTED' };
+  assert.equal(tags.visibility('今天 #工作', many), 'PRIVATE');
+  assert.equal(tags.visibility('写了 #博客', many), 'PUBLIC');
+  assert.equal(tags.visibility('#博客 #日记', many), 'PRIVATE');
+  assert.equal(tags.visibility('#其他', many), 'PROTECTED');
+});

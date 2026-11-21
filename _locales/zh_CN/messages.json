@@ -45,10 +45,10 @@
     "message": "保存到 Memos"
   },
   "placeHideInput": {
-    "message": "默认“仅自己可见”标签名"
+    "message": "隐藏标签：正文含这些标签时按“仅自己可见”保存（多个用空格或逗号分隔）"
   },
   "placeShowInput": {
-    "message": "默认“所有人可见”标签名"
+    "message": "公开标签：正文含这些标签时按“所有人可见”保存（多个用空格或逗号分隔）"
   },
   "picDrag": {
     "message": "拖拽到窗口上传该图片"

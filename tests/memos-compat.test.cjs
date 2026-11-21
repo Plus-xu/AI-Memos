@@ -565,3 +565,10 @@ test('the post-save check also recognises a child of the hidden tag', async () =
   await popup.context.sendText();
   assert.equal(popup.node('#visibilityWarning')[0].hidden, false);
 });
+
+test('the post-save check covers every hidden tag in a multi-tag rule', async () => {
+  const popup = await loadPopup({ createMemo: async (_, body) => ({ name: 'memos/saved', ...body, tags: ['work'], visibility: 'PUBLIC' }) },
+    { hidetag: 'diary, work', memo_lock: 'PUBLIC' });
+  await popup.context.sendText();
+  assert.equal(popup.node('#visibilityWarning')[0].hidden, false);
+});
