@@ -436,7 +436,7 @@ def quicksort(arr):
     provider: 'openai',
     model: 'gpt-6.2-sol',
     temperature: 0.7,
-    maxTokens: 2000
+    maxTokens: 8192
   }
 };
 

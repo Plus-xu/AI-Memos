@@ -540,7 +540,7 @@
     "message": "Add link to draft"
   },
   "aiTruncated": {
-    "message": "Output limit reached. Shorten the input and retry."
+    "message": "The model hit the output limit before producing visible text. Raise the output limit in settings or shorten the input."
   },
   "aiInterrupted": {
     "message": "AI request interrupted. Your draft is available for retry."
@@ -589,5 +589,11 @@
   },
   "archiveDone": {
     "message": "Archived"
+  },
+  "aiTruncatedWarning": {
+    "message": "The result was cut off at the output limit and is incomplete. You can raise the limit in settings."
+  },
+  "aiMaxTokensLabel": {
+    "message": "Output limit (tokens). Blank uses the default of 8192; New API sends no limit when blank"
   }
 }

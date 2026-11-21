@@ -39,6 +39,7 @@ var AIReview = (function () {
     var warnings = [];
     var empty = !currentReview || !currentReview.result.trim();
     if (currentReview && $('#content').val() !== currentReview.input) warnings.push(message('aiEditConflict'));
+    if (currentReview && currentReview.truncated) warnings.push(message('aiTruncatedWarning'));
     if (currentReview && AIWorkflow.missingReferences(currentReview).length) warnings.push(message('aiMissingLinks'));
     $('#aiReviewWarning').text(warnings.join(' ')).prop('hidden', !warnings.length);
     $('#aiReviewReplace').prop('disabled', busy || empty || $('#content').val() !== currentReview.input);
@@ -56,8 +57,8 @@ var AIReview = (function () {
     refreshTaskHint();
   }
 
-  function show(input, result, task) {
-    currentReview = AIWorkflow.review(input, result, task);
+  function show(input, result, task, truncated) {
+    currentReview = AIWorkflow.review(input, result, task, truncated);
     persist();
     render();
   }

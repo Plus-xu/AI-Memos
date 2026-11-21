@@ -540,7 +540,7 @@
     "message": "将链接加入草稿"
   },
   "aiTruncated": {
-    "message": "模型达到了输出上限，请缩短原文后重试。"
+    "message": "模型在给出可见内容前就达到了输出上限。请在设置中调高输出上限，或缩短原文后重试。"
   },
   "aiInterrupted": {
     "message": "AI 请求中断，草稿仍在，可以重试。"
@@ -589,5 +589,11 @@
   },
   "archiveDone": {
     "message": "已归档"
+  },
+  "aiTruncatedWarning": {
+    "message": "结果在输出上限处被截断，内容不完整。可在设置中调高输出上限。"
+  },
+  "aiMaxTokensLabel": {
+    "message": "输出上限（token）。留空使用默认值 8192；New API 留空时不传上限"
   }
 }

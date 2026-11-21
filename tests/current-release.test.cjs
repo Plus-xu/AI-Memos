@@ -34,15 +34,17 @@ for (const [provider,model,route,header,limit,response] of transports) {
     if (provider !== 'newapi') assert.equal(config.providers[provider].models[0].value,model);
     let request;
     ctx.$.ajax = value => { request = value; value.success(response); };
-    assert.equal(await ctx.callLLMAPI(provider,model,'fixture-key','Plain note','en','https://fixture.test/gateway/v1/','summary',''),'answer');
+    const result = await ctx.callLLMAPI(provider,model,'fixture-key','Plain note','en','https://fixture.test/gateway/v1/','summary','');
+    assert.equal(result.text,'answer'); assert.equal(result.truncated,false);
     const body = JSON.parse(request.data), url = new URL(request.url);
     assert.equal(url.pathname,route);
     assert.equal(url.search,'');
     assert.equal(request.headers[header], header === 'Authorization' ? 'Bearer fixture-key' : 'fixture-key');
     assert.equal(JSON.stringify(body).includes('fixture-key'),false);
     assert.equal(JSON.stringify(body).includes('temperature'),false);
-    if (limit) assert.ok(body[limit] > 0);
-    if (provider === 'gemini') assert.ok(body.generationConfig.maxOutputTokens > 0);
+    if (limit) assert.equal(body[limit],8192);
+    if (provider === 'newapi') assert.ok(!Object.hasOwn(body,'max_tokens'));
+    if (provider === 'gemini') assert.equal(body.generationConfig.maxOutputTokens,8192);
     else assert.equal(body.model,model);
   });
 }
@@ -54,7 +56,7 @@ test('generation errors distinguish permissions, rate limits, interrupted reques
     ctx.$.ajax = options => options.error({ status });
     await assert.rejects(request(), new RegExp(expected));
   }
-  for (const [response,expected] of [[{ output_text:'  ' },'aiEmpty'],[{ status:'incomplete',output_text:'partial' },'aiTruncated']]) {
+  for (const [response,expected] of [[{ output_text:'  ' },'aiEmpty'],[{ status:'incomplete',output_text:'  ' },'aiTruncated']]) {
     ctx.$.ajax = options => options.success(response);
     await assert.rejects(request(), new RegExp(expected));
   }
@@ -138,4 +140,49 @@ test('AI review detects lost staged attachments and preserves a legacy DeepSeek 
   assert.deepEqual(Array.from(ctx.AIWorkflow.missingReferences(review)),[ref]);
   const legacy = ctx.normalizeProviderConfig('deepseek',{model:'deepseek-v4-flash',apiKey:'test'});
   assert.equal(legacy.model,'deepseek-v4-flash');
+});
+
+test('truncated output with visible text is returned for review instead of being discarded', async () => {
+  const { ctx } = runtime();
+  const cases = [
+    ['openai','gpt-6.2-sol',{ status:'incomplete',output_text:'partial' }],
+    ['anthropic','claude-sonnet-5-5',{ stop_reason:'max_tokens',content:[{ type:'text',text:'partial' }] }],
+    ['gemini','gemini-4-hydrogen',{ candidates:[{ finishReason:'MAX_TOKENS',content:{ parts:[{ text:'partial' }] } }] }],
+    ['deepseek','deepseek-flash',{ choices:[{ finish_reason:'length',message:{ content:'partial' } }] }]
+  ];
+  for (const [provider,model,response] of cases) {
+    ctx.$.ajax = options => options.success(response);
+    const result = await ctx.callLLMAPI(provider,model,'key','note','en','','summary','');
+    assert.equal(result.text,'partial'); assert.equal(result.truncated,true);
+  }
+});
+
+test('a configured output limit reaches every protocol and invalid values fall back to the default', async () => {
+  const limits = async stored => {
+    const { ctx, sync } = runtime();
+    if (stored !== undefined) sync.llmMaxOutputTokens = stored;
+    await new Promise(resolve => ctx.loadLLMState(resolve));
+    const seen = {};
+    for (const [provider,model,,,,response] of transports) {
+      ctx.$.ajax = value => { const body = JSON.parse(value.data);
+        seen[provider] = body.max_output_tokens ?? body.max_tokens ?? body.generationConfig?.maxOutputTokens; value.success(response); };
+      await ctx.callLLMAPI(provider,model,'key','note','en','https://fixture.test/gateway/v1/','summary','');
+    }
+    return seen;
+  };
+  assert.deepEqual(await limits(4096), { openai:4096, anthropic:4096, gemini:4096, deepseek:4096, newapi:4096 });
+  for (const invalid of [12, 'abc', 4096.5, 999999, undefined]) {
+    assert.deepEqual(await limits(invalid), { openai:8192, anthropic:8192, gemini:8192, deepseek:8192, newapi:undefined });
+  }
+});
+
+test('request errors rejected by the provider show its reason, capped at 240 characters', async () => {
+  const { ctx } = runtime();
+  const request = () => ctx.callLLMAPI('openai','gpt-6.2-sol','key','note','en','','summary','');
+  ctx.$.ajax = options => options.error({ status:400, responseJSON:{ error:{ message:'max_tokens too large' } } });
+  await assert.rejects(request(), /HTTP 400.*max_tokens too large/);
+  ctx.$.ajax = options => options.error({ status:422, responseJSON:{ message:'x'.repeat(500) } });
+  await assert.rejects(request(), error => error.message.endsWith('x'.repeat(240)) && !error.message.includes('x'.repeat(241)));
+  ctx.$.ajax = options => options.error({ status:500, responseJSON:{ error:{ message:'internal detail' } } });
+  await assert.rejects(request(), error => !error.message.includes('internal detail'));
 });

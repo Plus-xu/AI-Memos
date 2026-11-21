@@ -404,11 +404,22 @@ test('task-specific instructions are passed into real provider request bodies', 
     assert.equal(request.headers.Authorization, 'Bearer ai-test-key');
     instructions.push(body.instructions);
     request.success({ output_text: 'A reviewed result' });
-    assert.equal(await pending, 'A reviewed result');
+    assert.deepEqual(plain(await pending), { text: 'A reviewed result', truncated: false });
   }
   assert.equal(new Set(instructions).size, 5);
   assert.match(instructions[1], /concise.*summary/i);
   assert.match(instructions[3], /\*\*Q:\*\*/);
   assert.match(instructions[4], /Compare supporting and opposing arguments\./);
   assert.ok(instructions.every(prompt => /source links/.test(prompt)));
+});
+
+test('a truncated AI result is reviewable and carries a truncation warning', () => {
+  const state = harness();
+  state.context.AIReview.show('Original draft', 'Partial result', 'organize', true);
+  assert.equal(state.node('#aiReviewResult').val(), 'Partial result');
+  assert.equal(state.local.memosAIReview.truncated, true);
+  assert.equal(state.node('#aiReviewWarning').prop('hidden'), false);
+  assert.match(state.node('#aiReviewWarning').text(), /aiTruncatedWarning/);
+  state.context.AIReview.show('Original draft', 'Full result', 'organize');
+  assert.equal(state.node('#aiReviewWarning').prop('hidden'), true);
 });

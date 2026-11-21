@@ -46,9 +46,11 @@ var AIWorkflow = (function () {
     return Array.from(new Set(urls));
   }
 
-  function review(input, result, task) {
+  function review(input, result, task, truncated) {
     if (typeof input !== 'string' || typeof result !== 'string' || !result.trim()) throw new Error('invalid_ai_result');
-    return { input: input, result: result, task: normalizeTask(task), createdAt: new Date().toISOString() };
+    var value = { input: input, result: result, task: normalizeTask(task), createdAt: new Date().toISOString() };
+    if (truncated) value.truncated = true;
+    return value;
   }
 
   function missingReferences(value) {

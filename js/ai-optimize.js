@@ -8,6 +8,17 @@ let llmProviderConfigs = {};
 let llmActiveProvider = LLM_CONFIG.defaults.provider;
 let llmQuickPresets = [];
 let llmMessagesOverride = null;
+let llmMaxOutputTokens = 0;
+
+function normalizeMaxOutputTokens(value) {
+  const limit = typeof value === 'string' && value.trim() ? Number(value) : value;
+  return Number.isInteger(limit) && limit >= 256 && limit <= 200000 ? limit : 0;
+}
+
+// Gateways front models with different ceilings, so New API sends no limit unless one is configured.
+function outputTokenLimit(providerConfig) {
+  return llmMaxOutputTokens || (providerConfig.requiresBaseUrl ? 0 : LLM_CONFIG.defaults.maxTokens);
+}
 
 function getLLMMessage(key, fallback) {
   if (llmMessagesOverride && llmMessagesOverride[key]) {
@@ -166,6 +177,7 @@ function loadLLMState(callback) {
     'llmProviderConfigs',
     'llmActiveProvider',
     'llmQuickPresets',
+    'llmMaxOutputTokens',
     'llmProvider',
     'llmModel',
     'llmCustomModel',
@@ -177,6 +189,7 @@ function loadLLMState(callback) {
     chrome.storage.local.get({ llmTaskPresets: null }, function(local) {
       if (Array.isArray(local.llmTaskPresets)) data.llmQuickPresets = local.llmTaskPresets;
       llmProviderConfigs = data.llmProviderConfigs || {};
+      llmMaxOutputTokens = normalizeMaxOutputTokens(data.llmMaxOutputTokens);
       const legacyConfig = buildLegacyConfig(data);
 
 
@@ -215,6 +228,11 @@ function persistLLMState(callback) {
   const activeConfig = normalizeProviderConfig(llmActiveProvider, llmProviderConfigs[llmActiveProvider]);
   const presets = collectQuickPresetConfigs();
   llmQuickPresets = presets;
+  const limitField = document.getElementById('llmMaxTokens');
+  if (limitField) {
+    llmMaxOutputTokens = normalizeMaxOutputTokens(limitField.value);
+    limitField.value = llmMaxOutputTokens || '';
+  }
 
   chrome.storage.local.set({ llmTaskPresets: presets }, function() {
     if (chrome.runtime.lastError) {
@@ -225,6 +243,7 @@ function persistLLMState(callback) {
     chrome.storage.sync.set({
       llmProviderConfigs: llmProviderConfigs,
       llmActiveProvider: llmActiveProvider,
+      llmMaxOutputTokens: llmMaxOutputTokens,
       llmQuickPresets: presets.map(function(preset) {
         return preset.provider ? { provider: preset.provider, model: preset.model, customModel: preset.customModel } : {};
       }),
@@ -246,6 +265,7 @@ function persistLLMState(callback) {
 function initLLMConfig() {
   loadLLMState(function() {
     applyProviderConfigToForm(llmActiveProvider);
+    $('#llmMaxTokens').val(llmMaxOutputTokens || '');
     initQuickPresetControls();
     if (typeof ModelCatalog !== 'undefined' && document.getElementById('llmProvider')) restoreModelChoices();
     refreshLLMTexts();
@@ -706,8 +726,8 @@ function optimizeWithAI(preset, $button) {
       callLLMAPI(optimizationConfig.provider, optimizationConfig.model, optimizationConfig.apiKey, content,
         data.userLanguage || getFallbackUserLanguage(), optimizationConfig.baseUrl,
         optimizationConfig.task, optimizationConfig.prompt).then(result => {
-          AIReview.show(content, result, optimizationConfig.task);
-          $.message({ message: getLLMMessage('aiReviewReady') });
+          AIReview.show(content, result.text, optimizationConfig.task, result.truncated);
+          $.message({ message: getLLMMessage(result.truncated ? 'aiTruncatedWarning' : 'aiReviewReady') });
           resolve();
         }, reject);
     });
@@ -734,7 +754,7 @@ function buildOpenAIResponsesRequest(providerConfig, model, apiKey, systemPrompt
       model: model,
       instructions: systemPrompt,
       input: userContent,
-      max_output_tokens: LLM_CONFIG.defaults.maxTokens
+      max_output_tokens: outputTokenLimit(providerConfig)
     }
   };
 }
@@ -766,7 +786,7 @@ function buildChatCompletionsRequest(providerConfig, model, apiKey, systemPrompt
           content: userContent
         }
       ],
-      ...(!providerConfig.requiresBaseUrl ? { max_tokens: LLM_CONFIG.defaults.maxTokens } : {})
+      ...(outputTokenLimit(providerConfig) ? { max_tokens: outputTokenLimit(providerConfig) } : {})
     }
   };
 }
@@ -794,7 +814,7 @@ function buildGeminiRequest(providerConfig, model, apiKey, systemPrompt, userCon
         }
       ],
       generationConfig: {
-        maxOutputTokens: LLM_CONFIG.defaults.maxTokens
+        maxOutputTokens: outputTokenLimit(providerConfig)
       }
     }
   };
@@ -817,7 +837,7 @@ function buildAnthropicRequest(providerConfig, model, apiKey, systemPrompt, user
           content: userContent
         }
       ],
-      max_tokens: LLM_CONFIG.defaults.maxTokens
+      max_tokens: outputTokenLimit(providerConfig)
     }
   };
 }
@@ -908,7 +928,10 @@ function extractLLMErrorMessage(xhr) {
   if (xhr.status === 401 || xhr.status === 403 || xhr.status === 404) return getLLMMessage('aiUnavailable');
   if (xhr.status === 429) return getLLMMessage('requestLimited');
   if (!xhr.status || xhr.statusText === 'timeout') return getLLMMessage('aiInterrupted');
-  return getLLMMessage('apiFailed') + ' (HTTP ' + xhr.status + ')';
+  const body = xhr.responseJSON;
+  const reason = body && ((body.error && body.error.message) || body.message);
+  const detail = (xhr.status === 400 || xhr.status === 422) && typeof reason === 'string' ? reason.trim().slice(0, 240) : '';
+  return getLLMMessage('apiFailed') + ' (HTTP ' + xhr.status + ')' + (detail ? ': ' + detail : '');
 }
 
 // 调用LLM API
@@ -953,14 +976,12 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
         
         // 提取优化后的内容
         const finish = response.stop_reason || response.choices?.[0]?.finish_reason || response.candidates?.[0]?.finishReason;
-        if (['max_tokens', 'length', 'MAX_TOKENS'].includes(finish) || response.status === 'incomplete') {
-          reject(new Error(getLLMMessage('aiTruncated'))); return;
-        }
+        const truncated = ['max_tokens', 'length', 'MAX_TOKENS'].includes(finish) || response.status === 'incomplete';
         const optimizedContent = extractLLMText(providerConfig, response);
         if (typeof optimizedContent === 'string' && optimizedContent.trim()) {
-          resolve(optimizedContent);
+          resolve({ text: optimizedContent, truncated: truncated });
         } else {
-          reject(new Error(getLLMMessage('aiEmpty')));
+          reject(new Error(getLLMMessage(truncated ? 'aiTruncated' : 'aiEmpty')));
         }
       },
       error: function(xhr) {

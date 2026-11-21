@@ -211,3 +211,9 @@ test('empty selections fail before modifying a draft; appending a valid clip ret
   assert.equal(clipper.append(existing, clip), 'An existing memo draft.\n\n' + clip + '\n');
   assert.equal(clipper.append('', clip), clip + '\n');
 });
+
+test('a truncated result is marked on the review and unmarked reviews stay unchanged', () => {
+  const { ai } = loadRules();
+  assert.equal(ai.review('a', 'b', 'summary', true).truncated, true);
+  assert.ok(!Object.hasOwn(ai.review('a', 'b', 'summary'), 'truncated'));
+});
