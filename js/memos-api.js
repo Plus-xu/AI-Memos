@@ -184,6 +184,18 @@ const MemosAPI = (function () {
     });
   }
 
+  function patchMemo(info, memoName, field, value) {
+    return request(info, {
+      path: memoName + '?updateMask=' + field,
+      method: 'PATCH',
+      body: { [field]: value }
+    });
+  }
+
+  function setMemoVisibility(info, memoName, visibility) {
+    return patchMemo(info, memoName, 'visibility', visibility);
+  }
+
   function uploadAttachment(info, body) {
     return request(info, {
       path: 'attachments',
@@ -336,6 +348,7 @@ const MemosAPI = (function () {
     prepareMemo: prepareMemo,
     createMemo: createMemo,
     archiveMemo: archiveMemo,
+    setMemoVisibility: setMemoVisibility,
     uploadAttachment: uploadAttachment,
     getMemoId: getMemoId,
     getMemoPageId: getMemoPageId,

@@ -415,3 +415,44 @@ test('the service worker appends context-menu captures with source to the popup 
   const reopened = await loadPopup({}, { memosDraft: popup.storage.memosDraft });
   assert.equal(reopened.node('textarea[name=text]').val(), popup.storage.memosDraft.open_content);
 });
+
+test('visibility updates patch only the visibility field', async () => {
+  const { api, calls } = loadApi(() => ({ name: 'memos/x', visibility: 'PRIVATE' }));
+  await api.setMemoVisibility(info, 'memos/x', 'PRIVATE');
+  const url = new URL(calls[0].url);
+  assert.equal(calls[0].type, 'PATCH');
+  assert.equal(url.pathname, '/api/memos/x');
+  assert.equal(url.searchParams.get('updateMask'), 'visibility');
+  assert.deepEqual(JSON.parse(calls[0].data), { visibility: 'PRIVATE' });
+});
+
+test('a saved memo whose server tags include the hidden tag but is not private offers a one-click fix', async () => {
+  const patches = [];
+  const popup = await loadPopup({
+    createMemo: async (_, body) => ({ name: 'memos/saved', ...body, tags: ['secret'], visibility: 'PUBLIC' }),
+    setMemoVisibility: async (_, name, visibility) => { patches.push([name, visibility]); return {}; }
+  }, { hidetag: '#secret', memo_lock: 'PUBLIC' });
+  await popup.context.sendText();
+  assert.equal(popup.node('#visibilityWarning')[0].hidden, false);
+  await popup.context.makeSavedMemoPrivate();
+  assert.deepEqual(patches, [['memos/saved', 'PRIVATE']]);
+  assert.equal(popup.node('#visibilityWarning')[0].hidden, true);
+  assert.equal(popup.messages.at(-1), 'madePrivate');
+  await popup.context.makeSavedMemoPrivate();
+  assert.equal(patches.length, 1);
+});
+
+test('the visibility warning stays when the fix fails and never appears for private or legacy responses', async () => {
+  const failing = await loadPopup({
+    createMemo: async (_, body) => ({ name: 'memos/saved', ...body, tags: ['secret'], visibility: 'PROTECTED' }),
+    setMemoVisibility: async () => { throw refused(500); }
+  }, { hidetag: 'secret' });
+  await failing.context.sendText();
+  await failing.context.makeSavedMemoPrivate();
+  assert.equal(failing.node('#visibilityWarning')[0].hidden, false);
+  for (const extra of [{ tags: ['secret'], visibility: 'PRIVATE' }, {}, { tags: ['other'], visibility: 'PUBLIC' }]) {
+    const popup = await loadPopup({ createMemo: async (_, body) => ({ name: 'memos/saved', content: body.content, ...extra }) }, { hidetag: 'secret' });
+    await popup.context.sendText();
+    assert.equal(popup.node('#visibilityWarning')[0].hidden, true);
+  }
+});

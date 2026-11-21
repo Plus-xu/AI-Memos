@@ -571,5 +571,14 @@
   },
   "clipContextFailed": {
     "message": "上次右键剪藏失败，请从网页重试。"
+  },
+  "hiddenTagExposed": {
+    "message": "这条笔记带有隐藏标签，但保存的范围不是仅自己可见。"
+  },
+  "makePrivate": {
+    "message": "改为仅自己可见"
+  },
+  "madePrivate": {
+    "message": "已改为仅自己可见"
   }
 }

@@ -571,5 +571,14 @@
   },
   "clipContextFailed": {
     "message": "The last context-menu clip failed. Try again on the page."
+  },
+  "hiddenTagExposed": {
+    "message": "This memo has your hidden tag but was not saved as private."
+  },
+  "makePrivate": {
+    "message": "Make private"
+  },
+  "madePrivate": {
+    "message": "Memo is now private"
   }
 }

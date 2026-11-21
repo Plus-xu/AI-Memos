@@ -71,6 +71,30 @@ function resolveVisibility(info) {
   return MemoTags.visibility($("textarea[name=text]").val(), info);
 }
 
+var exposedMemo = '';
+
+// Second check: the server's own tag list decides whether the rule applied.
+function checkSavedVisibility(info, memo) {
+  var hidden = MemoTags.normalize(info.hidetag);
+  var exposed = !!hidden && Array.isArray(memo.tags) && memo.tags.includes(hidden) &&
+    typeof memo.visibility === 'string' && memo.visibility !== 'PRIVATE';
+  exposedMemo = exposed ? memo.name : '';
+  $('#visibilityWarning').prop('hidden', !exposed);
+}
+
+async function makeSavedMemoPrivate() {
+  var name = exposedMemo;
+  if (!name) return;
+  var info = await new Promise(function (resolve) { get_info(resolve); });
+  try {
+    await MemosAPI.setMemoVisibility(info, name, 'PRIVATE');
+    if (exposedMemo === name) { exposedMemo = ''; $('#visibilityWarning').prop('hidden', true); }
+    $.message({ message: uiMessage('madePrivate') });
+  } catch (error) {
+    showApiError('Make memo private', error, uiMessage('apiFailed'));
+  }
+}
+
 function escapeHtml(value) {
   return String(value || '')
     .replace(/&/g, '&amp;')
@@ -338,6 +362,7 @@ $(document).on("click", ".memos-file-link", function (event) {
 });
 
 $('#content_submit_text').click(sendText);
+$('#makePrivate').click(makeSavedMemoPrivate);
 
 async function submitMemo(info, snapshot, destination) {
   const scope = DraftStorage.scope(info);
@@ -379,6 +404,7 @@ async function submitMemo(info, snapshot, destination) {
   await DraftStorage.put('local', { [key]: null });
   $('#lastMemoLink').attr('href', MemosAPI.buildMemoUrl(info.apiUrl, memo));
   $('#saveStatus').prop('hidden', false);
+  checkSavedVisibility(info, memo);
   $.message({ message: uiMessage(historyError ? 'historyWriteFailed' : 'memoSuccess') });
   Workspace.refreshHistory();
 }

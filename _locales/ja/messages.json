@@ -571,5 +571,14 @@
   },
   "clipContextFailed": {
     "message": "前回の右クリック操作に失敗しました。ページから再試行してください。"
+  },
+  "hiddenTagExposed": {
+    "message": "このメモには非公開タグがありますが、自分のみでは保存されていません。"
+  },
+  "makePrivate": {
+    "message": "自分のみに変更"
+  },
+  "madePrivate": {
+    "message": "自分のみに変更しました"
   }
 }
