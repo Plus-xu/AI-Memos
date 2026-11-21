@@ -1,5 +1,14 @@
-dayjs.extend(window.dayjs_plugin_relativeTime)
-dayjs.locale('zh-cn')
+function relativeTime(value, lang, now) {
+  var time = value === '' || value == null ? NaN : new Date(value).getTime();
+  if (Number.isNaN(time)) return '';
+  var seconds = Math.round((time - (now === undefined ? Date.now() : now)) / 1000);
+  var units = [['second', 60], ['minute', 60], ['hour', 24], ['day', 30], ['month', 12], ['year', Infinity]];
+  var amount = seconds;
+  for (var i = 0; i < units.length; i++) {
+    if (Math.abs(amount) < units[i][1]) return new Intl.RelativeTimeFormat(lang || 'en').format(Math.trunc(amount), units[i][0]);
+    amount /= units[i][1];
+  }
+}
 
 var memoSaveInProgress = false;
 var pendingUploads = 0;
@@ -215,7 +224,7 @@ function buildMemoHtml(info, memo) {
   var memoId = MemosAPI.getMemoId(memo);
   var memoUrl = MemosAPI.buildMemoUrl(info.apiUrl, memo);
   var createTime = memo.createTime || memo.createdTs || '';
-  var timeText = createTime ? dayjs(createTime).fromNow() : '';
+  var timeText = relativeTime(createTime, document.documentElement.lang);
 
   var itemHtml = '<article class="random-item"><div class="random-time">' + escapeHtml(timeText);
   itemHtml += '<button type="button" class="random-link" data-uid="' + escapeHtml(memoId) + '" data-url="' + escapeHtml(memoUrl) + '">' + escapeHtml(uiMessage('openSaved')) + '</button>';

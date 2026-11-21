@@ -102,10 +102,8 @@ function harness(options = {}) {
       sync: { get(keys, callback) { callback(read(sync, keys)); }, set(value, callback) { Object.assign(sync, plain(value)); callback?.(); } }
     }
   };
-  const dayjs = () => ({ fromNow: () => 'now' });
-  dayjs.extend = dayjs.locale = () => {};
   const context = vm.createContext({
-    $, chrome, document, URL, URLSearchParams, AbortController, AbortSignal, Blob, dayjs,
+    $, chrome, document, URL, URLSearchParams, AbortController, AbortSignal, Blob,
     window: { addEventListener() {} }, setTimeout() {},
     console: { log() {}, error() {}, warn() {} },
     Clipper: { init() {} },

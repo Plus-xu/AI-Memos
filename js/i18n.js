@@ -22,5 +22,4 @@ async function setUiLanguage(language) {
   $('#languageSelect').val(lang);
   if (typeof refreshLLMTexts === 'function') refreshLLMTexts(messages);
   if (typeof Workspace !== 'undefined') Workspace.translate();
-  if (typeof dayjs !== 'undefined') dayjs.locale(lang === 'zh_CN' ? 'zh-cn' : lang);
 }

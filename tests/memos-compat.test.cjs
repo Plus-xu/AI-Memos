@@ -239,8 +239,6 @@ async function loadPopup(overrides = {}, saved = {}) {
   function $(selector) { return node(selector === document ? 'document' : selector); }
   $.message = message => messages.push(message.message);
   $.each = (values, callback) => values.forEach((value, index) => callback(index, value));
-  const dayjs = () => ({ fromNow: () => 'now' });
-  dayjs.extend = dayjs.locale = () => {};
   Object.assign(api, {
     listSpaces: async () => [],
     getInstanceProfile: async () => ({ version:'0.31.0' }),
@@ -249,7 +247,7 @@ async function loadPopup(overrides = {}, saved = {}) {
     getMemo: async () => ({ name: 'memos/saved', content: 'saved' })
   }, overrides);
   Object.assign(context, {
-    $, MemosAPI: api, document, dayjs, crypto:require('node:crypto').webcrypto, TextEncoder, uiMessage: key => key, Option: class {}, AIReview: { isBusy: () => false, onMemoSaved() {}, refresh() {} },
+    $, MemosAPI: api, document, crypto:require('node:crypto').webcrypto, TextEncoder, uiMessage: key => key, Option: class {}, AIReview: { isBusy: () => false, onMemoSaved() {}, refresh() {} },
     window: { addEventListener() {} },
     setTimeout() {},
     chrome: {
@@ -540,4 +538,23 @@ test('archiving the single random memo empties the list and can be undone', asyn
   assert.equal(popup.node('#randomlist').htmlValue, '');
   await popup.context.undoArchive();
   assert.match(popup.node('#randomlist').htmlValue, /data-uid="r"/);
+});
+
+test('relative times follow the interface language, including Japanese', async () => {
+  const popup = await loadPopup();
+  const now = Date.parse('2026-11-22T12:00:00Z');
+  const ago = hours => new Date(now - hours * 3600e3).toISOString();
+  const format = popup.context.relativeTime;
+  assert.equal(format(ago(3), 'ja', now), '3 時間前');
+  assert.equal(format(ago(3), 'zh-CN', now), '3小时前');
+  assert.equal(format(ago(3), 'en', now), '3 hours ago');
+  assert.equal(format(ago(48), 'en', now), '2 days ago');
+  assert.equal(format(ago(0.5), 'en', now), '30 minutes ago');
+  assert.equal(format(ago(24 * 400), 'en', now), '1 year ago');
+  assert.equal(format(now - 3600e3, 'en', now), '1 hour ago');
+  assert.equal(format('bad', 'en', now), '');
+  assert.equal(format('', 'en', now), '');
+  popup.document.documentElement.lang = 'ja';
+  const html = popup.context.buildMemoHtml(info, { name: 'memos/a', content: 'x', createTime: new Date(Date.now() - 7200e3).toISOString() });
+  assert.match(html, /2 時間前/);
 });
