@@ -77,9 +77,6 @@
   "searchNone": {
     "message": "見つかりません、別の言葉を試してください"
   },
-  "archiveSuccess": {
-    "message": "アーカイブ成功！😊"
-  },
   "archiveFailed": {
     "message": "アーカイブ失敗 😭"
   },
@@ -595,5 +592,8 @@
   },
   "aiMaxTokensLabel": {
     "message": "出力上限（トークン）。空欄は既定値 8192。New API は空欄なら上限を送りません"
+  },
+  "aiMaxTokensInvalid": {
+    "message": "出力上限は 256〜200000 の整数にするか、空欄にして既定値を使ってください。保存していません。"
   }
 }

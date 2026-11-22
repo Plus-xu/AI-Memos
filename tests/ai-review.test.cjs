@@ -421,3 +421,20 @@ test('a truncated AI result is reviewable and carries a truncation warning', () 
   state.context.AIReview.show('Original draft', 'Full result', 'organize');
   assert.equal(state.node('#aiReviewWarning').prop('hidden'), true);
 });
+
+test('an invalid output limit is reported and nothing is saved', () => {
+  const state = harness();
+  const field = state.context.document.getElementById('llmMaxTokens');
+  for (const [value, validity] of [['100', {}], ['', { badInput: true }]]) {
+    field.value = value; field.validity = validity;
+    let result;
+    state.context.persistLLMState(error => { result = error; });
+    assert.equal(result && result.message, 'aiMaxTokensInvalid');
+    assert.equal(Object.hasOwn(state.sync, 'llmMaxOutputTokens'), false);
+  }
+  field.value = '4096'; field.validity = {};
+  let result = 'unset';
+  state.context.persistLLMState(error => { result = error; });
+  assert.ok(!result);
+  assert.equal(state.sync.llmMaxOutputTokens, 4096);
+});

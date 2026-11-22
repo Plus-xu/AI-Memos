@@ -195,3 +195,11 @@ test('an open editor reloads AI settings when the output limit changes', () => {
   assert.equal(ctx.llmStateChanged({ llmMaxOutputTokens: {} }, 'local'), false);
   assert.equal(ctx.llmStateChanged({ theme: {} }, 'sync'), false);
 });
+
+test('locales carry no archiveSuccess entry and all define aiMaxTokensInvalid', () => {
+  for (const lang of ['zh_CN', 'en', 'ja']) {
+    const messages = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '_locales', lang, 'messages.json'), 'utf8'));
+    assert.equal(Object.hasOwn(messages, 'archiveSuccess'), false);
+    assert.ok(messages.aiMaxTokensInvalid && messages.aiMaxTokensInvalid.message);
+  }
+});

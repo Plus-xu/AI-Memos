@@ -77,9 +77,6 @@
   "searchNone": {
     "message": "Try another word!"
   },
-  "archiveSuccess": {
-    "message": "Archive Success 😊"
-  },
   "archiveFailed": {
     "message": "Archive Failed 😭"
   },
@@ -595,5 +592,8 @@
   },
   "aiMaxTokensLabel": {
     "message": "Output limit (tokens). Blank uses the default of 8192; New API sends no limit when blank"
+  },
+  "aiMaxTokensInvalid": {
+    "message": "The output limit must be a whole number from 256 to 200000, or blank for the default. Nothing was saved."
   }
 }

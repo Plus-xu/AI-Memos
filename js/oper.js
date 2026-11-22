@@ -2,6 +2,8 @@ function relativeTime(value, lang, now) {
   var time = value === '' || value == null ? NaN : new Date(value).getTime();
   if (Number.isNaN(time)) return '';
   var seconds = Math.round((time - (now === undefined ? Date.now() : now)) / 1000);
+  // The present, and a server clock running slightly ahead, both read as "now".
+  if (seconds >= 0 && seconds < 60) return new Intl.RelativeTimeFormat(lang || 'en', { numeric: 'auto' }).format(0, 'second');
   var units = [['second', 60], ['minute', 60], ['hour', 24], ['day', 30], ['month', 12], ['year', Infinity]];
   var amount = seconds;
   for (var i = 0; i < units.length; i++) {
@@ -80,7 +82,7 @@ function resolveVisibility(info) {
   return MemoTags.visibility($("textarea[name=text]").val(), info);
 }
 
-var exposedMemo = '';
+var exposedMemo = null;
 
 // Second check: the server's own tag list decides whether the rule applied.
 function checkSavedVisibility(info, memo) {
@@ -90,17 +92,20 @@ function checkSavedVisibility(info, memo) {
       return hidden.some(function (name) { return tag === name || String(tag).startsWith(name + '/'); });
     }) &&
     typeof memo.visibility === 'string' && memo.visibility !== 'PRIVATE';
-  exposedMemo = exposed ? memo.name : '';
+  exposedMemo = exposed ? { name: memo.name, scope: DraftStorage.scope(info) } : null;
   $('#visibilityWarning').prop('hidden', !exposed);
 }
 
 async function makeSavedMemoPrivate() {
-  var name = exposedMemo;
-  if (!name) return;
+  var entry = exposedMemo;
+  if (!entry) return;
   var info = await new Promise(function (resolve) { get_info(resolve); });
+  function dismiss() { if (exposedMemo === entry) { exposedMemo = null; $('#visibilityWarning').prop('hidden', true); } }
+  // The memo belongs to the account that saved it; never send its name to another one.
+  if (DraftStorage.scope(info) !== entry.scope) { dismiss(); return; }
   try {
-    await MemosAPI.setMemoVisibility(info, name, 'PRIVATE');
-    if (exposedMemo === name) { exposedMemo = ''; $('#visibilityWarning').prop('hidden', true); }
+    await MemosAPI.setMemoVisibility(info, entry.name, 'PRIVATE');
+    dismiss();
     $.message({ message: uiMessage('madePrivate') });
   } catch (error) {
     showApiError('Make memo private', error, uiMessage('apiFailed'));
@@ -328,12 +333,13 @@ $('#tags').click(() => get_info(async info => {
 $(document).on('click', '.item-container', function () { add($(this).text() + ' '); });
 $('#random').click(() => get_info(async info => {
   if (!info.status) { $.message({ message: uiMessage('connectMemos') }); return; }
-  Workspace.resetSearch();
+  const run = Workspace.resetSearch();
   try {
     const memos = await MemosAPI.listMemos(info);
+    if (run !== Workspace.listRun()) return;
     if (memos.length) Workspace.show([memos[Math.floor(Math.random() * memos.length)]]);
     else $('#searchStatus').text(uiMessage('noMemosFound'));
-  } catch (error) { showApiError('Random memo', error, uiMessage('apiFailed')); }
+  } catch (error) { if (run === Workspace.listRun()) showApiError('Random memo', error, uiMessage('apiFailed')); }
 }));
 
 $(document).on("click", ".random-link", function () {
@@ -345,6 +351,7 @@ $(document).on("click", ".random-link", function () {
 });
 
 var archivedEntry = null;
+var archivingNames = new Set();
 
 function dismissArchiveNotice() {
   archivedEntry = null;
@@ -352,14 +359,19 @@ function dismissArchiveNotice() {
 }
 
 async function archiveMemoByName(name) {
-  var info = await new Promise(function (resolve) { get_info(resolve); });
+  if (archivingNames.has(name)) return;
+  archivingNames.add(name);
+  var info;
   try {
+    info = await new Promise(function (resolve) { get_info(resolve); });
     await MemosAPI.archiveMemo(info, name);
   } catch (xhr) {
     showApiError('Archive API failed', xhr, uiMessage("archiveFailed"));
     return;
+  } finally {
+    archivingNames.delete(name);
   }
-  archivedEntry = { name: name, removed: Workspace.remove(name) };
+  archivedEntry = { name: name, scope: DraftStorage.scope(info), removed: Workspace.remove(name) };
   $('#archiveNotice').prop('hidden', false);
 }
 
@@ -367,6 +379,10 @@ async function undoArchive() {
   var entry = archivedEntry;
   if (!entry) return;
   var info = await new Promise(function (resolve) { get_info(resolve); });
+  if (DraftStorage.scope(info) !== entry.scope) {
+    if (archivedEntry === entry) dismissArchiveNotice();
+    return;
+  }
   try {
     await MemosAPI.restoreMemo(info, entry.name);
   } catch (xhr) {

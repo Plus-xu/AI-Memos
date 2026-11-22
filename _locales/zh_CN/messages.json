@@ -77,9 +77,6 @@
   "searchNone": {
     "message": "搜不到，换个词试试"
   },
-  "archiveSuccess": {
-    "message": "归档成功！😊"
-  },
   "archiveFailed": {
     "message": "归档失败 😭"
   },
@@ -595,5 +592,8 @@
   },
   "aiMaxTokensLabel": {
     "message": "输出上限（token）。留空使用默认值 8192；New API 留空时不传上限"
+  },
+  "aiMaxTokensInvalid": {
+    "message": "输出上限需为 256 到 200000 之间的整数，或留空使用默认值。未保存。"
   }
 }

@@ -84,7 +84,7 @@ async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
     await waitFor(page, () => document.querySelectorAll('#randomlist .random-item').length === 1 && document.querySelector('#randomlist img[src^="blob:"]')?.naturalWidth > 0);
     pass('Real keyword/tag search finds the members-only memo and the private image matches its original bytes');
     await page.click('.random-delete');
-    await waitFor(page, () => document.querySelector('.tip')?.textContent === uiMessage('archiveSuccess'));
+    await waitFor(page, () => document.getElementById('archiveNotice').hidden === false);
     assert.equal((await call(memo.name,null,token)).state,'ARCHIVED');
     pass('Archiving the test memo updates its state on the real server');
   } finally {

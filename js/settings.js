@@ -27,7 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
   };
   el('saveAI').onclick = () => {
     cacheCurrentProviderForm();
-    persistLLMState(error => { el('aiSettingsStatus').textContent = uiMessage(error ? 'settingsSaveFailed' : 'settingsSaved'); });
+    persistLLMState(error => { el('aiSettingsStatus').textContent = uiMessage(!error ? 'settingsSaved' : error.message === 'aiMaxTokensInvalid' ? 'aiMaxTokensInvalid' : 'settingsSaveFailed'); });
   };
   el('saveTag').onclick = async () => {
     try {

@@ -230,7 +230,13 @@ function persistLLMState(callback) {
   llmQuickPresets = presets;
   const limitField = document.getElementById('llmMaxTokens');
   if (limitField) {
-    llmMaxOutputTokens = normalizeMaxOutputTokens(limitField.value);
+    const limit = normalizeMaxOutputTokens(limitField.value);
+    if (!limit && (String(limitField.value).trim() || (limitField.validity && limitField.validity.badInput))) {
+      if (callback) callback(new Error('aiMaxTokensInvalid'));
+      else $.message({ message: getLLMMessage('aiMaxTokensInvalid') });
+      return;
+    }
+    llmMaxOutputTokens = limit;
     limitField.value = llmMaxOutputTokens || '';
   }
 

@@ -572,3 +572,55 @@ test('the post-save check covers every hidden tag in a multi-tag rule', async ()
   await popup.context.sendText();
   assert.equal(popup.node('#visibilityWarning')[0].hidden, false);
 });
+
+test('undo and make-private do nothing after the account changes', async () => {
+  const { popup, calls } = await searchedPopup();
+  await popup.context.archiveMemoByName('memos/a');
+  popup.storage.userName = 'someone-else';
+  await popup.context.undoArchive();
+  assert.deepEqual(calls.restored, []);
+  assert.equal(popup.document.getElementById('archiveNotice').hidden, true);
+
+  const patches = [];
+  const saved = await loadPopup({
+    createMemo: async (_, body) => ({ name: 'memos/saved', ...body, tags: ['secret'], visibility: 'PUBLIC' }),
+    setMemoVisibility: async (_, name) => { patches.push(name); return {}; }
+  }, { hidetag: 'secret', memo_lock: 'PUBLIC' });
+  await saved.context.sendText();
+  saved.storage.apiUrl = 'https://other.example/';
+  await saved.context.makeSavedMemoPrivate();
+  assert.deepEqual(patches, []);
+  assert.equal(saved.node('#visibilityWarning')[0].hidden, true);
+});
+
+test('a double-clicked archive sends one request and can still be undone', async () => {
+  const { popup, calls, shown } = await searchedPopup();
+  await Promise.all([popup.context.archiveMemoByName('memos/a'), popup.context.archiveMemoByName('memos/a')]);
+  assert.deepEqual(calls.archived, ['memos/a']);
+  await popup.context.undoArchive();
+  assert.deepEqual(shown(), ['a', 'b']);
+});
+
+test('a late random memo never replaces newer search results', async () => {
+  let deliver;
+  const { popup, shown } = await searchedPopup({ listMemos: () => new Promise(resolve => { deliver = resolve; }) });
+  popup.handlers.get('#random:click')();
+  await flush();
+  popup.document.getElementById('searchForm').onsubmit({ preventDefault() {} });
+  await flush();
+  deliver([{ name: 'memos/r', content: 'r' }]);
+  await flush();
+  assert.deepEqual(shown(), ['a', 'b']);
+});
+
+test('relative times say "now" for the present and small clock skew, and keep real future times', async () => {
+  const popup = await loadPopup();
+  const now = Date.parse('2026-11-22T12:00:00Z');
+  const format = popup.context.relativeTime;
+  assert.equal(format(now, 'en', now), 'now');
+  assert.equal(format(now + 30e3, 'en', now), 'now');
+  assert.equal(format(now, 'zh-CN', now), '现在');
+  assert.equal(format(now, 'ja', now), '今');
+  assert.equal(format(now - 5e3, 'en', now), '5 seconds ago');
+  assert.equal(format(now + 3 * 3600e3, 'en', now), 'in 3 hours');
+});

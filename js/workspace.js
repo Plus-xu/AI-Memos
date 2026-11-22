@@ -104,7 +104,10 @@ var Workspace = (function () {
     el('searchStatus').textContent = '';
     dismissArchiveNotice();
     clearMemoList();
+    return listGeneration;
   }
+
+  function listRun() { return listGeneration; }
 
   function renderResults() {
     if (results.length) renderMemoList(account, results);
@@ -247,5 +250,5 @@ var Workspace = (function () {
     });
     StagedFiles.collect().catch(() => {});
   });
-  return { configure, destination, refreshVisibility, refreshHistory, resetSearch, show, remove, restore, translate, tab };
+  return { configure, destination, refreshVisibility, refreshHistory, resetSearch, listRun, show, remove, restore, translate, tab };
 })();
