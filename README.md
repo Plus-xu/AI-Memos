@@ -59,4 +59,4 @@ npm.cmd run package
 
 浏览器验收脚本 `scripts/check-chrome.cjs` 使用临时配置及回环地址上的 Memos、New API 测试服务。先解压待验收的 ZIP，设置 `EXTENSION_PATH` 为该目录、`CHROMIUM_PATH` 为支持扩展的 Chromium 可执行文件。如果环境中没有可直接导入的 `playwright-core`，将 `PLAYWRIGHT_MODULE` 指向它的安装目录。运行 `node scripts/check-chrome.cjs` 后，截图和检查结果保存在 `artifacts/acceptance-<版本>/`。
 
-如需实测 Memos 26.11.1，可另外将 `MEMOS_BINARY` 指向从官方发行包解压的可执行文件。脚本会启动仅监听本机的临时 SQLite 实例，创建测试账号和临时令牌，从扩展界面保存、搜索、预览并归档测试笔记，随后关闭实例并清理测试库。[官方发行包及校验值](https://github.com/usememos/memos/releases/expanded_assets/26.11.1)
+如需实测 Memos 26.11.1，可另外将 `MEMOS_BINARY` 指向从官方发行包解压的可执行文件。脚本默认要求该程序为 26.11.1；用其他版本实测时，将 `MEMOS_VERSION` 设为该版本号。脚本会启动仅监听本机的临时 SQLite 实例，创建测试账号和临时令牌，从扩展界面保存、搜索、预览并归档测试笔记，随后关闭实例并清理测试库。[官方发行包及校验值](https://github.com/usememos/memos/releases/expanded_assets/26.11.1)

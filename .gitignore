@@ -4,3 +4,6 @@
 # Generated extension packages
 /artifacts/
 /node_modules/
+
+# Local Memos server binary for browser checks
+/memos.exe

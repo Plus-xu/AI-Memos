@@ -275,7 +275,7 @@ async function main() {
     assert.deepEqual(errors,[]);
     pass('Extension pages emitted zero JavaScript errors');
     await fs.writeFile(path.join(output,'browser.json'),JSON.stringify({ version:context.browser()?.version() || await worker.evaluate(() => navigator.userAgent),
-      checks, sources:process.env.MEMOS_BINARY ? 'Local Memos 26.11.1 with disposable SQLite and PAT, plus loopback Memos and AI fixtures' : 'Loopback Memos and AI fixtures', requests:{ memoCreates:fixture.memos.size, attachmentUploads:fixture.attachments.size } },null,2));
+      checks, sources:process.env.MEMOS_BINARY ? 'Local Memos ' + (process.env.MEMOS_VERSION || '26.11.1') + ' with disposable SQLite and PAT, plus loopback Memos and AI fixtures' : 'Loopback Memos and AI fixtures', requests:{ memoCreates:fixture.memos.size, attachmentUploads:fixture.attachments.size } },null,2));
   } catch (error) {
     console.error('Fixture calls', fixture.calls.map(r => r.method + ' ' + r.route), 'Page errors', errors);
     throw error;

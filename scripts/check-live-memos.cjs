@@ -9,6 +9,7 @@ const { once } = require('node:events');
 const { randomUUID } = require('node:crypto');
 
 async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
+  const expected = process.env.MEMOS_VERSION || '26.11.1';
   const probe = net.createServer();
   probe.listen(0,'127.0.0.1');
   await once(probe,'listening');
@@ -33,7 +34,7 @@ async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
       if (service.exitCode !== null) throw new Error('Local test server exited before startup');
       try { profile = await call('instance/profile'); break; } catch (_) { await new Promise(resolve => setTimeout(resolve,150)); }
     }
-    assert.equal(profile?.version,'26.11.1');
+    assert.equal(profile?.version,expected);
     const credentials = { username:'clipper-test',password:'qa-' + randomUUID() };
     const user = await call('users',credentials);
     const login = await call('auth/signin',{ passwordCredentials:credentials });
@@ -46,8 +47,8 @@ async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
     await options.fill('#apiUrl',base);
     await options.fill('#apiTokens',token);
     await options.click('#saveKey');
-    await waitFor(options, () => document.getElementById('connectionStatus').textContent.includes('clipper-test') && document.getElementById('connectionStatus').textContent.includes('26.11.1'));
-    pass('The released Memos 26.11.1 binary accepts the extension connection with a real temporary PAT');
+    await waitFor(options, version => document.getElementById('connectionStatus').textContent.includes('clipper-test') && document.getElementById('connectionStatus').textContent.includes(version), expected);
+    pass('The released Memos ' + expected + ' binary accepts the extension connection with a real temporary PAT');
     const page = await context.newPage();
     await page.goto(ext + '/panel.html');
     await waitFor(page, name => !!document.querySelector('#memoSpace option[value="' + name + '"]') && !document.getElementById('content').readOnly,space.name);
