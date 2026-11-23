@@ -548,6 +548,12 @@ test('private preview markup never embeds PATs or unsafe link protocols', async 
   assert.ok(html.includes('%22quoted%22'));
 });
 
+test('preview labels show escaped brackets and backslashes literally', async () => {
+  const popup = await loadPopup();
+  const html = popup.context.renderMarkdownPreview('[a\\[1\\]\\\\b](https://e.com)', info);
+  assert.ok(html.includes('>a[1]\\b</a>'), html);
+});
+
 test('private image previews authenticate once, share a Blob URL and release it on clearing', async () => {
   let reads = 0;
   const revoked = [];

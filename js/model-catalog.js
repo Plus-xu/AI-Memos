@@ -1,3 +1,5 @@
+/* global DraftStorage, LLM_CONFIG */
+/* exported ModelCatalog */
 /** Per-credential model catalogs. Only model names are persisted, never keys or endpoints in clear cache keys. */
 var ModelCatalog = (function () {
   const accounts = new Map(),
@@ -7,8 +9,8 @@ var ModelCatalog = (function () {
     let url;
     try {
       url = new URL(base);
-    } catch (_) {
-      throw new Error('modelGatewayUrl');
+    } catch (error) {
+      throw new Error('modelGatewayUrl', { cause: error });
     }
     if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash)
       throw new Error('modelGatewayUrl');
@@ -83,7 +85,7 @@ var ModelCatalog = (function () {
     const next = new URL(req.url);
     const models = new Set(),
       seen = new Set();
-    do {
+    while (true) {
       const response = await fetch(next, {
         headers: req.headers,
         credentials: 'omit',
@@ -101,6 +103,7 @@ var ModelCatalog = (function () {
           typeof value === 'string' &&
           value.trim() &&
           value.length <= 200 &&
+          // eslint-disable-next-line no-control-regex -- model ids with control characters are rejected on purpose
           !/[\x00-\x1f]/.test(value) &&
           !/(?:^|[-_/])(?:embed(?:ding)?|realtime|audio|image|tts|asr|ocr|rerank|transcribe|moderation|whisper|sora|dall-e|imagen|veo|lyria|live|video)(?:[-_/.\d]|$)/i.test(
             value
@@ -117,7 +120,7 @@ var ModelCatalog = (function () {
       if (seen.has(token)) throw new Error('modelInvalid');
       seen.add(token);
       next.searchParams.set(provider === 'gemini' ? 'pageToken' : 'after_id', token);
-    } while (true);
+    }
     const values = Array.from(models).sort();
     if (requests.get(provider) === generation && accounts.get(provider) === id) {
       await DraftStorage.put('local', { [id]: values });

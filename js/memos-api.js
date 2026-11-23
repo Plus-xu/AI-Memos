@@ -1,3 +1,4 @@
+/* exported MemosAPI */
 /**
  * Memos API compatibility helpers.
  * Uses the unversioned API in Memos 26.10+ and detects older /api/v1 servers.

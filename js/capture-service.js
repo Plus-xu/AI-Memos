@@ -1,3 +1,5 @@
+/* global ClipperCore, DraftStorage, StagedFiles */
+/* exported CaptureService */
 /** Service worker owns right-click and explicit editor captures. */
 var CaptureService = (function () {
   async function readPage(tab, mode, frameId) {

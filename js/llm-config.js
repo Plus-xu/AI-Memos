@@ -1,3 +1,4 @@
+/* exported LLM_CONFIG */
 /**
  * LLM 模型配置
  * 用于管理不同提供商的模型列表
@@ -439,8 +440,3 @@ def quicksort(arr):
     maxTokens: 8192
   }
 };
-
-// 导出配置（用于其他脚本引用）
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = LLM_CONFIG;
-}

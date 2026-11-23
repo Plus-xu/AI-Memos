@@ -1,3 +1,5 @@
+/* global ClipperCore, DraftEditor, Workspace, getLLMMessage, memoSaveInProgress */
+/* exported Clipper */
 var Clipper = (function () {
   var template = ClipperCore.defaultTemplate;
   var capturing = false;
@@ -13,7 +15,7 @@ var Clipper = (function () {
         if (runtimeError || !tab) throw new Error('source_unavailable');
         var url = ClipperCore.safeUrl(tab.url);
         var title = String(tab.title || url)
-          .replace(/[\\\[\]]/g, '\\$&')
+          .replace(/[\\[\]]/g, '\\$&')
           .replace(/[\r\n]+/g, ' ');
         var withTime = !!$('#sourceIncludeTime').prop('checked');
         var source = '[' + title + '](' + url + ')' + (withTime ? '\n\n' + new Date().toISOString() : '');

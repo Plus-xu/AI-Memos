@@ -1,3 +1,5 @@
+/* global DraftStorage, MemosAPI */
+/* exported StagedFiles */
 /** Draft attachment bytes stay in IndexedDB until the user saves the memo. */
 var StagedFiles = (function () {
   const prefix = 'memos-local://';

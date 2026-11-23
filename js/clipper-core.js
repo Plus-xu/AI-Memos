@@ -1,3 +1,4 @@
+/* exported ClipperCore */
 /** Formatting only: never runs page code, requests an AI provider, or saves to Memos. */
 var ClipperCore = (function () {
   var defaultTemplate = '> {{content}}\n\n[{{title}}]({{url}})\n\n{{date}}';
@@ -31,7 +32,7 @@ var ClipperCore = (function () {
     var values = {
       content: content,
       title: String(capture.title || capture.url)
-        .replace(/[\\\[\]]/g, '\\$&')
+        .replace(/[\\[\]]/g, '\\$&')
         .replace(/[\r\n]+/g, ' '),
       url: safeUrl(capture.url),
       date: new Date(capture.capturedAt || Date.now()).toISOString()

@@ -1,3 +1,5 @@
+/* global AIReview, DraftStorage, Workspace, getLLMMessage */
+/* exported DraftEditor */
 /** Serialize local keystrokes and reconcile changes from other extension surfaces. */
 var DraftEditor = (function () {
   let base,

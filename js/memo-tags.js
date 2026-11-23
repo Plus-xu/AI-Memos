@@ -1,3 +1,4 @@
+/* exported MemoTags */
 /**
  * Tag extraction for the visibility rules. Approximates the Memos 26.11 tag
  * lexer: code, link text, link destinations and bare URLs never contain tags.

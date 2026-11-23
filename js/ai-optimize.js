@@ -1,3 +1,5 @@
+/* global AIReview, AIWorkflow, Clipper, LLM_CONFIG, ModelCatalog, memoSaveInProgress, uiMessage */
+/* exported persistLLMState */
 /**
  * AI优化功能实现
  * 负责LLM配置管理和内容优化
@@ -663,13 +665,6 @@ function updatePlaceholders() {
   $('#llmApiKey').attr('placeholder', getLLMMessage('llmApiKeyPlaceholder'));
   $('#llmBaseUrl').attr('placeholder', getLLMMessage('llmBaseUrlPlaceholder'));
   $('.quick-preset-custom-model').attr('placeholder', getLLMMessage('llmCustomModelPlaceholder'));
-}
-
-// 保存LLM配置（在原有保存按钮点击时调用）
-function saveLLMConfig() {
-  cacheCurrentProviderForm();
-  llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
-  persistLLMState(updateQuickPresetMenu);
 }
 
 // 获取语言输出指令

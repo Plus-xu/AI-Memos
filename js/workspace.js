@@ -1,3 +1,5 @@
+/* global DraftEditor, DraftStorage, MemosAPI, StagedFiles, clearMemoList, dismissArchiveNotice, get_info, renderMemoList, resolveVisibility, showApiError, uiMessage */
+/* exported Workspace */
 /** Shared editor navigation, destinations, server search and local clip history. */
 var Workspace = (function () {
   const el = id => document.getElementById(id);

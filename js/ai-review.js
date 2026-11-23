@@ -1,3 +1,5 @@
+/* global AIWorkflow, DraftStorage, getLLMMessage, memoSaveInProgress */
+/* exported AIReview */
 /** AI responses remain separate from the draft until explicitly adopted. */
 var AIReview = (function () {
   var currentReview = null;

@@ -1,3 +1,5 @@
+/* global Workspace, refreshLLMTexts */
+/* exported setUiLanguage */
 let uiMessages = {};
 let uiLanguage = '';
 function uiMessage(key) {

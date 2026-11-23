@@ -1,3 +1,4 @@
+/* exported DraftStorage */
 /** The popup, side panel and service worker share one origin and one draft lock. */
 var DraftStorage = (function () {
   const queues = new Map();

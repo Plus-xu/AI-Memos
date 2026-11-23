@@ -1,3 +1,4 @@
+/* global setUiLanguage */
 function applyTheme(choice = 'auto') {
   const dark = choice === 'dark' || (choice === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';

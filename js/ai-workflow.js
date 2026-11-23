@@ -1,3 +1,4 @@
+/* exported AIWorkflow */
 /** Pure task and review rules, shared by the popup and regression tests. */
 var AIWorkflow = (function () {
   var tasks = ['organize', 'summary', 'keypoints', 'qa', 'custom'];

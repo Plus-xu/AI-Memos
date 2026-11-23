@@ -144,9 +144,16 @@ async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
     if (service.exitCode === null) service.kill();
     await exit;
     const resolved = await fs.realpath(data);
-    if (path.dirname(resolved) !== (await fs.realpath(tmp)) || !path.basename(resolved).startsWith('ai-memos-test-db-'))
-      throw new Error('Unexpected test database path');
-    await fs.rm(resolved, { recursive: true, force: true, maxRetries: 3 });
+    // Never throw from here: it would replace the error that ended the check.
+    if (
+      path.dirname(resolved) === (await fs.realpath(tmp)) &&
+      path.basename(resolved).startsWith('ai-memos-test-db-')
+    ) {
+      await fs.rm(resolved, { recursive: true, force: true, maxRetries: 3 });
+    } else {
+      console.error('Unexpected test database path, left in place: ' + resolved);
+      process.exitCode = 1;
+    }
   }
 }
 module.exports = { checkLiveMemos };

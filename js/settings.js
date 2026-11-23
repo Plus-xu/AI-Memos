@@ -1,3 +1,4 @@
+/* global DraftStorage, MemoTags, MemosAPI, ModelCatalog, cacheCurrentProviderForm, extractLLMErrorMessage, getCurrentFormConfig, persistLLMState, rebuildModelChoices, uiMessage */
 document.addEventListener('DOMContentLoaded', () => {
   const el = id => document.getElementById(id);
   let savedUrl = '',

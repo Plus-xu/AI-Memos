@@ -1,3 +1,5 @@
+/* global AIReview, DraftEditor, DraftStorage, MemoTags, MemosAPI, StagedFiles, Workspace, uiMessage */
+/* exported resolveVisibility, clearMemoList, renderMemoList */
 function relativeTime(value, lang, now) {
   var time = value === '' || value == null ? NaN : new Date(value).getTime();
   if (Number.isNaN(time)) return '';
@@ -189,7 +191,7 @@ function renderMarkdownPreview(content, info) {
   var last = 0;
   String(content).replace(/(!?)\[((?:\\.|[^\]\\\n])*)\]\(([^\s)]+)\)/g, function (match, image, label, url, offset) {
     html += escapeHtml(content.slice(last, offset));
-    label = label.replace(/\\([\\\[\]])/g, '$1');
+    label = label.replace(/\\([\\[\]])/g, '$1');
     html += image ? previewImage(info, url, label) : previewLink(info, url, label);
     last = offset + match.length;
     return match;

@@ -1,3 +1,4 @@
+/* global CaptureService */
 importScripts('draft-storage.js', 'clipper-core.js', 'staged-files.js', 'capture-service.js');
 
 for (const area of ['local', 'sync']) chrome.storage[area].setAccessLevel?.({ accessLevel: 'TRUSTED_CONTEXTS' });
