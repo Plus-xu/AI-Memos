@@ -50,10 +50,15 @@
 需要 Node.js 22.13 或以上。打包使用 PowerShell 7。首次克隆后可运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，让 `git blame` 跳过纯格式化提交。
 
 ```powershell
-npm.cmd test
+npm.cmd ci --ignore-scripts
+npm.cmd run check
 npm.cmd run preview
 npm.cmd run package
 ```
+
+`npm.cmd run check` 依次执行格式检查（`format:check`）、代码检查（`lint`）和单元测试（`test`），提交前跑这一条即可；`npm.cmd run format` 按 Prettier 规则改写文件。单元测试只用 Node 内置模块，不安装依赖也能运行 `npm.cmd test`。每次推送和拉取请求，GitHub Actions（`.github/workflows/ci.yml`）会执行同样的检查并打包。
+
+各脚本用到的其他文件里的名字，写在文件顶部的 `/* global */` 注释里；新增页面脚本或调整 `<script>` 顺序后，`tests/consistency.test.cjs` 会核对每个页面是否加载了这些名字，以及三种语言的词条是否一致、是否都有引用。`tests/helpers/` 放测试共用的替身：页面与 jQuery（`dom.cjs`）、`chrome.*`（`chrome.cjs`）、IndexedDB（`indexeddb.cjs`），以及在这些替身上加载真实脚本的现成环境（`environments.cjs`）。替身自身的行为由 `tests/helpers.test.cjs` 固定。
 
 预览地址由终端输出。预览使用本机模拟数据，可测试记录、查找、设置及 AI 审阅。ZIP 和 SHA-256 校验文件生成在 `artifacts/`。要从锁文件重新生成正文解析依赖，运行 `npm.cmd ci --ignore-scripts` 和 `node scripts/vendor-clipper.cjs`。
 

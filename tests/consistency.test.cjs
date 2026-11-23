@@ -137,3 +137,13 @@ test('the service worker loads, and its scripts find the globals they declare', 
   assert.ok(loaded.scripts.length > 1, 'importScripts loaded nothing');
   assert.deepEqual(missingGlobals(loaded), absent['background.js']);
 });
+
+test('every npm script the CI workflow runs is defined in package.json', () => {
+  const run = Array.from(read('.github/workflows/ci.yml').matchAll(/\bnpm run ([\w:-]+)/g), hit => hit[1]);
+  assert.ok(run.length, 'the workflow runs no npm scripts');
+  const defined = Object.keys(JSON.parse(read('package.json')).scripts);
+  assert.deepEqual(
+    run.filter(name => !defined.includes(name)),
+    []
+  );
+});

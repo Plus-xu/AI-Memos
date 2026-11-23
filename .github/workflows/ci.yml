@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - name: The bundled clipping libraries match the lock file
+        run: |
+          node scripts/vendor-clipper.cjs
+          git diff --exit-code
+
+  package:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm test
+      - run: npm run package
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ai-memos-package
+          path: |
+            artifacts/ai-memos-*.zip
+            artifacts/ai-memos-*.zip.sha256
+          retention-days: 30
+          if-no-files-found: error
