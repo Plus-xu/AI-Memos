@@ -136,10 +136,29 @@ async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
         document.querySelector('#randomlist img[src^="blob:"]')?.naturalWidth > 0
     );
     pass('Real keyword/tag search finds the members-only memo and the private image matches its original bytes');
+    await page.click('[data-tab="write"]');
+    await page.click('#tags');
+    await waitFor(page, () =>
+      Array.from(document.querySelectorAll('#taglist .item-container'), tag => tag.textContent).includes('#阅读')
+    );
+    await page.click('#tags');
+    await page.click('[data-tab="search"]');
+    await page.click('#random');
+    await waitFor(
+      page,
+      () =>
+        document.querySelectorAll('#randomlist .random-item').length === 1 &&
+        document.querySelector('#randomlist .random-content').textContent.includes('阅读室开放时间')
+    );
+    pass('The real server lists the saved tag from user statistics, and random review shows the saved memo');
     await page.click('.random-delete');
     await waitFor(page, () => document.getElementById('archiveNotice').hidden === false);
     assert.equal((await call(memo.name, null, token)).state, 'ARCHIVED');
     pass('Archiving the test memo updates its state on the real server');
+    await page.click('#random');
+    await waitFor(page, () => document.getElementById('searchStatus').textContent === uiMessage('noMemosFound'));
+    assert.equal(await page.locator('#randomlist .random-item').count(), 0);
+    pass('Random review does not bring the archived memo back');
   } finally {
     if (service.exitCode === null) service.kill();
     await exit;

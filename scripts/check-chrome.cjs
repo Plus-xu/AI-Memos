@@ -292,6 +292,59 @@ async function main() {
     assert.equal(last.query.filter, 'content.contains("阅读室") && "阅读" in tags');
     assert.equal(last.query.pageToken, 'page=2/opaque');
     pass('History finds duplicate sources and server search combines keyword/tag filters with deduplicated pagination');
+    const requests = test => fixture.calls.filter(test).length;
+    const listings = () => requests(r => r.route === '/api/memos' && r.method === 'GET' && !r.query.filter);
+    const fetches = () => requests(r => /^\/api\/memos\/[^/]+$/.test(r.route) && r.method === 'GET');
+    const randomReview = async () => {
+      const before = fetches();
+      await panel.click('#random');
+      for (let i = 0; i < 120 && fetches() === before; i++) await new Promise(resolve => setTimeout(resolve, 60));
+      assert.equal(fetches(), before + 1, 'Random review fetches the one memo it shows');
+      await waitFor(
+        panel,
+        () =>
+          document.querySelectorAll('#randomlist article').length === 1 &&
+          !document.getElementById('searchStatus').textContent
+      );
+    };
+    await randomReview();
+    await randomReview();
+    assert.equal(listings(), 1, 'Two random reviews list the memos once');
+    await panel.click('[data-tab="write"]');
+    const draft = await panel.inputValue('#content');
+    await panel.click('#tags');
+    await waitFor(panel, () =>
+      Array.from(document.querySelectorAll('#taglist .item-container'), tag => tag.textContent).includes('#阅读')
+    );
+    assert.equal(
+      requests(r => r.route === '/api/users/reader:getStats'),
+      1
+    );
+    const quiet = fixture.calls.length;
+    await panel.click('#tags');
+    await waitFor(panel, () => document.getElementById('taglist').hidden);
+    await panel.click('#tags');
+    await waitFor(panel, () => !!document.querySelector('#taglist .item-container'));
+    await panel.click('#taglist .item-container');
+    const tagged = await panel.inputValue('#content');
+    assert.ok(tagged.includes('#阅读 ') && tagged.length === draft.length + 4, 'A clicked tag is inserted once');
+    await panel.click('#tags');
+    await waitFor(panel, () => document.getElementById('taglist').hidden);
+    assert.equal(fixture.calls.length, quiet, 'Closing and reopening the tag list sends no request');
+    assert.equal(listings(), 1, 'Tags come from the user statistics, not from another listing');
+    await panel.fill('#content', draft);
+    await waitFor(panel, async text => (await DraftStorage.current()).open_content === text, draft);
+    fixture.state.spacesDelay = 1500;
+    const replies = fixture.state.spaceReplies;
+    await panel.reload();
+    await waitFor(panel, () => !!document.querySelector('#memoSpace option[value="spaces/reading"]'));
+    assert.equal(fixture.state.spaceReplies, replies, 'The remembered spaces are drawn before the server answers');
+    for (let i = 0; i < 120 && fixture.state.spaceReplies === replies; i++)
+      await new Promise(resolve => setTimeout(resolve, 60));
+    assert.equal(fixture.state.spaceReplies, replies + 1);
+    fixture.state.spacesDelay = 0;
+    await waitFor(panel, () => !document.getElementById('content').readOnly);
+    pass('Tags and random review reuse one index per account, and the destination is drawn from remembered spaces');
     await article.goto(fixture.base + '/short');
     await capture(page, 'capturePage');
     await waitFor(page, () => document.getElementById('content').value.includes('目录与索引'));

@@ -18,7 +18,9 @@ async function startFixture() {
     spaces: [{ name: 'spaces/reading', title: '阅读小组' }],
     loseReceipt: false,
     failUpload: false,
-    aiDelay: 0
+    aiDelay: 0,
+    spacesDelay: 0,
+    spaceReplies: 0
   };
   const examples = ['memos/first', 'memos/second'].map((name, i) => ({
     name,
@@ -67,7 +69,17 @@ async function startFixture() {
       calls.push({ route, method, query: Object.fromEntries(url.searchParams), body });
       if (route === '/api/auth/me') return reply(200, { user: { name: 'users/reader' } });
       if (route === '/api/instance/profile') return reply(200, { version: '26.11.1' });
-      if (route === '/api/spaces') return reply(200, { spaces: state.spaces });
+      if (route === '/api/spaces')
+        return setTimeout(() => {
+          state.spaceReplies++;
+          reply(200, { spaces: state.spaces });
+        }, state.spacesDelay);
+      if (route === '/api/users/reader:getStats') {
+        const tagCounts = {};
+        for (const memo of Array.from(memos.values()).concat(examples))
+          for (const tag of memo.tags || []) tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+        return reply(200, { name: 'users/reader/stats', tagCounts });
+      }
       if (route === '/v1/models') return reply(200, { data: [{ id: 'fixture-text' }, { id: 'fixture-embedding-4' }] });
       if (route === '/v1/chat/completions') {
         if (body.model !== 'fixture-text') return reply(403, {});
@@ -118,7 +130,8 @@ async function startFixture() {
       }
       if (route.startsWith('/api/memos/')) {
         const key = route.slice(5);
-        return reply(memos.has(key) ? 200 : 404, memos.get(key) || {});
+        const memo = memos.get(key) || examples.find(example => example.name === key);
+        return reply(memo ? 200 : 404, memo || {});
       }
       reply(404, {});
     } catch (error) {
