@@ -1,4 +1,4 @@
-/* global DraftEditor, DraftStorage, MemosAPI, StagedFiles, appendMemoList, clearMemoList, dismissArchiveNotice, get_info, renderMemoList, resolveVisibility, showApiError, uiMessage */
+/* global DraftEditor, DraftStorage, MemoIndex, MemosAPI, StagedFiles, appendMemoList, clearMemoList, closeTagList, dismissArchiveNotice, get_info, renderMemoList, resolveVisibility, showApiError, uiMessage */
 /* exported Workspace */
 /** Shared editor navigation, destinations, server search and local clip history. */
 var Workspace = (function () {
@@ -351,7 +351,12 @@ var Workspace = (function () {
       if (area === 'local' && changes.memosClipHistory) refreshHistory();
       if (area === 'sync' && ['apiUrl', 'apiTokens', 'userName', 'hidetag', 'showtag'].some(key => changes[key])) {
         resetSearch();
-        get_info(configure);
+        closeTagList();
+        get_info(info => {
+          // A token that had expired was shown the public memos only.
+          if (changes.apiTokens && info.status) MemoIndex.clear(info);
+          configure(info);
+        });
       }
       if (area === 'local' && account && changes['memosDestination:' + DraftStorage.scope(account)]) {
         const saved = changes['memosDestination:' + DraftStorage.scope(account)].newValue;

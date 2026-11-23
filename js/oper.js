@@ -1,5 +1,5 @@
 /* global AIReview, DraftEditor, DraftStorage, MemoIndex, MemoTags, MemosAPI, StagedFiles, Workspace, uiMessage */
-/* exported resolveVisibility, clearMemoList, renderMemoList, appendMemoList */
+/* exported resolveVisibility, clearMemoList, renderMemoList, appendMemoList, closeTagList */
 function relativeTime(value, lang, now) {
   var time = value === '' || value == null ? NaN : new Date(value).getTime();
   if (Number.isNaN(time)) return '';

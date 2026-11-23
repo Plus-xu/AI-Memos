@@ -358,6 +358,148 @@ test('a memo saved while the tags and names are loading is still there when the 
   assert.deepEqual(session[key].names, ['memos/saved', 'memos/older']);
 });
 
+test('without user statistics, a memo saved during a listing keeps its tag when the tags join that listing', async () => {
+  const listing = deferred();
+  const session = {};
+  const popup = await loadPopup(
+    {
+      listMemos: () => listing.promise,
+      getMemo: async (_, name) => ({ name, content: name }),
+      createMemo: async (_, body) => ({ name: 'memos/saved', ...body, tags: ['fresh'] })
+    },
+    {},
+    session
+  );
+  await clickRandom(popup);
+  await popup.context.sendText();
+  await flush();
+  await new Promise(resolve => setTimeout(resolve, 5));
+  await clickTags(popup);
+  listing.resolve([{ name: 'memos/older', tags: ['a'] }]);
+  await flush();
+  assert.deepEqual(tagList(popup).tags, ['a', 'fresh']);
+  assert.deepEqual(session[key].tags, ['a', 'fresh']);
+});
+
+test('without user statistics, the listing made for random review also serves the tags', async () => {
+  let lists = 0;
+  const popup = await loadPopup({
+    listMemos: async () => {
+      lists++;
+      return [{ name: 'memos/a', tags: ['reading'] }];
+    },
+    getMemo: async (_, name) => ({ name, content: name })
+  });
+  await clickRandom(popup);
+  await clickTags(popup);
+  assert.deepEqual(tagList(popup).tags, ['reading']);
+  assert.equal(lists, 1);
+});
+
+test('archived memos in a listing give neither names nor tags', async () => {
+  const session = {};
+  const popup = await loadPopup(
+    {
+      listMemos: async () => [
+        { name: 'memos/kept', tags: ['kept'] },
+        { name: 'memos/archived', tags: ['old'], state: 'ARCHIVED' },
+        { name: 'memos/legacy', tags: ['older'], rowStatus: 'ARCHIVED' }
+      ]
+    },
+    {},
+    session
+  );
+  await clickTags(popup);
+  assert.deepEqual(tagList(popup).tags, ['kept']);
+  assert.deepEqual(session[key].names, ['memos/kept']);
+});
+
+test('archiving without user statistics lists the memos again for the next tags', async () => {
+  let lists = 0;
+  const popup = await loadPopup({
+    listMemos: async () =>
+      ++lists === 1
+        ? [
+            { name: 'memos/a', tags: ['gone'] },
+            { name: 'memos/b', tags: ['kept'] }
+          ]
+        : [{ name: 'memos/b', tags: ['kept'] }],
+    archiveMemo: async () => ({})
+  });
+  await clickTags(popup);
+  assert.deepEqual(tagList(popup).tags, ['gone', 'kept']);
+  await clickTags(popup);
+  await popup.context.archiveMemoByName('memos/a');
+  await flush();
+  await clickTags(popup);
+  await flush();
+  assert.deepEqual(tagList(popup).tags, ['kept']);
+  assert.equal(lists, 2);
+});
+
+test('changing the account closes the tag list, and tags still loading for the old account are not drawn', async () => {
+  const answer = deferred();
+  const popup = await loadPopup({ userTags: () => answer.promise });
+  await clickTags(popup);
+  assert.equal(tagList(popup).open, true);
+  popup.storage.userName = 'users/someone-else';
+  popup.context.chrome.storage.onChanged.emit({ userName: { newValue: 'users/someone-else' } }, 'sync');
+  await flush();
+  assert.equal(tagList(popup).open, false);
+  answer.resolve(['theirs']);
+  await flush();
+  assert.deepEqual(tagList(popup), { open: false, tags: [], text: '' });
+});
+
+test('a new access token forgets the tags and names loaded with the old one', async () => {
+  let statistics = 0;
+  const session = { [key]: stored({ tags: ['public-only'], names: ['memos/public'] }) };
+  const popup = await loadPopup(
+    {
+      userTags: async () => {
+        statistics++;
+        return ['mine', 'public-only'];
+      },
+      listMemos: async () => [{ name: 'memos/mine' }],
+      getMemo: async (_, name) => ({ name, content: name })
+    },
+    {},
+    session
+  );
+  popup.storage.apiTokens = 'renewed-pat';
+  popup.context.chrome.storage.onChanged.emit({ apiTokens: { newValue: 'renewed-pat' } }, 'sync');
+  await flush();
+  await clickTags(popup);
+  assert.deepEqual(tagList(popup).tags, ['mine', 'public-only']);
+  assert.equal(statistics, 1);
+  await clickRandom(popup);
+  assert.deepEqual(shown(popup), ['mine']);
+});
+
+test('tags and names that were loading when the access token changed are not kept', async () => {
+  const answer = deferred();
+  let statistics = 0;
+  const session = {};
+  const popup = await loadPopup(
+    {
+      userTags: () => (++statistics === 1 ? answer.promise : Promise.resolve(['mine'])),
+      listMemos: never
+    },
+    {},
+    session
+  );
+  await clickTags(popup);
+  await new Promise(resolve => setTimeout(resolve, 5));
+  popup.storage.apiTokens = 'renewed-pat';
+  popup.context.chrome.storage.onChanged.emit({ apiTokens: { newValue: 'renewed-pat' } }, 'sync');
+  await flush();
+  answer.resolve(['public-only']);
+  await flush();
+  assert.equal(session[key].tags, null);
+  await clickTags(popup);
+  assert.deepEqual(tagList(popup).tags, ['mine']);
+});
+
 test('tags, random review and saving work when session storage fails or does not exist', async () => {
   for (const breakStorage of [
     chrome => {

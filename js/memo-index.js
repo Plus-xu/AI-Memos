@@ -27,6 +27,8 @@ var MemoIndex = (function () {
       scanned: raw.scanned === true,
       names: strings(raw.names),
       namesAt: Number(raw.namesAt) || 0,
+      // The tags of the listed memos, as old as the names: the tags of a server without statistics.
+      listed: strings(raw.listed),
       // Saves and archives of the last minutes; a load that started before one applies it again.
       recent: Array.isArray(raw.recent) ? raw.recent.filter(change => change && typeof change.at === 'number') : []
     };
@@ -65,7 +67,14 @@ var MemoIndex = (function () {
     if (entry.names && change.add && !entry.names.includes(change.add))
       entry.names = [change.add].concat(entry.names).slice(0, LIMIT);
     if (entry.tags && change.tags) entry.tags = sorted(entry.tags.concat(change.tags));
-    if (change.stale) entry.tagsAt = 0;
+    if (entry.listed && change.tags) entry.listed = sorted(entry.listed.concat(change.tags));
+    // A tag may have lost its last memo, which only the server can tell.
+    if (change.stale) {
+      entry.tagsAt = 0;
+      entry.listed = null;
+    }
+    // What another access token was shown is not this one's to keep.
+    if (change.reset) entry.tags = entry.names = entry.listed = null;
   }
 
   // Stores what a load found, then repeats the changes made since the load began.
@@ -89,21 +98,23 @@ var MemoIndex = (function () {
     const key = keyOf(info);
     return once('names ' + key, async () => {
       const startedAt = Date.now();
-      const memos = await MemosAPI.listMemos(info);
-      // The tags of the listed memos stand in for the user statistics on servers without them.
-      const listed = sorted(memos.flatMap(memo => strings(memo.tags) || []));
+      // Older servers may list archived memos too; those are neither reviewed nor tagged.
+      const memos = (await MemosAPI.listMemos(info)).filter(
+        memo => memo.state !== 'ARCHIVED' && memo.rowStatus !== 'ARCHIVED'
+      );
       const entry = await land(key, startedAt, entry => {
         entry.names = memos
           .map(memo => memo.name)
           .filter(name => typeof name === 'string' && /^memos\/[^/]+$/.test(name))
           .slice(0, LIMIT);
         entry.namesAt = Date.now();
+        entry.listed = sorted(memos.flatMap(memo => strings(memo.tags) || []));
         if (entry.scanned) {
-          entry.tags = listed;
+          entry.tags = entry.listed;
           entry.tagsAt = entry.namesAt;
         }
       });
-      return { names: entry.names, listed };
+      return entry;
     });
   }
 
@@ -112,13 +123,20 @@ var MemoIndex = (function () {
     return once('tags ' + key, async () => {
       const startedAt = Date.now();
       const counted = await MemosAPI.userTags(info);
-      const tags = counted || (await scan(info)).listed;
+      let listed = [];
+      if (!counted) {
+        // One listing serves both the names and the tags, whichever asked for it.
+        const known = await read(key);
+        const usable = known.listed && Date.now() - known.namesAt < TTL;
+        listed = (usable ? known : await scan(info)).listed || [];
+      }
       const entry = await land(key, startedAt, entry => {
-        entry.tags = sorted(tags);
+        // The index's own list has every tag saved since the listing began, whenever that was.
+        entry.tags = counted ? sorted(counted) : entry.listed || listed;
         entry.tagsAt = Date.now();
         entry.scanned = !counted;
       });
-      return entry.tags;
+      return entry.tags || [];
     });
   }
 
@@ -140,7 +158,7 @@ var MemoIndex = (function () {
   async function names(info, fresh) {
     const entry = await read(keyOf(info));
     const age = Date.now() - entry.namesAt;
-    if (!entry.names || (fresh && age >= FRESH)) return (await scan(info)).names;
+    if (!entry.names || (fresh && age >= FRESH)) return (await scan(info)).names || [];
     if (age >= TTL) scan(info).catch(() => {});
     return entry.names;
   }
@@ -166,6 +184,7 @@ var MemoIndex = (function () {
     tags,
     names,
     saved,
+    clear: info => record(info, { reset: true }),
     archived: (info, name) => record(info, { remove: name, stale: true }),
     restored: (info, name) => record(info, { add: name, stale: true }),
     forget: (info, name) => record(info, { remove: name })
