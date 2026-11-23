@@ -117,6 +117,25 @@ test('page stand-in: an element listener is fired by the same key as a jQuery ha
   assert.deepEqual(calls, ['jquery', 'element']);
 });
 
+test('page stand-in: an element lists the options given to it, and replacing its children starts over', () => {
+  const { document, Option } = createDom();
+  const select = document.getElementById('space');
+  assert.deepEqual(select.options, []);
+  select.replaceChildren(new Option('None', ''));
+  select.add(new Option('Reading', 'spaces/reading'));
+  assert.deepEqual(
+    select.options.map(option => [option.text, option.value]),
+    [
+      ['None', ''],
+      ['Reading', 'spaces/reading']
+    ]
+  );
+  const before = select.options;
+  select.replaceChildren();
+  assert.deepEqual(select.options, []);
+  assert.notEqual(select.options, before, 'a redraw is visible as a new list');
+});
+
 /** Opens the stand-in the way a script would, creating one key-path store on first use. */
 function openFiles(indexedDB, upgrades = []) {
   return new Promise(resolve => {

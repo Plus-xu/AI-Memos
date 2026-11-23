@@ -128,7 +128,7 @@ function loadApi(
 async function loadPopup(overrides = {}, saved = {}) {
   const { api, context } = loadApi();
   const storage = { ...info, memo_lock: 'PRIVATE', open_action: 'save_text', open_content: 'draft text', ...saved };
-  const { $, document, node, handlers, messages } = createDom();
+  const { $, document, node, handlers, messages, Option } = createDom();
   document.documentElement = { lang: 'en' };
   const chrome = createChrome({
     sync: storage,
@@ -155,7 +155,7 @@ async function loadPopup(overrides = {}, saved = {}) {
     crypto: webcrypto,
     TextEncoder,
     uiMessage: key => key,
-    Option: class {},
+    Option,
     AIReview: { isBusy: () => false, onMemoSaved() {}, refresh() {} },
     window: { addEventListener() {} },
     setTimeout() {},
@@ -255,7 +255,7 @@ const libraries = ['js/jquery.min.js', 'js/view-image.js'];
 function loadPage(page) {
   const html = fs.readFileSync(path.join(root, page), 'utf8');
   const listed = pageScripts(page);
-  const { $, document } = createDom();
+  const { $, document, Option } = createDom();
   $.extend = extra => Object.assign($, extra);
   delete $.message; // js/message.js adds it
   const dataset = Object.fromEntries(
@@ -268,7 +268,7 @@ function loadPage(page) {
     location: { search: '', protocol: 'chrome-extension:', replace() {} },
     matchMedia: () => ({ matches: false, addEventListener() {} }),
     addEventListener() {},
-    Option: class {},
+    Option,
     FileReader
   });
   context.window = context;

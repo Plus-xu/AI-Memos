@@ -778,3 +778,146 @@ test('relative times say "now" for the present and small clock skew, and keep re
   assert.equal(format(now - 5e3, 'en', now), '5 seconds ago');
   assert.equal(format(now + 3 * 3600e3, 'en', now), 'in 3 hours');
 });
+
+const scope = JSON.stringify([info.apiUrl, info.userName]);
+const reading = { name: 'spaces/reading', title: 'Reading' };
+const team = { name: 'spaces/team', title: 'Team' };
+const spaceOptions = popup => popup.document.getElementById('memoSpace').options.map(option => option.value);
+
+/** A popup whose space request stays open until `answer` settles it. */
+async function popupAwaitingSpaces(saved = {}, overrides = {}) {
+  let answer;
+  const pending = new Promise((resolve, reject) => {
+    answer = { resolve, reject };
+  });
+  const popup = await loadPopup({ listSpaces: () => pending, ...overrides }, saved);
+  return { popup, answer };
+}
+
+test('the destination is drawn from the remembered spaces before the server answers, then follows the answer', async () => {
+  const { popup, answer } = await popupAwaitingSpaces({
+    ['memosSpaces:' + scope]: { spaces: [reading] },
+    ['memosDestination:' + scope]: { space: reading.name, visibility: 'SPACE' }
+  });
+  assert.deepEqual(spaceOptions(popup), ['', reading.name]);
+  assert.equal(popup.document.getElementById('memoSpace').value, reading.name);
+  assert.equal(popup.document.getElementById('effectiveVisibility').textContent, '');
+  answer.resolve([reading, { ...team, description: 'not kept' }]);
+  await flush();
+  assert.deepEqual(spaceOptions(popup), ['', reading.name, team.name]);
+  assert.deepEqual(popup.storage['memosSpaces:' + scope], { spaces: [reading, team] });
+});
+
+test('an unchanged space list is neither redrawn nor stored again', async () => {
+  const { popup, answer } = await popupAwaitingSpaces({ ['memosSpaces:' + scope]: { spaces: [reading] } });
+  const drawn = popup.document.getElementById('memoSpace').options;
+  const stored = popup.storage['memosSpaces:' + scope];
+  answer.resolve([{ ...reading, memberCount: 3 }]);
+  await flush();
+  assert.equal(popup.document.getElementById('memoSpace').options, drawn);
+  assert.equal(popup.storage['memosSpaces:' + scope], stored);
+});
+
+test('with nothing remembered, the first answer is drawn and remembered; a server without spaces remembers none', async () => {
+  const fresh = await loadPopup({ listSpaces: async () => [reading] });
+  assert.deepEqual(spaceOptions(fresh), ['', reading.name]);
+  assert.deepEqual(fresh.storage['memosSpaces:' + scope], { spaces: [reading] });
+  const legacy = await loadPopup(
+    {
+      listSpaces: async () => {
+        throw refused(404);
+      }
+    },
+    { ['memosSpaces:' + scope]: { spaces: [reading] } }
+  );
+  assert.deepEqual(spaceOptions(legacy), ['']);
+  assert.deepEqual(legacy.storage['memosSpaces:' + scope], { spaces: [] });
+  assert.deepEqual(legacy.messages, []);
+});
+
+test('a failed space refresh keeps the remembered spaces and says the check failed', async () => {
+  const { popup, answer } = await popupAwaitingSpaces({ ['memosSpaces:' + scope]: { spaces: [reading] } });
+  answer.reject(refused(500));
+  await flush();
+  assert.deepEqual(spaceOptions(popup), ['', reading.name]);
+  assert.deepEqual(popup.messages, ['spaceCheckFailed']);
+  assert.deepEqual(popup.storage['memosSpaces:' + scope], { spaces: [reading] });
+});
+
+test('a remembered space the server no longer lists blocks the save and keeps the draft', async () => {
+  const posts = [];
+  const saved = {
+    ['memosSpaces:' + scope]: { spaces: [reading] },
+    ['memosDestination:' + scope]: { space: reading.name, visibility: 'SPACE' }
+  };
+  const createMemo = async (_, body) => {
+    posts.push(body);
+    return { name: 'memos/saved', ...body };
+  };
+  const removed = await loadPopup({ listSpaces: async () => [], createMemo }, saved);
+  await removed.context.sendText();
+  assert.deepEqual(posts, []);
+  assert.equal(removed.messages.at(-1), 'spaceUnavailable');
+  assert.equal(removed.node('#content').val(), 'draft text');
+
+  // The refresh on opening failed, so the popup still shows the space; only the check at save time knows.
+  let opened = false;
+  const stale = await loadPopup(
+    {
+      listSpaces: async () => {
+        if (opened) return [team];
+        opened = true;
+        throw refused(500);
+      },
+      createMemo
+    },
+    saved
+  );
+  assert.deepEqual(spaceOptions(stale), ['', reading.name]);
+  await stale.context.sendText();
+  assert.deepEqual(posts, []);
+  assert.equal(stale.messages.at(-1), 'spaceUnavailable');
+  assert.equal(stale.node('#content').val(), 'draft text');
+  assert.equal(stale.storage.memosDraft.open_content, 'draft text');
+  assert.deepEqual(stale.storage['memosSpaces:' + scope], { spaces: [team] });
+});
+
+test("another account's remembered spaces are never shown", async () => {
+  const other = JSON.stringify([info.apiUrl, 'users/someone-else']);
+  const { popup } = await popupAwaitingSpaces({ ['memosSpaces:' + other]: { spaces: [team] } });
+  assert.deepEqual(spaceOptions(popup), ['']);
+});
+
+test('spaces show and a memo saves into one even when the space list cannot be remembered', async () => {
+  const posts = [];
+  const { popup, answer } = await popupAwaitingSpaces(
+    { ['memosDestination:' + scope]: { space: reading.name, visibility: 'SPACE' } },
+    {
+      createMemo: async (_, body) => {
+        posts.push(body);
+        return { name: 'memos/saved', ...body };
+      }
+    }
+  );
+  const local = popup.context.chrome.storage.local;
+  const set = local.set;
+  local.set = (values, callback) => {
+    if (Object.keys(values).some(key => key.startsWith('memosSpaces:'))) throw new Error('quota exceeded');
+    set(values, callback);
+  };
+  answer.resolve([reading]);
+  await flush();
+  assert.deepEqual(spaceOptions(popup), ['', reading.name]);
+  popup.context.MemosAPI.listSpaces = async () => [reading, team];
+  await popup.context.sendText();
+  assert.equal(posts.length, 1);
+  assert.equal(posts[0].space, reading.name);
+  assert.equal(posts[0].visibility, 'SPACE');
+});
+
+test('remembered spaces that are not a list of space names are ignored', async () => {
+  for (const junk of ['spaces/reading', { spaces: 'spaces/reading' }, { spaces: [{ name: 'users/x' }, null, 7] }]) {
+    const { popup } = await popupAwaitingSpaces({ ['memosSpaces:' + scope]: junk });
+    assert.deepEqual(spaceOptions(popup), [''], JSON.stringify(junk));
+  }
+});

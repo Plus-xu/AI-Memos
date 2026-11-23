@@ -61,6 +61,28 @@ var Workspace = (function () {
     return configuring;
   }
 
+  // The remembered list only draws the popup sooner; destination() still asks the server before a save.
+  function spaceList(entries) {
+    if (!Array.isArray(entries)) return null;
+    return entries
+      .filter(entry => entry && /^spaces\/[^/]+$/.test(entry.name))
+      .map(entry =>
+        typeof entry.title === 'string' ? { name: entry.name, title: entry.title } : { name: entry.name }
+      );
+  }
+
+  // Draws and remembers a list from the server, if it differs from the one on screen.
+  async function showSpaces(info, list) {
+    if (JSON.stringify(list) === JSON.stringify(spaces)) return;
+    spaces = list;
+    renderSpaces();
+    try {
+      await DraftStorage.put('local', { ['memosSpaces:' + DraftStorage.scope(info)]: { spaces: list } });
+    } catch (_) {
+      /* Not remembered: the next popup waits for the server instead. */
+    }
+  }
+
   async function loadDestination(info, run) {
     account = info;
     spaces = [];
@@ -72,23 +94,34 @@ var Workspace = (function () {
     el('saveStatus').hidden = true;
     renderSpaces();
     if (!info.status) return;
-    const key = 'memosDestination:' + DraftStorage.scope(info);
-    const saved = (await DraftStorage.get('local', { [key]: null }))[key];
+    const key = 'memosDestination:' + DraftStorage.scope(info),
+      listKey = 'memosSpaces:' + DraftStorage.scope(info);
+    const stored = await DraftStorage.get('local', { [key]: null, [listKey]: null });
     if (run !== destinationGeneration) return;
+    const saved = stored[key],
+      remembered = spaceList(stored[listKey]?.spaces);
     if (saved) {
       space = saved.space || '';
       visibility = labels[saved.visibility] ? saved.visibility : 'PRIVATE';
     }
+    if (remembered) {
+      spaces = remembered;
+      renderSpaces();
+    }
+    await refreshHistory();
+    if (run !== destinationGeneration) return;
+    let list = null;
     try {
-      const list = await MemosAPI.listSpaces(info);
-      if (run !== destinationGeneration) return;
-      spaces = list;
+      list = spaceList(await MemosAPI.listSpaces(info));
     } catch (error) {
       if (run !== destinationGeneration) return;
-      if (!MemosAPI.isMissingRoute(error)) $.message({ message: uiMessage('spaceCheckFailed') });
+      if (MemosAPI.isMissingRoute(error)) list = [];
+      else $.message({ message: uiMessage('spaceCheckFailed') });
     }
-    renderSpaces();
-    await refreshHistory();
+    if (run !== destinationGeneration) return;
+    const drawn = spaces;
+    if (list) await showSpaces(info, list);
+    if (!remembered && spaces === drawn) renderSpaces();
   }
 
   async function saveDestination() {
@@ -112,14 +145,10 @@ var Workspace = (function () {
       scope = resolveVisibility({ ...info, memo_lock: visibility });
     if (missing || (scope === 'SPACE' && !target)) throw new Error('spaceUnavailable');
     if (target) {
-      const list = await MemosAPI.listSpaces(info);
+      const list = spaceList(await MemosAPI.listSpaces(info));
       if (DraftStorage.scope(info) !== DraftStorage.scope(account) || target !== space) throw new Error('draftChanged');
-      if (!list.some(entry => entry.name === target)) {
-        missing = true;
-        spaces = list;
-        renderSpaces();
-        throw new Error('spaceUnavailable');
-      }
+      await showSpaces(info, list);
+      if (!list.some(entry => entry.name === target)) throw new Error('spaceUnavailable');
     }
     return target ? { visibility: scope, space: target } : { visibility: scope };
   }

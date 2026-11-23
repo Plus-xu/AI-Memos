@@ -15,7 +15,18 @@ const inert = [
   'append'
 ];
 
+/** What `new Option(text, value)` gives a page. */
+class Option {
+  constructor(text, value) {
+    this.text = text;
+    this.value = value;
+  }
+}
+
 /**
+ * An element remembers the children it was last given as `options`: replaceChildren() starts a new list
+ * and add() extends it.
+ *
  * handlers.get('<selector>:<event>'), or '<selector>:<event>:<delegated selector>', is a function that runs
  * every callback registered under that key, in order, and returns the last result. Listeners added to the
  * document itself are under 'document:<event>'.
@@ -56,8 +67,13 @@ function createDom() {
       selectionStart: 0,
       selectionEnd: 0,
       focus() {},
-      replaceChildren() {},
-      add() {},
+      options: [],
+      replaceChildren(...children) {
+        this.options = children;
+      },
+      add(option) {
+        this.options.push(option);
+      },
       addEventListener(event, callback) {
         register(selector + ':' + event, element, callback);
       },
@@ -157,7 +173,7 @@ function createDom() {
   $.message = value => messages.push(value.message);
   $.each = (items, callback) => items.forEach((item, index) => callback(index, item));
 
-  return { $, document, node, handlers, messages, inputChanges };
+  return { $, document, node, handlers, messages, inputChanges, Option };
 }
 
 module.exports = { createDom };
