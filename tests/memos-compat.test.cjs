@@ -597,6 +597,53 @@ async function searchedPopup(overrides = {}) {
   return { popup, calls, shown };
 }
 
+test('user tags come from the statistics of the signed-in user, without tags that count nothing', async () => {
+  const { api, calls } = loadApi(() => ({
+    name: 'users/tester/stats',
+    tagCounts: { b: 2, 'a/child': 1, a: 1, gone: 0 }
+  }));
+  assert.deepEqual(plain(await api.userTags(info)), ['b', 'a/child', 'a']);
+  assert.deepEqual(paths(calls), ['/api/users/tester:getStats']);
+  assert.equal(calls[0].type, 'GET');
+  const older = loadApi(() => ({ tagCount: { reading: 3 } }));
+  assert.deepEqual(plain(await older.api.userTags(info)), ['reading']);
+  const none = loadApi(() => ({ tagCounts: {} }));
+  assert.deepEqual(plain(await none.api.userTags(info)), []);
+});
+
+test('user tags are null when the server has no usable statistics, and an error otherwise', async () => {
+  for (const answer of [
+    () => {
+      throw refused(404);
+    },
+    () => {
+      throw refused(400);
+    },
+    () => {
+      throw refused(501);
+    },
+    () => ({ name: 'users/tester/stats' }),
+    () => ({ tagCounts: ['a'] }),
+    () => ({ tagCounts: 'a' }),
+    () => null
+  ]) {
+    assert.equal(await loadApi(answer).api.userTags(info), null);
+  }
+  for (const status of [401, 403, 429, 500]) {
+    await assert.rejects(
+      loadApi(() => {
+        throw refused(status);
+      }).api.userTags(info),
+      error => error.status === status
+    );
+  }
+  for (const userName of ['', undefined, 'tester', 'users/a/b']) {
+    const { api, calls } = loadApi();
+    assert.equal(await api.userTags({ ...info, userName }), null);
+    assert.equal(calls.length, 0);
+  }
+});
+
 test('restoring a memo patches only its state back to NORMAL', async () => {
   const { api, calls } = loadApi(() => ({}));
   await api.restoreMemo(info, 'memos/x');
@@ -663,6 +710,7 @@ test('a failed archive leaves the list untouched; a new search drops the pending
 test('archiving the single random memo empties the list and can be undone', async () => {
   const popup = await loadPopup({
     listMemos: async () => [{ name: 'memos/r', content: 'r' }],
+    getMemo: async () => ({ name: 'memos/r', content: 'r' }),
     archiveMemo: async () => ({}),
     restoreMemo: async () => ({})
   });

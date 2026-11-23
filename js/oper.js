@@ -1,4 +1,4 @@
-/* global AIReview, DraftEditor, DraftStorage, MemoTags, MemosAPI, StagedFiles, Workspace, uiMessage */
+/* global AIReview, DraftEditor, DraftStorage, MemoIndex, MemoTags, MemosAPI, StagedFiles, Workspace, uiMessage */
 /* exported resolveVisibility, clearMemoList, renderMemoList, appendMemoList */
 function relativeTime(value, lang, now) {
   var time = value === '' || value == null ? NaN : new Date(value).getTime();
@@ -407,27 +407,68 @@ $('#opensite').click(() =>
     else chrome.runtime.openOptionsPage();
   })
 );
-$('#tags').click(() =>
+// The tag list is open from the click that asks for it, also while its tags are still loading.
+var tagListOpen = false;
+var tagListRun = 0;
+
+function closeTagList() {
+  tagListOpen = false;
+  tagListRun++;
+  $('#taglist').prop('hidden', true).html('');
+}
+
+function drawTagList(tags) {
+  if (!tags.length) return closeTagList();
+  var html = '';
+  for (var i = 0; i < tags.length; i++)
+    html += '<button type="button" class="item-container">' + escapeHtml('#' + tags[i]) + '</button>';
+  $('#taglist').html(html);
+}
+
+// Redraws an open tag list after the index changed, unless a newer click has taken it over.
+function refreshTagList(info) {
+  if (!tagListOpen) return;
+  var run = tagListRun;
+  MemoIndex.tags(info).then(
+    function (tags) {
+      if (tagListOpen && run === tagListRun) drawTagList(tags);
+    },
+    function () {}
+  );
+}
+
+$('#tags').click(() => {
+  if (tagListOpen) {
+    closeTagList();
+    return;
+  }
+  tagListOpen = true;
+  const run = ++tagListRun;
+  const current = () => tagListOpen && run === tagListRun;
+  $('#taglist')
+    .html(escapeHtml(uiMessage('working')))
+    .prop('hidden', false);
   get_info(async info => {
+    if (!current()) return;
     if (!info.status) {
+      closeTagList();
       $.message({ message: uiMessage('connectMemos') });
       return;
     }
     try {
-      const memos = await MemosAPI.listMemos(info);
-      const tags = Array.from(new Set(memos.flatMap(m => m.tags || []))).sort();
-      if (!tags.length) {
-        $.message({ message: uiMessage('noTagsFound') });
-        return;
-      }
-      const list = $('#taglist').empty();
-      for (const tag of tags) list.append($('<button type="button" class="item-container"></button>').text('#' + tag));
-      list.toggle();
+      const tags = await MemoIndex.tags(info, fresh => {
+        if (current()) drawTagList(fresh);
+      });
+      if (!current()) return;
+      drawTagList(tags);
+      if (!tags.length) $.message({ message: uiMessage('noTagsFound') });
     } catch (error) {
+      if (!current()) return;
+      closeTagList();
       showApiError('Tags', error, uiMessage('getTabFailed'));
     }
-  })
-);
+  });
+});
 $(document).on('click', '.item-container', function () {
   add($(this).text() + ' ');
 });
@@ -438,16 +479,41 @@ $('#random').click(() =>
       return;
     }
     const run = Workspace.resetSearch();
+    const current = () => run === Workspace.listRun();
+    $('#searchStatus').text(uiMessage('working'));
     try {
-      const memos = await MemosAPI.listMemos(info);
-      if (run !== Workspace.listRun()) return;
-      if (memos.length) Workspace.show([memos[Math.floor(Math.random() * memos.length)]]);
-      else $('#searchStatus').text(uiMessage('noMemosFound'));
+      const memo = await randomMemo(info, current);
+      if (!current()) return;
+      $('#searchStatus').text(memo ? '' : uiMessage('noMemosFound'));
+      if (memo) Workspace.show([memo]);
     } catch (error) {
-      if (run === Workspace.listRun()) showApiError('Random memo', error, uiMessage('apiFailed'));
+      if (!current()) return;
+      $('#searchStatus').text('');
+      showApiError('Random memo', error, uiMessage('apiFailed'));
     }
   })
 );
+
+// Picks among the remembered memo names and fetches that one memo. A name whose memo is archived or gone
+// is forgotten; after three of those in a row the names are listed again, once.
+async function randomMemo(info, current) {
+  for (const fresh of [false, true]) {
+    const names = (await MemoIndex.names(info, fresh)).slice();
+    for (let attempt = 0; attempt < 3 && names.length && current(); attempt++) {
+      const name = names.splice(Math.floor(Math.random() * names.length), 1)[0];
+      let memo = null;
+      try {
+        memo = await MemosAPI.getMemo(info, name);
+      } catch (error) {
+        if (!MemosAPI.isMissingRoute(error)) throw error;
+      }
+      if (memo && memo.name === name && memo.state !== 'ARCHIVED' && memo.rowStatus !== 'ARCHIVED') return memo;
+      await MemoIndex.forget(info, name);
+    }
+    if (!current()) return null;
+  }
+  return null;
+}
 
 $(document).on('click', '.random-link', function () {
   var memoUrl = $(this).attr('data-url');
@@ -482,6 +548,7 @@ async function archiveMemoByName(name) {
   }
   archivedEntry = { name: name, scope: DraftStorage.scope(info), removed: Workspace.remove(name) };
   $('#archiveNotice').prop('hidden', false);
+  MemoIndex.archived(info, name);
 }
 
 async function undoArchive() {
@@ -502,6 +569,7 @@ async function undoArchive() {
   }
   if (archivedEntry === entry) dismissArchiveNotice();
   Workspace.restore(entry.removed);
+  MemoIndex.restored(info, entry.name);
   $.message({ message: uiMessage('archiveUndone') });
 }
 
@@ -590,6 +658,7 @@ async function submitMemo(info, snapshot, destination) {
   checkSavedVisibility(info, memo);
   $.message({ message: uiMessage(historyError ? 'historyWriteFailed' : 'memoSuccess') });
   Workspace.refreshHistory();
+  MemoIndex.saved(info, memo).then(() => refreshTagList(info));
 }
 
 async function sendText() {

@@ -484,7 +484,6 @@ details summary {
   overflow-wrap: anywhere;
 }
 .tag-list {
-  display: none;
   padding: 5px 0;
 }
 .tag-list button {

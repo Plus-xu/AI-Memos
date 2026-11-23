@@ -40,6 +40,18 @@ test('storage stand-in: one backing object for both areas is one merged store', 
   assert.deepEqual(await read(storage.local, 'fromSync'), { fromSync: 1 });
 });
 
+test('storage stand-in: the session area is a third store with the same contract', async () => {
+  const session = { kept: 1 };
+  const { storage } = createChrome({ session });
+  storage.session.set({ added: { deep: true } });
+  assert.deepEqual(session, { kept: 1, added: { deep: true } });
+  assert.deepEqual(await read(storage.session, { added: null, missing: 'default' }), {
+    added: { deep: true },
+    missing: 'default'
+  });
+  assert.deepEqual(await read(storage.local, null), {});
+});
+
 test('storage stand-in: onSyncSet sees a write to sync before it lands, and never a write to local', () => {
   const sync = {},
     local = {};

@@ -210,6 +210,25 @@ const MemosAPI = (function () {
     return nextPage();
   }
 
+  // The tags of the user's own memos, or null when the server has no statistics to read them from.
+  function userTags(info) {
+    var user = /^users\/([^/]+)$/.exec(info.userName || '');
+    if (!user) return Promise.resolve(null);
+    return request(info, { path: 'users/' + encodeURIComponent(user[1]) + ':getStats' }).then(
+      function (stats) {
+        var counts = stats && (stats.tagCounts || stats.tagCount);
+        if (!counts || typeof counts !== 'object' || Array.isArray(counts)) return null;
+        return Object.keys(counts).filter(function (tag) {
+          return counts[tag] > 0;
+        });
+      },
+      function (xhr) {
+        if (isMissingRoute(xhr) || [400, 405, 501].includes(xhr && xhr.status)) return null;
+        throw xhr;
+      }
+    );
+  }
+
   function buildContentFilter(pattern) {
     return 'content.contains(' + JSON.stringify(String(pattern)) + ')';
   }
@@ -414,6 +433,7 @@ const MemosAPI = (function () {
     listMemos,
     listMemoPage,
     listSpaces,
+    userTags,
     isMissingRoute,
     buildContentFilter: buildContentFilter,
     getMemo: getMemo,

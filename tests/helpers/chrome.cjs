@@ -27,10 +27,10 @@ function area(store, onSet) {
 }
 
 /**
- * sync and local are the backing objects, which tests read and write directly; pass the same object twice
- * for one merged store. onSyncSet sees every write to sync before it lands.
+ * sync, local and session are the backing objects, which tests read and write directly; pass the same
+ * object twice for one merged store. onSyncSet sees every write to sync before it lands.
  */
-function createChrome({ sync = {}, local = {}, messages = key => key, onSyncSet } = {}) {
+function createChrome({ sync = {}, local = {}, session = {}, messages = key => key, onSyncSet } = {}) {
   const listeners = [];
   return {
     runtime: { lastError: null },
@@ -38,6 +38,7 @@ function createChrome({ sync = {}, local = {}, messages = key => key, onSyncSet 
     storage: {
       local: area(local),
       sync: area(sync, onSyncSet),
+      session: area(session),
       onChanged: {
         addListener: listener => listeners.push(listener),
         // Not in the real API. Writes here notify nobody; a test delivers a change by calling this.

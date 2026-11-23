@@ -124,8 +124,11 @@ function loadApi(
   return { api: context.api, context, calls, local };
 }
 
-/** The popup's editor, save flow and search. Sync and local storage are the one `storage` object. */
-async function loadPopup(overrides = {}, saved = {}) {
+/**
+ * The popup's editor, save flow and search. Sync and local storage are the one `storage` object, and
+ * `session` is session storage. The server has no user statistics unless `userTags` is overridden.
+ */
+async function loadPopup(overrides = {}, saved = {}, session = {}) {
   const { api, context } = loadApi();
   const storage = { ...info, memo_lock: 'PRIVATE', open_action: 'save_text', open_content: 'draft text', ...saved };
   const { $, document, node, handlers, messages, Option } = createDom();
@@ -133,6 +136,7 @@ async function loadPopup(overrides = {}, saved = {}) {
   const chrome = createChrome({
     sync: storage,
     local: storage,
+    session,
     onSyncSet: values =>
       assert.ok(!Object.hasOwn(values, 'open_content'), 'draft text must not be written to sync storage')
   });
@@ -141,6 +145,7 @@ async function loadPopup(overrides = {}, saved = {}) {
     api,
     {
       listSpaces: async () => [],
+      userTags: async () => null,
       getInstanceProfile: async () => ({ version: '0.31.0' }),
       prepareMemo: async (_, body) => body,
       createMemo: async (_, body) => ({ name: 'memos/saved', ...body }),
@@ -161,10 +166,18 @@ async function loadPopup(overrides = {}, saved = {}) {
     setTimeout() {},
     chrome
   });
-  loadScripts(context, ['draft-storage', 'editor-draft', 'staged-files', 'memo-tags', 'workspace', 'oper']);
+  loadScripts(context, [
+    'draft-storage',
+    'editor-draft',
+    'staged-files',
+    'memo-tags',
+    'memo-index',
+    'workspace',
+    'oper'
+  ]);
   handlers.get('document:DOMContentLoaded')?.();
   await flush();
-  return { context, api, node, handlers, messages, storage, document };
+  return { context, api, node, handlers, messages, storage, session, document };
 }
 
 /** The settings page's connection and tag forms over the real MemosAPI; `element(id)` is a page element. */
