@@ -146,6 +146,7 @@ async function loadPopup(overrides = {}, saved = {}, session = {}) {
     {
       listSpaces: async () => [],
       userTags: async () => null,
+      uploadLimit: async () => null,
       getInstanceProfile: async () => ({ version: '0.31.0' }),
       prepareMemo: async (_, body) => body,
       createMemo: async (_, body) => ({ name: 'memos/saved', ...body }),
@@ -164,6 +165,7 @@ async function loadPopup(overrides = {}, saved = {}, session = {}) {
     AIReview: { isBusy: () => false, onMemoSaved() {}, refresh() {} },
     window: { addEventListener() {} },
     setTimeout() {},
+    indexedDB: createIndexedDB(),
     chrome
   });
   loadScripts(context, [

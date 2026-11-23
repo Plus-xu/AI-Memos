@@ -452,6 +452,9 @@
   "fileStaged": {
     "message": "附件已加入本机草稿"
   },
+  "fileTooLarge": {
+    "message": "{name} 超过 {limit} 的上传上限，未加入草稿。"
+  },
   "imageCaptureFailed": {
     "message": "无法读取这张图片，请将图片粘贴到草稿。"
   },

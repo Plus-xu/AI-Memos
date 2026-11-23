@@ -644,6 +644,47 @@ test('user tags are null when the server has no usable statistics, and an error 
   }
 });
 
+test('the upload limit is read from the usage of the signed-in user', async () => {
+  const { api, calls } = loadApi(() => ({
+    name: 'users/tester/usage',
+    limits: { memoContentBytes: '8192', uploadBytes: '33554432' }
+  }));
+  assert.equal(await api.uploadLimit(info), 33554432);
+  assert.deepEqual(paths(calls), ['/api/users/tester/usage']);
+  assert.equal(await loadApi(() => ({ limits: { uploadBytes: 1048576 } })).api.uploadLimit(info), 1048576);
+});
+
+test('the upload limit is null when the server does not say, and an error otherwise', async () => {
+  for (const answer of [
+    () => {
+      throw refused(404);
+    },
+    () => {
+      throw refused(400);
+    },
+    () => ({ name: 'users/tester/usage' }),
+    () => ({ limits: {} }),
+    () => ({ limits: { uploadBytes: '0' } }),
+    () => ({ limits: { uploadBytes: '-5' } }),
+    () => ({ limits: { uploadBytes: 'abc' } }),
+    () => ({ limits: { uploadBytes: '1.5' } }),
+    () => null
+  ]) {
+    assert.equal(await loadApi(answer).api.uploadLimit(info), null);
+  }
+  for (const status of [401, 500]) {
+    await assert.rejects(
+      loadApi(() => {
+        throw refused(status);
+      }).api.uploadLimit(info),
+      error => error.status === status
+    );
+  }
+  const { api, calls } = loadApi();
+  assert.equal(await api.uploadLimit({ ...info, userName: '' }), null);
+  assert.equal(calls.length, 0);
+});
+
 test('restoring a memo patches only its state back to NORMAL', async () => {
   const { api, calls } = loadApi(() => ({}));
   await api.restoreMemo(info, 'memos/x');
@@ -1093,4 +1134,68 @@ test('an image that failed to download is tried again on the next redraw', async
   await flush();
   assert.deepEqual(reads, ['a', 'b', 'a']);
   assert.equal(summary(), 'a:1');
+});
+
+const MB = 1024 * 1024;
+const file = (name, bytes = 'file-bytes', type = 'text/plain') => Object.assign(new Blob([bytes], { type }), { name });
+/** A file too big to build in a test: staging must refuse it before reading anything but its size. */
+const hugeFile = (name, size) => ({ name, size, type: 'application/zip' });
+
+async function popupForFiles(saved = {}, overrides = {}) {
+  const popup = await loadPopup(overrides, { open_content: '', ...saved });
+  popup.context.uiMessage = key => (key === 'fileTooLarge' ? 'too large: {name} > {limit}' : key);
+  popup.messages.length = 0;
+  return popup;
+}
+
+test('a file over the limit is refused by name while the other chosen files are added', async () => {
+  const popup = await popupForFiles();
+  await popup.context.addFiles([file('a.txt'), hugeFile('big.zip', 30 * MB + 1), file('c.txt')]);
+  const draft = popup.node('#content').val();
+  assert.match(draft, /^\[a\.txt\]\(memos-local:\/\/[a-f0-9-]{36}\)\n\[c\.txt\]\(memos-local:\/\/[a-f0-9-]{36}\)$/);
+  assert.deepEqual(popup.messages, ['too large: big.zip > 30.0 MB', 'fileStaged']);
+  assert.equal(popup.storage.memosDraft.open_content, draft);
+  assert.equal(popup.context.pendingUploads, 0);
+});
+
+test('when every chosen file is over the limit the draft stays as it was', async () => {
+  const popup = await popupForFiles({ open_content: 'draft text' });
+  await popup.context.addFiles([hugeFile('one.zip', 31 * MB), hugeFile('two.zip', 40 * MB)]);
+  assert.equal(popup.node('#content').val(), 'draft text');
+  assert.deepEqual(popup.messages, ['too large: one.zip > 30.0 MB', 'too large: two.zip > 30.0 MB']);
+});
+
+test('the limit the server gave replaces the default, in both directions', async () => {
+  const limits = bytes => ({ memosUploadLimits: { [scope]: { bytes, at: Date.now() } } });
+  const small = await popupForFiles(limits(1.5 * MB));
+  await small.context.addFiles([hugeFile('two.zip', 2 * MB)]);
+  assert.deepEqual(small.messages, ['too large: two.zip > 1.5 MB']);
+  const large = await popupForFiles(limits(64 * MB));
+  await large.context.addFiles([file('ok.txt')]);
+  assert.deepEqual(large.messages, ['fileStaged']);
+  const exact = await popupForFiles(limits(10));
+  await exact.context.addFiles([file('ten.txt', '0123456789'), file('eleven.txt', '0123456789a')]);
+  assert.match(exact.node('#content').val(), /^\[ten\.txt\]\([^)]+\)$/);
+});
+
+test('an opened popup asks the server for the upload limit once a day and remembers the answer', async () => {
+  let asked = 0;
+  const uploadLimit = async () => {
+    asked++;
+    return 8 * MB;
+  };
+  const first = await loadPopup({ uploadLimit });
+  await flush();
+  assert.equal(first.storage.memosUploadLimits[scope].bytes, 8 * MB);
+  await loadPopup({ uploadLimit }, { memosUploadLimits: first.storage.memosUploadLimits });
+  await flush();
+  assert.equal(asked, 1);
+  const stale = { [scope]: { bytes: 8 * MB, at: Date.now() - 86400001 } };
+  await loadPopup({ uploadLimit }, { memosUploadLimits: stale });
+  await flush();
+  assert.equal(asked, 2);
+  const offline = await loadPopup({ uploadLimit }, { apiTokens: '' });
+  await flush();
+  assert.equal(asked, 2, 'nothing is asked without a connection');
+  assert.equal(offline.storage.memosUploadLimits, undefined);
 });

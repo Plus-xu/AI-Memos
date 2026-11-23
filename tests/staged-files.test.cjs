@@ -270,3 +270,88 @@ test('a write that file storage aborts is reported with its reason, or as a stor
   reason = new Error('QuotaExceededError');
   await assert.rejects(staged.stage(png(), 'photo.png'), { message: 'QuotaExceededError' });
 });
+
+const MB = 1024 * 1024;
+const account = JSON.stringify([info.apiUrl, info.userName]);
+const connection = { apiUrl: info.apiUrl, apiTokens: info.apiTokens, userName: info.userName };
+
+test('a file exactly at the limit is staged; one byte more is refused before anything is stored', async () => {
+  const { staged, files } = loadStagedFiles();
+  await staged.stage(png('0123456789'), 'ten.png', '', false, 10);
+  assert.equal(files.size, 1);
+  await assert.rejects(staged.stage(png('0123456789a'), 'eleven.png', '', false, 10), { message: 'fileTooLarge' });
+  assert.equal(files.size, 1);
+  await staged.stage(png('0123456789a'), 'unchecked.png');
+  assert.equal(files.size, 2, 'without a limit nothing is checked');
+});
+
+test('the limit is 30 MB until the server has given one for the connected account', async () => {
+  assert.equal(loadStagedFiles().staged.DEFAULT_LIMIT, 30 * MB);
+  assert.equal(await loadStagedFiles({ sync: connection }).staged.limit(), 30 * MB);
+  const remembered = { memosUploadLimits: { [account]: { bytes: 8 * MB, at: 1 } } };
+  assert.equal(await loadStagedFiles({ sync: connection, local: remembered }).staged.limit(), 8 * MB);
+  assert.equal(
+    await loadStagedFiles({
+      sync: { ...connection, apiUrl: 'https://memos.example' },
+      local: remembered
+    }).staged.limit(),
+    8 * MB,
+    'an address stored without its final slash is the same account'
+  );
+  assert.equal(
+    await loadStagedFiles({ sync: { ...connection, userName: 'users/other' }, local: remembered }).staged.limit(),
+    30 * MB
+  );
+  for (const junk of [null, 'x', { [account]: null }, { [account]: { bytes: 'many' } }, { [account]: { bytes: -1 } }])
+    assert.equal(
+      await loadStagedFiles({ sync: connection, local: { memosUploadLimits: junk } }).staged.limit(),
+      30 * MB
+    );
+  const broken = loadStagedFiles({ sync: connection, local: remembered });
+  broken.context.chrome.storage.local.get = () => {
+    throw new Error('storage unavailable');
+  };
+  assert.equal(await broken.staged.limit(), 30 * MB);
+});
+
+test('refreshing the limit stores what the server says, or the default when it says nothing', async () => {
+  const usage = bytes => () => ({ limits: { uploadBytes: String(bytes) } });
+  const known = loadStagedFiles({ responder: usage(8 * MB), sync: connection });
+  await known.staged.refreshLimit(info);
+  assert.equal(known.local.memosUploadLimits[account].bytes, 8 * MB);
+  assert.ok(Date.now() - known.local.memosUploadLimits[account].at < 5000);
+  assert.equal(await known.staged.limit(), 8 * MB);
+  await known.staged.refreshLimit(info);
+  assert.equal(known.calls.length, 1, 'a limit less than a day old is not asked for again');
+
+  const legacy = loadStagedFiles({
+    responder: () => {
+      throw { status: 404 };
+    },
+    sync: connection
+  });
+  await legacy.staged.refreshLimit(info);
+  assert.equal(legacy.local.memosUploadLimits[account].bytes, 30 * MB);
+  const asked = legacy.calls.length;
+  await legacy.staged.refreshLimit(info);
+  assert.equal(legacy.calls.length, asked, 'a server without the route is not asked on every opening');
+});
+
+test('a refresh that fails changes nothing, never rejects, and is tried again', async () => {
+  const failing = loadStagedFiles({
+    responder: () => {
+      throw { status: 500 };
+    },
+    sync: connection
+  });
+  await failing.staged.refreshLimit(info);
+  await failing.staged.refreshLimit(info);
+  assert.equal(failing.calls.length, 2);
+  assert.deepEqual(failing.local, {});
+  const unwritable = loadStagedFiles({ responder: () => ({ limits: { uploadBytes: '1048576' } }), sync: connection });
+  unwritable.context.chrome.storage.local.set = () => {
+    throw new Error('quota exceeded');
+  };
+  await unwritable.staged.refreshLimit(info);
+  assert.equal(await unwritable.staged.limit(), 30 * MB);
+});

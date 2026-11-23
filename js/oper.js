@@ -369,8 +369,20 @@ async function addFiles(files) {
   if (!files.length || memoSaveInProgress) return;
   pendingUploads++;
   try {
+    const limit = await StagedFiles.limit();
     const references = [];
-    for (const file of files) references.push(await StagedFiles.stage(file, file.name));
+    for (const file of files) {
+      try {
+        references.push(await StagedFiles.stage(file, file.name, undefined, false, limit));
+      } catch (error) {
+        if (error.message !== 'fileTooLarge') throw error;
+        const message = uiMessage('fileTooLarge')
+          .replace('{name}', () => file.name || 'attachment')
+          .replace('{limit}', (limit / 1048576).toFixed(1) + ' MB');
+        $.message({ message });
+      }
+    }
+    if (!references.length) return;
     add(references.join('\n'));
     await DraftEditor.flush();
     $.message({ message: uiMessage('fileStaged') });

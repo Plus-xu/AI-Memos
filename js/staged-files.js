@@ -3,6 +3,8 @@
 /** Draft attachment bytes stay in IndexedDB until the user saves the memo. */
 var StagedFiles = (function () {
   const prefix = 'memos-local://';
+  // A file goes up as base64 inside one JSON request, so it is refused here before it can fail there.
+  const DEFAULT_LIMIT = 30 * 1024 * 1024;
   let database;
 
   function open() {
@@ -29,7 +31,8 @@ var StagedFiles = (function () {
     });
   }
 
-  async function stage(blob, filename, label, reuse = false) {
+  async function stage(blob, filename, label, reuse = false, limit) {
+    if (limit !== undefined && blob.size > limit) throw new Error('fileTooLarge');
     const name = (filename || 'attachment').replace(/[\r\n]/g, ' ');
     let id = crypto.randomUUID();
     if (reuse) {
@@ -49,6 +52,44 @@ var StagedFiles = (function () {
     return (
       (blob.type.startsWith('image/') ? '!' : '') + '[' + alt.replace(/[\\[\]]/g, '\\$&') + '](' + prefix + id + ')'
     );
+  }
+
+  function limits(stored) {
+    return stored && typeof stored === 'object' ? stored : {};
+  }
+
+  /** The largest file to stage for the connected account, in bytes. Never asks the server. */
+  async function limit() {
+    try {
+      const sync = await DraftStorage.get('sync', { apiUrl: '', userName: '', userid: '' });
+      const account = DraftStorage.scope({
+        ...sync,
+        apiUrl: String(sync.apiUrl).trim().replace(/\/+$/, '') + '/'
+      });
+      const known = limits((await DraftStorage.get('local', { memosUploadLimits: {} })).memosUploadLimits)[account];
+      return Number.isSafeInteger(known?.bytes) && known.bytes > 0 ? known.bytes : DEFAULT_LIMIT;
+    } catch (_) {
+      return DEFAULT_LIMIT;
+    }
+  }
+
+  /** Asks the server for the account's limit when the remembered one is a day old. For pages only. */
+  async function refreshLimit(info) {
+    try {
+      const account = DraftStorage.scope(info);
+      const read = async () => limits((await DraftStorage.get('local', { memosUploadLimits: {} })).memosUploadLimits);
+      const known = (await read())[account];
+      if (known && Date.now() - known.at < 86400000) return;
+      // A server that does not say is remembered too, so it is not asked on every opening.
+      const bytes = (await MemosAPI.uploadLimit(info)) || DEFAULT_LIMIT;
+      await DraftStorage.locked('memos-upload-limits', async () => {
+        const all = await read();
+        all[account] = { bytes, at: Date.now() };
+        await DraftStorage.put('local', { memosUploadLimits: all });
+      });
+    } catch (_) {
+      /* The default limit applies until a later opening succeeds. */
+    }
   }
 
   function base64(blob) {
@@ -135,5 +176,5 @@ var StagedFiles = (function () {
     return stage(blob, name || 'image.' + blob.type.slice(6).split('+')[0], label, true);
   }
 
-  return { stage, fromUrl, resolve, collect, ids };
+  return { DEFAULT_LIMIT, limit, refreshLimit, stage, fromUrl, resolve, collect, ids };
 })();

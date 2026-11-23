@@ -229,6 +229,23 @@ const MemosAPI = (function () {
     );
   }
 
+  // The largest attachment the server takes from this user, in bytes, or null when it does not say.
+  function uploadLimit(info) {
+    var user = /^users\/([^/]+)$/.exec(info.userName || '');
+    if (!user) return Promise.resolve(null);
+    return request(info, { path: 'users/' + encodeURIComponent(user[1]) + '/usage' }).then(
+      function (usage) {
+        var value = usage && usage.limits && usage.limits.uploadBytes;
+        var bytes = /^\d+$/.test(String(value)) ? Number(value) : 0;
+        return Number.isSafeInteger(bytes) && bytes > 0 ? bytes : null;
+      },
+      function (xhr) {
+        if (isMissingRoute(xhr) || [400, 405, 501].includes(xhr && xhr.status)) return null;
+        throw xhr;
+      }
+    );
+  }
+
   function buildContentFilter(pattern) {
     return 'content.contains(' + JSON.stringify(String(pattern)) + ')';
   }
@@ -434,6 +451,7 @@ const MemosAPI = (function () {
     listMemoPage,
     listSpaces,
     userTags,
+    uploadLimit,
     isMissingRoute,
     buildContentFilter: buildContentFilter,
     getMemo: getMemo,

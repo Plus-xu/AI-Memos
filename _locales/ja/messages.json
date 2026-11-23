@@ -452,6 +452,9 @@
   "fileStaged": {
     "message": "添付ファイルを下書きに追加しました"
   },
+  "fileTooLarge": {
+    "message": "{name} はアップロード上限（{limit}）を超えているため、下書きに追加されませんでした。"
+  },
   "imageCaptureFailed": {
     "message": "画像を読み込めません。下書きに貼り付けてください。"
   },

@@ -94,6 +94,8 @@ var Workspace = (function () {
     el('saveStatus').hidden = true;
     renderSpaces();
     if (!info.status) return;
+    // Runs again when the account changes; it never rejects.
+    StagedFiles.refreshLimit(info);
     const key = 'memosDestination:' + DraftStorage.scope(info),
       listKey = 'memosSpaces:' + DraftStorage.scope(info);
     const stored = await DraftStorage.get('local', { [key]: null, [listKey]: null });
