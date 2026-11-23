@@ -369,23 +369,34 @@ async function addFiles(files) {
   if (!files.length || memoSaveInProgress) return;
   pendingUploads++;
   try {
-    const limit = await StagedFiles.limit();
-    const references = [];
-    for (const file of files) {
-      try {
-        references.push(await StagedFiles.stage(file, file.name, undefined, false, limit));
-      } catch (error) {
-        if (error.message !== 'fileTooLarge') throw error;
-        const message = uiMessage('fileTooLarge')
-          .replace('{name}', () => file.name || 'attachment')
-          .replace('{limit}', (limit / 1048576).toFixed(1) + ' MB');
-        $.message({ message });
+    let limit = await StagedFiles.limit();
+    if (files.some(file => file.size > limit)) {
+      // The remembered limit may have been raised on the server since: ask before refusing.
+      const info = await new Promise(resolve => get_info(resolve));
+      if (info.status) {
+        await StagedFiles.refreshLimit(info, true);
+        limit = await StagedFiles.limit();
       }
     }
-    if (!references.length) return;
-    add(references.join('\n'));
-    await DraftEditor.flush();
-    $.message({ message: uiMessage('fileStaged') });
+    const references = [],
+      refused = [];
+    for (const file of files) {
+      if (file.size > limit) refused.push(file.name || 'attachment');
+      else references.push(await StagedFiles.stage(file, file.name, undefined, false, limit));
+    }
+    if (references.length) {
+      add(references.join('\n'));
+      await DraftEditor.flush();
+    }
+    // One message for the whole selection: a second one would replace the first on screen.
+    if (refused.length)
+      $.message({
+        message: uiMessage('fileTooLarge')
+          .replace('{limit}', (limit / 1048576).toFixed(1) + ' MB')
+          .replace('{name}', () => refused.join(', ')),
+        time: 6000
+      });
+    else $.message({ message: uiMessage('fileStaged') });
   } catch (_) {
     $.message({ message: uiMessage('picFailed') });
   } finally {
@@ -703,6 +714,8 @@ async function sendText() {
     if (['draftChanged', 'spaceUnavailable', 'stagedFileMissing', 'unconfirmedSave'].includes(error.message))
       $.message({ message: uiMessage(error.message) });
     else showApiError('Save memo', error, uiMessage('memoFailed'));
+    // The server took less than the remembered limit allows.
+    if (error && error.status === 413) get_info(info => info.status && StagedFiles.refreshLimit(info, true));
   } finally {
     memoSaveInProgress = false;
     $('#content').prop('readOnly', false);

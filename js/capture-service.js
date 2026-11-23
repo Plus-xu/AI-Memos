@@ -6,9 +6,21 @@ var CaptureService = (function () {
   const MAX_IMAGES = 30,
     MAX_BYTES = 60 * 1024 * 1024;
 
+  // The address under which the connected Memos serves its files, or '' when there is none.
+  async function ownFiles() {
+    try {
+      const { apiUrl } = await DraftStorage.get('sync', { apiUrl: '' });
+      return apiUrl ? new URL('file/', String(apiUrl).trim().replace(/\/+$/, '') + '/').href : '';
+    } catch (_) {
+      return '';
+    }
+  }
+
   // An image left on its own server: an embed when it has a web address, else its description.
-  function remoteImage(image) {
+  function remoteImage(image, own) {
     if (!/^https?:/i.test(image.url)) return image.alt || '';
+    // Saving a memo binds the Memos files it embeds to it, so a file of another memo is never embedded.
+    if (own && image.url.startsWith(own)) return image.alt || image.url;
     const alt = (image.alt || '').replace(/[\\[\]]/g, '\\$&').replace(/[\r\n]+/g, ' ');
     return '![' + alt + '](' + image.url.replaceAll('(', '%28').replaceAll(')', '%29') + ')';
   }
@@ -30,6 +42,7 @@ var CaptureService = (function () {
     const url = ClipperCore.safeUrl(info.frameUrl || info.pageUrl || tab.url);
     let page = { url, title: tab.title || url, kind: 'selection', images: [] };
     const budget = { each: await StagedFiles.limit(), left: MAX_BYTES };
+    const own = await ownFiles();
     if (mode === 'image') {
       let src = info.srcUrl;
       if (String(src).startsWith('blob:')) {
@@ -65,7 +78,7 @@ var CaptureService = (function () {
             return await StagedFiles.fromUrl(image.url, image.alt, budget);
           } catch (error) {
             partial = true;
-            if (error.message === 'imageTooLarge') return remoteImage(image);
+            if (error?.message === 'imageTooLarge') return remoteImage(image, own);
             return image.alt || (image.url.startsWith('http') ? image.url : '');
           }
         })
@@ -74,7 +87,8 @@ var CaptureService = (function () {
         page.text = page.text.replace(image.marker, () => replacements[i]);
       });
     }
-    for (const image of images.slice(MAX_IMAGES)) page.text = page.text.replace(image.marker, () => remoteImage(image));
+    for (const image of images.slice(MAX_IMAGES))
+      page.text = page.text.replace(image.marker, () => remoteImage(image, own));
     if (!page.text?.trim()) throw new Error('emptySelection');
     const prefs = await DraftStorage.get('local', { memosClipTemplate: ClipperCore.defaultTemplate });
     let template = prefs.memosClipTemplate;

@@ -68,10 +68,11 @@
 - Create: `tests/capture-service.test.cjs`
 
 **Interfaces:**
-- `StagedFiles.fromUrl(raw, label, budget)`：`budget` 形如 `{ each, left }`（字节）。响应头 `Content-Length` 大于 `min(each, left)` 时不读正文直接抛 `imageCaptureFailed`；读到的 `blob.size` 超过时同样抛出；成功后 `budget.left -= blob.size`。不给 `budget` 时行为不变。
+- `StagedFiles.fromUrl(raw, label, budget)`：`budget` 形如 `{ each, left }`（字节）。响应头 `Content-Length` 大于 `min(each, left)` 时不读正文、取消响应体并抛 `imageTooLarge`；读到的 `blob.size` 超过时同样抛出；成功后 `budget.left -= blob.size`。不给 `budget` 时行为不变。
 - `CaptureService.add`：
   - 开始时 `budget = { each: await StagedFiles.limit(), left: 60 * 1024 * 1024 }`。
-  - 只抓前 30 张；其余以及抓取失败的图片替换为 `remoteImage(image)`：地址是 http(s) 时为 `![说明](地址)`（说明里的方括号和反斜杠转义，地址里的括号写成 `%28` `%29`），否则为说明文字。两种情况都置 `partial = true`。
+  - 只抓前 30 张；其余以及因 `imageTooLarge` 被拒的图片替换为 `remoteImage(image)`：地址是 http(s) 时为 `![说明](地址)`（说明里的方括号和反斜杠转义，地址里的括号写成 `%28` `%29`），否则为说明文字；地址是用户自己实例的附件时不嵌入（保存时会被绑定到新笔记），退回说明文字或裸地址。都置 `partial = true`。
+  - 其他原因抓取失败的图片沿用原有回退（说明文字或裸地址），不改成远程链接（实施时的裁定：规格只要求超出上限的保留为远程链接）。
   - 右键剪藏单张图片（`mode === 'image'`）也带 `budget`；超限时照旧整体失败。
 - `loadCapture({ page, fetcher, sync, local })`：在 Service Worker 的替身环境里加载 `draft-storage`、`clipper-core`、`staged-files`、`capture-service`；`chrome.scripting.executeScript` 的第二次调用返回 `page`；返回 `{ capture: CaptureService, files, local, requests }`。
 
@@ -80,7 +81,7 @@
   - 单张超过上限：该张保留远程链接，其余照常；`partial: true`。
   - 总量：每张 25 MB（上限按 30 MB），第三张起保留远程链接（60 MB 预算）。用声明大小的假 Blob，不真的分配内存。
   - `Content-Length` 超限：不调用 `blob()`。没有 `Content-Length` 而实际超限：被拒绝。
-  - 抓取失败的图片：也是 `![说明](原地址)`（原来只剩说明文字）；`data:` 图片失败时只剩说明文字。
+  - 抓取失败的图片：与原来一样只剩说明文字；`data:` 图片超限时也只剩说明文字。
   - 说明里有 `]`、地址里有 `)`：生成的 Markdown 仍是一个完整的图片链接。
   - 右键单张图片超限：`add` 抛错，草稿不变。
   - 不超限的 3 张图：行为与现在一致，`partial: false`。

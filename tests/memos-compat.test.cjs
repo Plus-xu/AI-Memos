@@ -1153,7 +1153,8 @@ test('a file over the limit is refused by name while the other chosen files are 
   await popup.context.addFiles([file('a.txt'), hugeFile('big.zip', 30 * MB + 1), file('c.txt')]);
   const draft = popup.node('#content').val();
   assert.match(draft, /^\[a\.txt\]\(memos-local:\/\/[a-f0-9-]{36}\)\n\[c\.txt\]\(memos-local:\/\/[a-f0-9-]{36}\)$/);
-  assert.deepEqual(popup.messages, ['too large: big.zip > 30.0 MB', 'fileStaged']);
+  // A later message would replace the refusal on screen, so the refusal is the only one.
+  assert.deepEqual(popup.messages, ['too large: big.zip > 30.0 MB']);
   assert.equal(popup.storage.memosDraft.open_content, draft);
   assert.equal(popup.context.pendingUploads, 0);
 });
@@ -1162,18 +1163,24 @@ test('when every chosen file is over the limit the draft stays as it was', async
   const popup = await popupForFiles({ open_content: 'draft text' });
   await popup.context.addFiles([hugeFile('one.zip', 31 * MB), hugeFile('two.zip', 40 * MB)]);
   assert.equal(popup.node('#content').val(), 'draft text');
-  assert.deepEqual(popup.messages, ['too large: one.zip > 30.0 MB', 'too large: two.zip > 30.0 MB']);
+  assert.deepEqual(popup.messages, ['too large: one.zip, two.zip > 30.0 MB']);
+});
+
+test('a refused file whose name looks like a placeholder is still named literally', async () => {
+  const popup = await popupForFiles();
+  await popup.context.addFiles([hugeFile('{limit}.zip', 31 * MB)]);
+  assert.deepEqual(popup.messages, ['too large: {limit}.zip > 30.0 MB']);
 });
 
 test('the limit the server gave replaces the default, in both directions', async () => {
   const limits = bytes => ({ memosUploadLimits: { [scope]: { bytes, at: Date.now() } } });
-  const small = await popupForFiles(limits(1.5 * MB));
+  const small = await popupForFiles(limits(1.5 * MB), { uploadLimit: async () => 1.5 * MB });
   await small.context.addFiles([hugeFile('two.zip', 2 * MB)]);
   assert.deepEqual(small.messages, ['too large: two.zip > 1.5 MB']);
   const large = await popupForFiles(limits(64 * MB));
   await large.context.addFiles([file('ok.txt')]);
   assert.deepEqual(large.messages, ['fileStaged']);
-  const exact = await popupForFiles(limits(10));
+  const exact = await popupForFiles(limits(10), { uploadLimit: async () => 10 });
   await exact.context.addFiles([file('ten.txt', '0123456789'), file('eleven.txt', '0123456789a')]);
   assert.match(exact.node('#content').val(), /^\[ten\.txt\]\([^)]+\)$/);
 });
@@ -1198,4 +1205,56 @@ test('an opened popup asks the server for the upload limit once a day and rememb
   await flush();
   assert.equal(asked, 2, 'nothing is asked without a connection');
   assert.equal(offline.storage.memosUploadLimits, undefined);
+});
+
+test('before refusing a file the limit is asked for again, so a limit raised on the server applies at once', async () => {
+  let asked = 0;
+  const popup = await popupForFiles(
+    { memosUploadLimits: { [scope]: { bytes: MB, at: Date.now() } } },
+    {
+      uploadLimit: async () => {
+        asked++;
+        return 64 * MB;
+      }
+    }
+  );
+  await popup.context.addFiles([file('small.txt')]);
+  assert.equal(asked, 0, 'files within the remembered limit ask nothing');
+  await popup.context.addFiles([file('two.bin', 'x'.repeat(2 * MB))]);
+  assert.equal(asked, 1);
+  assert.deepEqual(popup.messages, ['fileStaged', 'fileStaged']);
+  assert.equal(popup.storage.memosUploadLimits[scope].bytes, 64 * MB);
+  assert.match(popup.node('#content').val(), /\[two\.bin\]\(memos-local:/);
+});
+
+test('when the limit cannot be asked for again, the remembered one decides', async () => {
+  const popup = await popupForFiles(
+    { memosUploadLimits: { [scope]: { bytes: MB, at: Date.now() } } },
+    { uploadLimit: async () => Promise.reject(refused(500)) }
+  );
+  await popup.context.addFiles([hugeFile('two.zip', 2 * MB)]);
+  assert.deepEqual(popup.messages, ['too large: two.zip > 1.0 MB']);
+  assert.equal(popup.storage.memosUploadLimits[scope].bytes, MB);
+});
+
+test('an upload the server refuses as too large makes the popup ask for the limit again', async () => {
+  let asked = 0;
+  const popup = await loadPopup(
+    {
+      uploadLimit: async () => {
+        asked++;
+        return 4 * MB;
+      }
+    },
+    { memosUploadLimits: { [scope]: { bytes: 64 * MB, at: Date.now() } } }
+  );
+  popup.context.StagedFiles.resolve = async () => {
+    throw refused(413);
+  };
+  await popup.context.sendText();
+  await flush();
+  assert.equal(popup.messages.at(-1), 'uploadTooLarge');
+  assert.equal(asked, 1);
+  assert.equal(popup.storage.memosUploadLimits[scope].bytes, 4 * MB);
+  assert.equal(popup.node('#content').val(), 'draft text');
 });

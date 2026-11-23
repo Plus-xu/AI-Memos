@@ -21,6 +21,12 @@ function imageResponse(size, { length = String(size), type = 'image/png' } = {})
   const response = {
     ok: true,
     read: false,
+    cancelled: false,
+    body: {
+      cancel() {
+        response.cancelled = true;
+      }
+    },
     headers: { get: name => (name.toLowerCase() === 'content-length' ? length : null) },
     blob: async () => {
       response.read = true;
@@ -116,7 +122,32 @@ test('images stop being staged once 60 MB are used, and a smaller one that still
 test('a declared length over the limit is refused without reading the body', async () => {
   const { lines, responses } = await capture(pageWith(1), () => imageResponse(10, { length: String(31 * MB) }));
   assert.equal(responses[0].read, false);
+  assert.equal(responses[0].cancelled, true, 'an unread body would hold its connection');
   assert.equal(lines[0], '![image 0](https://images.example/0.png)');
+});
+
+test("an image left remote that is a file of the user's own Memos is not embedded", async () => {
+  // An embed of a managed file would be bound to the new memo when it is saved.
+  const sync = { apiUrl: 'https://memos.example/notes/', userName: 'users/tester' };
+  const own = i => ({ url: 'https://memos.example/notes/file/attachments/a' + i + '/p.png' });
+  const tooBig = await capture(
+    pageWith(2, i => (i ? own(i) : {})),
+    () => imageResponse(31 * MB),
+    { sync }
+  );
+  assert.deepEqual(tooBig.lines, ['![image 0](https://images.example/0.png)', 'image 1']);
+  const tooMany = await capture(
+    pageWith(31, i => (i === 30 ? { ...own(i), alt: '' } : {})),
+    undefined,
+    { sync }
+  );
+  assert.equal(tooMany.lines[30], 'https://memos.example/notes/file/attachments/a30/p.png');
+  const elsewhere = await capture(
+    pageWith(1, () => ({ url: 'https://memos.example/other/file/attachments/a/p.png' })),
+    () => imageResponse(31 * MB),
+    { sync }
+  );
+  assert.deepEqual(elsewhere.lines, ['![image 0](https://memos.example/other/file/attachments/a/p.png)']);
 });
 
 test('an image with no declared length, or a false one, is judged by the bytes received', async () => {

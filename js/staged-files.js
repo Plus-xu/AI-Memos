@@ -73,13 +73,13 @@ var StagedFiles = (function () {
     }
   }
 
-  /** Asks the server for the account's limit when the remembered one is a day old. For pages only. */
-  async function refreshLimit(info) {
+  /** Asks the server for the account's limit when the remembered one is a day old, or on `force`. For pages only. */
+  async function refreshLimit(info, force) {
     try {
       const account = DraftStorage.scope(info);
       const read = async () => limits((await DraftStorage.get('local', { memosUploadLimits: {} })).memosUploadLimits);
       const known = (await read())[account];
-      if (known && Date.now() - known.at < 86400000) return;
+      if (!force && known && Date.now() - known.at < 86400000) return;
       // A server that does not say is remembered too, so it is not asked on every opening.
       const bytes = (await MemosAPI.uploadLimit(info)) || DEFAULT_LIMIT;
       await DraftStorage.locked('memos-upload-limits', async () => {
@@ -169,7 +169,15 @@ var StagedFiles = (function () {
     if (!response.ok) throw new Error('imageCaptureFailed');
     const room = () => (budget ? Math.min(budget.each, budget.left) : Infinity);
     // A declared length saves the download; the bytes that arrive decide either way.
-    if (Number(response.headers?.get('content-length')) > room()) throw new Error('imageTooLarge');
+    if (Number(response.headers?.get('content-length')) > room()) {
+      // An unread body would hold its connection until the timeout.
+      try {
+        Promise.resolve(response.body?.cancel()).catch(() => {});
+      } catch (_) {
+        /* nothing left to cancel */
+      }
+      throw new Error('imageTooLarge');
+    }
     const blob = await response.blob();
     if (!blob.type.startsWith('image/')) throw new Error('imageCaptureFailed');
     if (blob.size > room()) throw new Error('imageTooLarge');

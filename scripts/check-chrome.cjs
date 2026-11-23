@@ -359,14 +359,27 @@ async function main() {
       );
     };
     await reopenWithLimit(10);
-    const staged = fixture.attachments.size;
     await panel.locator('#inFile').setInputFiles(path.join(extension, 'assets', 'logo_24x24.png'));
     await waitFor(panel, () => document.querySelector('.tip')?.textContent.includes('logo_24x24.png'));
     assert.equal(await panel.inputValue('#content'), draft);
-    assert.equal(fixture.attachments.size, staged);
+    await panel.locator('#inFile').setInputFiles([
+      { name: 'tiny.txt', mimeType: 'text/plain', buffer: Buffer.from('tiny') },
+      {
+        name: 'logo_24x24.png',
+        mimeType: 'image/png',
+        buffer: await fs.readFile(path.join(extension, 'assets', 'logo_24x24.png'))
+      }
+    ]);
+    await waitFor(panel, () => document.getElementById('content').value.includes('[tiny.txt](memos-local://'));
+    // The refusal must still be the message on screen once the smaller file has been added.
+    await new Promise(resolve => setTimeout(resolve, 400));
+    assert.match(await panel.locator('.tip').textContent(), /logo_24x24\.png/);
+    assert.doesNotMatch(await panel.inputValue('#content'), /logo_24x24/);
+    await panel.fill('#content', draft);
+    await waitFor(panel, async text => (await DraftStorage.current()).open_content === text, draft);
     await reopenWithLimit(33554432);
     assert.equal(await panel.inputValue('#content'), draft);
-    pass('A file over the upload limit the server reports is refused by name and never reaches the draft');
+    pass('A file over the upload limit the server reports is refused by name, alone or among smaller files');
     await article.goto(fixture.base + '/short');
     await capture(page, 'capturePage');
     await waitFor(page, () => document.getElementById('content').value.includes('目录与索引'));
