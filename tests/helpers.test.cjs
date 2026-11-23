@@ -136,6 +136,17 @@ test('page stand-in: an element lists the options given to it, and replacing its
   assert.notEqual(select.options, before, 'a redraw is visible as a new list');
 });
 
+test('page stand-in: appended markup is added to what html() returns, and html(value) starts over', () => {
+  const { $ } = createDom();
+  const list = $('#list');
+  list.html('<p>a</p>').append('<p>b</p>').append('<p>c</p>');
+  assert.equal(list.html(), '<p>a</p><p>b</p><p>c</p>');
+  list.append($('#button'));
+  assert.equal(list.html(), '<p>a</p><p>b</p><p>c</p>', 'only markup is kept; appended elements are not');
+  list.html('');
+  assert.equal(list.html(), '');
+});
+
 /** Opens the stand-in the way a script would, creating one key-path store on first use. */
 function openFiles(indexedDB, upgrades = []) {
   return new Promise(resolve => {

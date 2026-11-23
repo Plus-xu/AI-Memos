@@ -11,8 +11,7 @@ const inert = [
   'css',
   'focus',
   'toggle',
-  'empty',
-  'append'
+  'empty'
 ];
 
 /** What `new Option(text, value)` gives a page. */
@@ -100,6 +99,11 @@ function createDom() {
       html(value) {
         if (value === undefined) return this.htmlValue || '';
         this.htmlValue = value;
+        return this;
+      },
+      // Markup adds to html(); an appended element is not kept.
+      append(content) {
+        if (typeof content === 'string') this.htmlValue = (this.htmlValue || '') + content;
         return this;
       },
       attr(key, value) {

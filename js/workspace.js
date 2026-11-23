@@ -1,4 +1,4 @@
-/* global DraftEditor, DraftStorage, MemosAPI, StagedFiles, clearMemoList, dismissArchiveNotice, get_info, renderMemoList, resolveVisibility, showApiError, uiMessage */
+/* global DraftEditor, DraftStorage, MemosAPI, StagedFiles, appendMemoList, clearMemoList, dismissArchiveNotice, get_info, renderMemoList, resolveVisibility, showApiError, uiMessage */
 /* exported Workspace */
 /** Shared editor navigation, destinations, server search and local clip history. */
 var Workspace = (function () {
@@ -171,8 +171,7 @@ var Workspace = (function () {
   }
 
   function renderResults() {
-    if (results.length) renderMemoList(account, results);
-    else clearMemoList();
+    renderMemoList(account, results);
   }
 
   function show(memos) {
@@ -221,9 +220,11 @@ var Workspace = (function () {
       if (page.next && seen.has(page.next)) throw new Error('invalid_page_token');
       if (page.next) seen.add(page.next);
       const ids = new Set(results.map(item => item.name));
-      results.push(...page.memos.filter(item => !ids.has(item.name) && ids.add(item.name)));
+      const fresh = page.memos.filter(item => !ids.has(item.name) && ids.add(item.name));
+      results.push(...fresh);
       nextPage = page.next;
-      renderMemoList(account, results);
+      if (more) appendMemoList(account, fresh);
+      else renderResults();
       el('searchStatus').textContent = results.length ? '' : uiMessage('noSearchResults');
       el('searchMore').hidden = !nextPage;
     } catch (error) {

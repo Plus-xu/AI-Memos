@@ -921,3 +921,128 @@ test('remembered spaces that are not a list of space names are ignored', async (
     assert.deepEqual(spaceOptions(popup), [''], JSON.stringify(junk));
   }
 });
+
+/**
+ * Search results whose memos each hold one private image, named after the memo. `images()` are the image
+ * elements now in the list: an element lasts until the list is redrawn, and `sources` is every src it got.
+ */
+async function imagePopup(overrides = {}) {
+  const reads = [],
+    revoked = [];
+  const memo = id => ({ name: 'memos/' + id, content: '![p](/file/attachments/' + id + '/p.png)' });
+  const popup = await loadPopup({
+    listMemoPage: async (_, query) =>
+      new URLSearchParams(query).get('pageToken')
+        ? { memos: [memo('c')], next: '' }
+        : { memos: [memo('a'), memo('b')], next: 'p2' },
+    fetchAttachmentBlob: async (_, url) => {
+      reads.push(url.split('/').at(-2));
+      return new Blob(['image'], { type: 'image/png' });
+    },
+    archiveMemo: async () => ({}),
+    restoreMemo: async () => ({}),
+    ...overrides
+  });
+  let created = 0;
+  popup.context.URL.createObjectURL = () => 'blob:' + ++created;
+  popup.context.URL.revokeObjectURL = url => revoked.push(url);
+  const list = popup.node('#randomlist'),
+    html = list.html;
+  let elements = [],
+    parsed = 0;
+  list.html = function (value) {
+    if (value !== undefined) {
+      elements = [];
+      parsed = 0;
+    }
+    return html.call(this, value);
+  };
+  popup.document.querySelectorAll = selector => {
+    if (!selector.includes('img[data-memos-file]')) return [];
+    const markup = list.html();
+    for (const [, url] of markup.slice(parsed).matchAll(/<img[^>]* data-memos-file="([^"]+)"/g)) {
+      const attributes = new Map([['data-memos-file', url]]);
+      elements.push({
+        id: url.split('/').at(-2),
+        sources: [],
+        getAttribute: name => attributes.get(name),
+        removeAttribute: name => attributes.delete(name),
+        has: name => attributes.has(name),
+        set src(value) {
+          this.sources.push(value);
+        }
+      });
+    }
+    parsed = markup.length;
+    return elements.filter(element => element.has('data-memos-file'));
+  };
+  const search = async () => {
+    popup.document.getElementById('searchForm').onsubmit({ preventDefault() {} });
+    await flush();
+  };
+  await search();
+  const summary = () => elements.map(element => element.id + ':' + element.sources.length).join(' ');
+  return { popup, reads, revoked, search, images: () => elements, summary };
+}
+
+test('loading more keeps the first page and downloads only the new images', async () => {
+  const { popup, reads, revoked, images, summary } = await imagePopup();
+  assert.deepEqual(reads, ['a', 'b']);
+  const first = images().slice();
+  popup.document.getElementById('searchMore').onclick();
+  await flush();
+  assert.deepEqual(reads, ['a', 'b', 'c']);
+  assert.equal(images()[0], first[0], 'the first page must stay in place');
+  assert.equal(images()[1], first[1]);
+  assert.equal(summary(), 'a:1 b:1 c:1');
+  assert.deepEqual(revoked, []);
+});
+
+test('archiving and restoring a result redraws the list from the images already downloaded', async () => {
+  const { popup, reads, revoked, summary } = await imagePopup();
+  await popup.context.archiveMemoByName('memos/a');
+  assert.equal(summary(), 'b:1');
+  await popup.context.undoArchive();
+  assert.equal(summary(), 'a:1 b:1');
+  assert.deepEqual(reads, ['a', 'b']);
+  assert.deepEqual(revoked, []);
+
+  const single = await imagePopup({
+    listMemoPage: async () => ({ memos: [{ name: 'memos/a', content: '![p](/file/attachments/a/p.png)' }], next: '' })
+  });
+  await single.popup.context.archiveMemoByName('memos/a');
+  assert.equal(single.popup.node('#randomlist').html(), '');
+  await single.popup.context.undoArchive();
+  assert.equal(single.summary(), 'a:1');
+  assert.deepEqual(single.reads, ['a']);
+});
+
+test('a new search releases every downloaded image and downloads again', async () => {
+  const { reads, revoked, search, summary } = await imagePopup();
+  await search();
+  assert.deepEqual(revoked, ['blob:1', 'blob:2']);
+  assert.deepEqual(reads, ['a', 'b', 'a', 'b']);
+  assert.equal(summary(), 'a:1 b:1');
+});
+
+test('an image that failed to download is tried again on the next redraw', async () => {
+  let failed = false;
+  const reads = [];
+  const { popup, images, summary } = await imagePopup({
+    fetchAttachmentBlob: async (_, url) => {
+      const id = url.split('/').at(-2);
+      reads.push(id);
+      if (id === 'a' && !failed) {
+        failed = true;
+        throw refused(500);
+      }
+      return new Blob(['image'], { type: 'image/png' });
+    }
+  });
+  assert.equal(summary(), 'a:0 b:1');
+  assert.equal(images()[0].alt, 'attachmentPreviewFailed');
+  await popup.context.archiveMemoByName('memos/b');
+  await flush();
+  assert.deepEqual(reads, ['a', 'b', 'a']);
+  assert.equal(summary(), 'a:1');
+});

@@ -1,5 +1,5 @@
 /* global AIReview, DraftEditor, DraftStorage, MemoTags, MemosAPI, StagedFiles, Workspace, uiMessage */
-/* exported resolveVisibility, clearMemoList, renderMemoList */
+/* exported resolveVisibility, clearMemoList, renderMemoList, appendMemoList */
 function relativeTime(value, lang, now) {
   var time = value === '' || value == null ? NaN : new Date(value).getTime();
   if (Number.isNaN(time)) return '';
@@ -25,7 +25,9 @@ function relativeTime(value, lang, now) {
 
 var memoSaveInProgress = false;
 var pendingUploads = 0;
+// Private images downloaded for the results on screen, by file URL. They last until the list is cleared.
 var previewGeneration = 0;
+var previewFiles = new Map();
 var previewObjectUrls = new Set();
 var previewController = null;
 
@@ -207,6 +209,7 @@ function releaseMemoPreviews() {
     URL.revokeObjectURL(url);
   });
   previewObjectUrls.clear();
+  previewFiles.clear();
 }
 
 function clearMemoList() {
@@ -214,26 +217,29 @@ function clearMemoList() {
   $('#randomlist').html('').hide();
 }
 
+// Fills the images that have not been asked for yet; an image keeps data-memos-file until then.
 function hydrateMemoImages(info) {
   var generation = previewGeneration;
-  previewController = new AbortController();
+  if (!previewController) previewController = new AbortController();
   var signal = previewController.signal;
-  var files = new Map();
   document.querySelectorAll('#randomlist img[data-memos-file]').forEach(function (element) {
     var url = element.getAttribute('data-memos-file');
-    if (!files.has(url)) {
-      files.set(
-        url,
-        MemosAPI.fetchAttachmentBlob(info, url, signal).then(function (blob) {
-          if (generation !== previewGeneration) return '';
-          if (!blob.type.startsWith('image/')) throw new Error('invalid_image_response');
-          var objectUrl = URL.createObjectURL(blob);
-          previewObjectUrls.add(objectUrl);
-          return objectUrl;
-        })
-      );
+    element.removeAttribute('data-memos-file');
+    if (!previewFiles.has(url)) {
+      var download = MemosAPI.fetchAttachmentBlob(info, url, signal).then(function (blob) {
+        if (generation !== previewGeneration) return '';
+        if (!blob.type.startsWith('image/')) throw new Error('invalid_image_response');
+        var objectUrl = URL.createObjectURL(blob);
+        previewObjectUrls.add(objectUrl);
+        return objectUrl;
+      });
+      previewFiles.set(url, download);
+      // A failed download is forgotten, so the next redraw asks again.
+      download.catch(function () {
+        if (previewFiles.get(url) === download) previewFiles.delete(url);
+      });
     }
-    files
+    previewFiles
       .get(url)
       .then(function (objectUrl) {
         if (!objectUrl || generation !== previewGeneration) return;
@@ -302,14 +308,26 @@ function buildMemoHtml(info, memo) {
   return itemHtml;
 }
 
-function renderMemoList(info, memos) {
-  releaseMemoPreviews();
+function memoListHtml(info, memos) {
   var memoHtml = '';
   for (var i = 0; i < memos.length; i++) {
     memoHtml += buildMemoHtml(info, memos[i]);
   }
+  return memoHtml;
+}
 
-  $('#randomlist').html(memoHtml).show();
+// Redraws the results on screen. Their downloaded images are kept; clearMemoList() releases them.
+function renderMemoList(info, memos) {
+  $('#randomlist')
+    .html(memoListHtml(info, memos))
+    .toggle(memos.length > 0);
+  hydrateMemoImages(info);
+  window.ViewImage && ViewImage.init('.random-image');
+}
+
+// Adds a page of results below the ones on screen, which stay as they are.
+function appendMemoList(info, memos) {
+  $('#randomlist').append(memoListHtml(info, memos)).show();
   hydrateMemoImages(info);
   window.ViewImage && ViewImage.init('.random-image');
 }
