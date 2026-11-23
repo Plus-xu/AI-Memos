@@ -27,10 +27,16 @@ var MemoIndex = (function () {
       scanned: raw.scanned === true,
       names: strings(raw.names),
       namesAt: Number(raw.namesAt) || 0,
-      // The tags of the listed memos, as old as the names: the tags of a server without statistics.
+      // The tags of the listed memos: the tags of a server without statistics.
       listed: strings(raw.listed),
-      // Saves and archives of the last minutes; a load that started before one applies it again.
-      recent: Array.isArray(raw.recent) ? raw.recent.filter(change => change && typeof change.at === 'number') : []
+      listedAt: Number(raw.listedAt) || 0,
+      // Counts the changes below. A load notes the count when it begins, in place of a clock: two pages
+      // can change the index within the same millisecond.
+      seq: Number(raw.seq) || 0,
+      // Saves and archives of the last minutes; a load that began before one applies it again.
+      recent: Array.isArray(raw.recent)
+        ? raw.recent.filter(change => change && typeof change.at === 'number' && typeof change.seq === 'number')
+        : []
     };
   }
 
@@ -68,20 +74,22 @@ var MemoIndex = (function () {
       entry.names = [change.add].concat(entry.names).slice(0, LIMIT);
     if (entry.tags && change.tags) entry.tags = sorted(entry.tags.concat(change.tags));
     if (entry.listed && change.tags) entry.listed = sorted(entry.listed.concat(change.tags));
-    // A tag may have lost its last memo, which only the server can tell.
-    if (change.stale) {
-      entry.tagsAt = 0;
-      entry.listed = null;
-    }
+    // A tag may have lost its last memo, which only the server can tell: both lists are due for a check.
+    if (change.stale) entry.tagsAt = entry.listedAt = 0;
     // What another access token was shown is not this one's to keep.
     if (change.reset) entry.tags = entry.names = entry.listed = null;
   }
 
+  // The count of changes so far: what a load notes before it asks the server.
+  async function mark(key) {
+    return (await read(key)).seq;
+  }
+
   // Stores what a load found, then repeats the changes made since the load began.
-  function land(key, startedAt, found) {
+  function land(key, since, found) {
     return update(key, entry => {
       found(entry);
-      for (const change of entry.recent) if (change.at >= startedAt) apply(entry, change);
+      for (const change of entry.recent) if (change.seq > since) apply(entry, change);
     });
   }
 
@@ -97,41 +105,47 @@ var MemoIndex = (function () {
   function scan(info) {
     const key = keyOf(info);
     return once('names ' + key, async () => {
-      const startedAt = Date.now();
+      const since = await mark(key);
       // Older servers may list archived memos too; those are neither reviewed nor tagged.
       const memos = (await MemosAPI.listMemos(info)).filter(
         memo => memo.state !== 'ARCHIVED' && memo.rowStatus !== 'ARCHIVED'
       );
-      const entry = await land(key, startedAt, entry => {
+      const entry = await land(key, since, entry => {
         entry.names = memos
           .map(memo => memo.name)
           .filter(name => typeof name === 'string' && /^memos\/[^/]+$/.test(name))
           .slice(0, LIMIT);
         entry.namesAt = Date.now();
         entry.listed = sorted(memos.flatMap(memo => strings(memo.tags) || []));
+        entry.listedAt = entry.namesAt;
         if (entry.scanned) {
           entry.tags = entry.listed;
           entry.tagsAt = entry.namesAt;
         }
       });
-      return entry;
+      return { names: entry.names, listed: entry.listed, since };
     });
   }
 
   function loadTags(info) {
     const key = keyOf(info);
     return once('tags ' + key, async () => {
-      const startedAt = Date.now();
+      let since = await mark(key);
       const counted = await MemosAPI.userTags(info);
       let listed = [];
       if (!counted) {
         // One listing serves both the names and the tags, whichever asked for it.
         const known = await read(key);
-        const usable = known.listed && Date.now() - known.namesAt < TTL;
-        listed = (usable ? known : await scan(info)).listed || [];
+        if (known.listed && Date.now() - known.listedAt < TTL) listed = known.listed;
+        else {
+          // A listing already on its way began earlier, so the changes since then count again.
+          const listing = await scan(info);
+          listed = listing.listed || [];
+          since = Math.min(since, listing.since);
+        }
       }
-      const entry = await land(key, startedAt, entry => {
-        // The index's own list has every tag saved since the listing began, whenever that was.
+      const entry = await land(key, since, entry => {
+        // The index's own list has every tag saved since its listing began.
         entry.tags = counted ? sorted(counted) : entry.listed || listed;
         entry.tagsAt = Date.now();
         entry.scanned = !counted;
@@ -168,7 +182,8 @@ var MemoIndex = (function () {
     const at = Date.now();
     return update(keyOf(info), entry => {
       apply(entry, change);
-      entry.recent = entry.recent.filter(old => at - old.at < RECENT).concat({ ...change, at });
+      entry.seq++;
+      entry.recent = entry.recent.filter(old => at - old.at < RECENT).concat({ ...change, at, seq: entry.seq });
     }).then(
       () => {},
       () => {}

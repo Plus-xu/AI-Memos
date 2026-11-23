@@ -373,7 +373,6 @@ test('without user statistics, a memo saved during a listing keeps its tag when 
   await clickRandom(popup);
   await popup.context.sendText();
   await flush();
-  await new Promise(resolve => setTimeout(resolve, 5));
   await clickTags(popup);
   listing.resolve([{ name: 'memos/older', tags: ['a'] }]);
   await flush();
@@ -394,6 +393,19 @@ test('without user statistics, the listing made for random review also serves th
   await clickTags(popup);
   assert.deepEqual(tagList(popup).tags, ['reading']);
   assert.equal(lists, 1);
+});
+
+test('without user statistics, a tag saved after the listing is in the tags taken from that listing', async () => {
+  const popup = await loadPopup({
+    listMemos: async () => [{ name: 'memos/a', tags: ['reading'] }],
+    getMemo: async (_, name) => ({ name, content: name }),
+    createMemo: async (_, body) => ({ name: 'memos/saved', ...body, tags: ['fresh'] })
+  });
+  await clickRandom(popup);
+  await popup.context.sendText();
+  await flush();
+  await clickTags(popup);
+  assert.deepEqual(tagList(popup).tags, ['fresh', 'reading']);
 });
 
 test('archived memos in a listing give neither names nor tags', async () => {
@@ -435,6 +447,29 @@ test('archiving without user statistics lists the memos again for the next tags'
   await flush();
   assert.deepEqual(tagList(popup).tags, ['kept']);
   assert.equal(lists, 2);
+});
+
+test('without user statistics, archiving during a listing does not empty the tags that join it', async () => {
+  const listing = deferred();
+  const session = {};
+  const popup = await loadPopup(
+    {
+      listMemos: () => listing.promise,
+      getMemo: async (_, name) => ({ name, content: name }),
+      archiveMemo: async () => ({})
+    },
+    {},
+    session
+  );
+  await clickRandom(popup);
+  await popup.context.archiveMemoByName('memos/gone');
+  await flush();
+  await clickTags(popup);
+  listing.resolve([{ name: 'memos/b', tags: ['kept'] }]);
+  await flush();
+  assert.deepEqual(tagList(popup), { open: true, tags: ['kept'], text: '' });
+  assert.deepEqual(session[key].tags, ['kept']);
+  assert.equal(session[key].tagsAt, 0, 'the listing may predate the archive, so the tags are checked again next time');
 });
 
 test('changing the account closes the tag list, and tags still loading for the old account are not drawn', async () => {
@@ -489,7 +524,6 @@ test('tags and names that were loading when the access token changed are not kep
     session
   );
   await clickTags(popup);
-  await new Promise(resolve => setTimeout(resolve, 5));
   popup.storage.apiTokens = 'renewed-pat';
   popup.context.chrome.storage.onChanged.emit({ apiTokens: { newValue: 'renewed-pat' } }, 'sync');
   await flush();
