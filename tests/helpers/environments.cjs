@@ -89,16 +89,18 @@ function runtime(fetcher) {
   return { ctx, bucket, sync, config: vm.runInContext('LLM_CONFIG', ctx) };
 }
 
-/** MemosAPI alone; responder answers each $.ajax call. */
+/** MemosAPI alone; responder answers each $.ajax call, and `local` is the local storage it remembers in. */
 function loadApi(
   responder = () => {
     throw new Error('Unexpected API request');
   },
-  fetcher
+  fetcher,
+  local = {}
 ) {
   const calls = [];
   class TestURL extends URL {}
   const context = vm.createContext({
+    chrome: createChrome({ local }),
     URL: TestURL,
     URLSearchParams,
     AbortController,
@@ -117,8 +119,9 @@ function loadApi(
       }
     }
   });
+  loadScripts(context, ['draft-storage']);
   vm.runInContext(source('memos-api') + '\nglobalThis.api = MemosAPI;', context);
-  return { api: context.api, context, calls };
+  return { api: context.api, context, calls, local };
 }
 
 /** The popup's editor, save flow and search. Sync and local storage are the one `storage` object. */

@@ -1,3 +1,4 @@
+/* global DraftStorage */
 /* exported MemosAPI */
 /**
  * Memos API compatibility helpers.
@@ -6,6 +7,38 @@
 
 const MemosAPI = (function () {
   var apiPrefixes = new Map();
+  var remembered = null;
+
+  // Local storage remembers the servers that need 'api/v1/'; every other server starts at 'api/'.
+  function legacyServers(stored) {
+    return stored && typeof stored === 'object' ? stored : {};
+  }
+
+  function knownPrefix(baseUrl) {
+    if (apiPrefixes.has(baseUrl)) return Promise.resolve(apiPrefixes.get(baseUrl));
+    if (!remembered)
+      remembered = DraftStorage.get('local', { memosApiPrefixes: {} }).then(
+        function (items) {
+          return legacyServers(items.memosApiPrefixes);
+        },
+        function () {
+          return {};
+        }
+      );
+    return remembered.then(function (servers) {
+      return apiPrefixes.get(baseUrl) || (servers[baseUrl] === 'api/v1/' ? 'api/v1/' : 'api/');
+    });
+  }
+
+  // A failure to remember costs one probe on the next page; it never fails the request.
+  function rememberPrefix(baseUrl, prefix) {
+    return DraftStorage.locked('memos-api-prefixes', async function () {
+      var servers = legacyServers((await DraftStorage.get('local', { memosApiPrefixes: {} })).memosApiPrefixes);
+      if (prefix === 'api/v1/') servers[baseUrl] = prefix;
+      else delete servers[baseUrl];
+      await DraftStorage.put('local', { memosApiPrefixes: servers });
+    }).catch(function () {});
+  }
 
   function normalizeBaseUrl(apiUrl) {
     var value = String(apiUrl || '')
@@ -61,20 +94,25 @@ const MemosAPI = (function () {
   function request(info, options) {
     var baseUrl = normalizeBaseUrl(info.apiUrl);
     if (!isValidBaseUrl(baseUrl)) return Promise.reject(apiError('invalid_url'));
-    var prefix = apiPrefixes.get(baseUrl) || 'api/';
 
-    return rawRequest(info, prefix, options)
-      .catch(function (xhr) {
-        // Only a missing route can be retried. Never replay an uncertain write,
-        // authentication failure, quota refusal, timeout, or server error.
-        if (!isMissingRoute(xhr)) throw xhr;
-        prefix = prefix === 'api/' ? 'api/v1/' : 'api/';
-        return rawRequest(info, prefix, options);
-      })
-      .then(function (data) {
-        apiPrefixes.set(baseUrl, prefix);
-        return data;
-      });
+    return knownPrefix(baseUrl).then(function (known) {
+      var prefix = known;
+      return rawRequest(info, prefix, options)
+        .catch(function (xhr) {
+          // Only a missing route can be retried. Never replay an uncertain write,
+          // authentication failure, quota refusal, timeout, or server error.
+          if (!isMissingRoute(xhr)) throw xhr;
+          prefix = prefix === 'api/' ? 'api/v1/' : 'api/';
+          return rawRequest(info, prefix, options);
+        })
+        .then(function (data) {
+          apiPrefixes.set(baseUrl, prefix);
+          if (prefix === known) return data;
+          return rememberPrefix(baseUrl, prefix).then(function () {
+            return data;
+          });
+        });
+    });
   }
 
   function getInstanceProfile(info) {
@@ -123,6 +161,8 @@ const MemosAPI = (function () {
   }
 
   async function listSpaces(info) {
+    // Spaces came after the unversioned API, so a server that needs 'api/v1/' has none.
+    if ((await knownPrefix(normalizeBaseUrl(info.apiUrl))) === 'api/v1/') return [];
     let token = '';
     const seen = new Set(),
       spaces = [];

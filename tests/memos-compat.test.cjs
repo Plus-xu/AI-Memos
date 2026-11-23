@@ -59,22 +59,79 @@ test('26.11 workflow: validate, upload, bind an inline image, create, and archiv
   assert.equal(calls.length, 6);
 });
 
-test('legacy API detection is cached and switches after a server upgrade', async () => {
+const paths = calls => calls.map(call => new URL(call.url).pathname);
+
+test('legacy API detection is remembered across pages and forgotten after a server upgrade', async () => {
   let upgraded = false;
-  const { api, calls } = loadApi(options => {
-    const legacy = options.url.includes('/api/v1/');
-    if (!upgraded && !legacy) throw refused(404);
-    if (upgraded && legacy) throw refused(410);
-    return { user: { name: 'users/tester' } };
-  });
-  await api.currentUser(info.apiUrl, info.apiTokens);
-  await api.currentUser(info.apiUrl, info.apiTokens);
+  const local = {};
+  const page = () =>
+    loadApi(
+      options => {
+        const legacy = options.url.includes('/api/v1/');
+        if (!upgraded && !legacy) throw refused(404);
+        if (upgraded && legacy) throw refused(410);
+        return { user: { name: 'users/tester' } };
+      },
+      undefined,
+      local
+    );
+  const first = page();
+  await first.api.currentUser(info.apiUrl, info.apiTokens);
+  await first.api.currentUser(info.apiUrl, info.apiTokens);
+  assert.deepEqual(paths(first.calls), ['/api/auth/me', '/api/v1/auth/me', '/api/v1/auth/me']);
+  assert.deepEqual(local, { memosApiPrefixes: { 'https://memos.example/': 'api/v1/' } });
+  const second = page();
+  await second.api.currentUser(info.apiUrl, info.apiTokens);
+  assert.deepEqual(paths(second.calls), ['/api/v1/auth/me'], 'a reopened page must not probe again');
   upgraded = true;
-  await api.currentUser(info.apiUrl, info.apiTokens);
-  assert.deepEqual(
-    calls.map(call => new URL(call.url).pathname),
-    ['/api/auth/me', '/api/v1/auth/me', '/api/v1/auth/me', '/api/v1/auth/me', '/api/auth/me']
-  );
+  await second.api.currentUser(info.apiUrl, info.apiTokens);
+  await second.api.currentUser(info.apiUrl, info.apiTokens);
+  assert.deepEqual(paths(second.calls), ['/api/v1/auth/me', '/api/v1/auth/me', '/api/auth/me', '/api/auth/me']);
+  assert.deepEqual(local, { memosApiPrefixes: {} });
+  const third = page();
+  await third.api.currentUser(info.apiUrl, info.apiTokens);
+  assert.deepEqual(paths(third.calls), ['/api/auth/me']);
+});
+
+test('a failed request, and a success on the default prefix, write nothing to storage', async () => {
+  const failing = loadApi(() => {
+    throw refused(404);
+  });
+  await assert.rejects(failing.api.getInstanceProfile(info));
+  assert.deepEqual(failing.local, {});
+  const modern = loadApi(() => ({ version: '26.11.2' }));
+  await modern.api.getInstanceProfile(info);
+  assert.deepEqual(modern.local, {});
+});
+
+test('a server remembered as legacy is not asked for spaces; any other server is', async () => {
+  const legacy = loadApi(undefined, undefined, { memosApiPrefixes: { 'https://memos.example/': 'api/v1/' } });
+  assert.deepEqual(plain(await legacy.api.listSpaces(info)), []);
+  assert.equal(legacy.calls.length, 0);
+  const other = loadApi(() => ({ spaces: [{ name: 'spaces/a', title: 'A' }] }), undefined, {
+    memosApiPrefixes: { 'https://elsewhere.example/': 'api/v1/' }
+  });
+  assert.deepEqual(plain(await other.api.listSpaces(info)), [{ name: 'spaces/a', title: 'A' }]);
+  assert.deepEqual(paths(other.calls), ['/api/spaces']);
+});
+
+test('requests still work when the remembered prefixes cannot be read, written, or understood', async () => {
+  const legacy = options => {
+    if (!options.url.includes('/api/v1/')) throw refused(404);
+    return { user: { name: 'users/tester' } };
+  };
+  const broken = loadApi(legacy);
+  broken.context.chrome.storage.local.get = broken.context.chrome.storage.local.set = () => {
+    throw new Error('storage unavailable');
+  };
+  await broken.api.currentUser(info.apiUrl, info.apiTokens);
+  await broken.api.currentUser(info.apiUrl, info.apiTokens);
+  assert.deepEqual(paths(broken.calls), ['/api/auth/me', '/api/v1/auth/me', '/api/v1/auth/me']);
+  for (const junk of ['api/v1/', null, { 'https://memos.example/': 'elsewhere/' }]) {
+    const odd = loadApi(() => ({ user: { name: 'users/tester' } }), undefined, { memosApiPrefixes: junk });
+    await odd.api.currentUser(info.apiUrl, info.apiTokens);
+    assert.deepEqual(paths(odd.calls), ['/api/auth/me']);
+  }
 });
 
 test('an HTML SPA fallback is recognized without accepting it as an API response', async () => {
