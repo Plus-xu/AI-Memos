@@ -140,6 +140,8 @@ function chromeRuntime(messages) {
   const nativeFetch = window.fetch.bind(window);
   window.fetch = (input, options) => {
     const url = new URL(input instanceof Request ? input.url : String(input), location.href);
+    const simulated = preview.request?.(url, options || {});
+    if (simulated) return simulated;
     if (url.pathname.endsWith('/models')) {
       const data = url.hostname.includes('googleapis') ? { models:[{ name:'models/preview-text', supportedGenerationMethods:['generateContent'] }] } : { data:[{ id:'preview-text' }] };
       return Promise.resolve(Response.json(data));
@@ -165,14 +167,14 @@ function chromeRuntime(messages) {
 })();`;
 }
 
-function ajaxRuntime() {
+function requestRuntime() {
   return `(() => {
   'use strict';
   const preview = window.__AI_MEMOS_PREVIEW__;
   const clone = value => JSON.parse(JSON.stringify(value));
   const initialMemo = { name: 'memos/preview-note', creator: 'users/preview', content: '预览中的示例笔记\\n#学习', tags: ['学习'], visibility: 'PRIVATE', createTime: new Date().toISOString(), attachments: [] };
   preview.memos.set(initialMemo.name, initialMemo);
-  function bodyOf(options) { if (!options.data) return {}; return typeof options.data === 'string' ? JSON.parse(options.data) : options.data; }
+  function bodyOf(options) { return options.body ? JSON.parse(options.body) : {}; }
   function userText(body) {
     if (typeof body.input === 'string') return body.input;
     if (Array.isArray(body.input)) return body.input.map(item => typeof item.content === 'string' ? item.content : (item.content || []).map(part => part.text || '').join('\\n')).join('\\n');
@@ -223,36 +225,26 @@ function ajaxRuntime() {
     if (route === 'spaces') return { spaces:[{ name:'spaces/reading', title:'阅读小组' }], nextPageToken: '' };
     throw { status: 404, message: '本地预览未模拟该接口：' + route };
   }
-  $.ajax = function (options) {
-    const deferred = $.Deferred();
-    const url = new URL(options.url, location.href);
-    const method = String(options.type || options.method || 'GET').toUpperCase();
-    const match = url.pathname.match(/\\/api\\/(?:v1\\/)?(.*)$/);
+  // Answers the requests the pages send through js/http.js: Memos API routes and AI calls.
+  preview.request = (url, options) => {
+    const method = String(options.method || 'GET').toUpperCase();
+    const match = url.origin === location.origin && url.pathname.match(/\\/api\\/(?:v1\\/)?(.*)$/);
     const ai = !match;
+    if (ai && method !== 'POST') return null;
     preview.requests.push({ kind: ai ? 'ai' : 'memos', method, path: url.pathname });
-    const xhr = deferred.promise();
-    xhr.status = 0; xhr.statusText = '';
-    xhr.getResponseHeader = name => String(name).toLowerCase() === 'content-type' ? 'application/json' : null;
-    let settled = false;
-    const fail = failure => {
-      settled = true; xhr.status = failure.status || 500; xhr.statusText = 'error';
-      xhr.responseJSON = { message: failure.message || '本地模拟请求失败', details: failure.details || [] };
-      xhr.responseText = JSON.stringify(xhr.responseJSON);
-      if (options.error) options.error(xhr, 'error', xhr.responseJSON.message);
-      deferred.reject(xhr, 'error', xhr.responseJSON.message);
-    };
-    const timer = setTimeout(() => {
-      try {
-        if (ai && preview.failAI) { preview.failAI = false; throw { status: 503, message: '模拟 AI 服务暂时不可用' }; }
-        const body = bodyOf(options);
-        const data = ai ? aiResult(body) : memosResult(match[1], method, body, url.searchParams);
-        settled = true; xhr.status = 200; xhr.statusText = 'OK'; xhr.responseJSON = clone(data); xhr.responseText = JSON.stringify(data);
-        if (options.success) options.success(clone(data), 'success', xhr);
-        deferred.resolve(clone(data), 'success', xhr);
-      } catch (failure) { fail(failure); }
-    }, ai ? 850 : 120);
-    xhr.abort = () => { if (!settled) { clearTimeout(timer); fail({ status: 0, message: '模拟请求已取消' }); } return xhr; };
-    return xhr;
+    const respond = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        try {
+          if (ai && preview.failAI) { preview.failAI = false; throw { status: 503, message: '模拟 AI 服务暂时不可用' }; }
+          const body = bodyOf(options);
+          resolve(respond(200, clone(ai ? aiResult(body) : memosResult(match[1], method, body, url.searchParams))));
+        } catch (failure) {
+          resolve(respond(failure.status || 500, { message: failure.message || '本地模拟请求失败', details: failure.details || [] }));
+        }
+      }, ai ? 850 : 120);
+      options.signal?.addEventListener('abort', () => { clearTimeout(timer); reject(options.signal.reason); });
+    });
   };
 })();`;
 }
@@ -293,7 +285,7 @@ function createPreviewServer() {
         const messages = JSON.parse(fs.readFileSync(path.join(root, '_locales/zh_CN/messages.json'), 'utf8'));
         return respond(200, contentTypes['.js'], chromeRuntime(messages));
       }
-      if (pathname === '/__preview-ajax.js') return respond(200, contentTypes['.js'], ajaxRuntime());
+      if (pathname === '/__preview-requests.js') return respond(200, contentTypes['.js'], requestRuntime());
       if (pathname === '/__preview-style.css') return respond(200, contentTypes['.css'], previewStyle);
       if (pathname === '/panel.html')
         return respond(200, contentTypes['.html'], fs.readFileSync(path.join(root, 'panel.html'), 'utf8'));
@@ -313,7 +305,7 @@ function createPreviewServer() {
         );
         const jquery = /(<script\b[^>]*src=["']js\/jquery\.min\.js["'][^>]*><\/script>)/i;
         if (!jquery.test(html)) throw new Error('Unable to locate popup jQuery script for isolated mocks');
-        html = html.replace(jquery, '$1\n<script src="/__preview-ajax.js"></script>');
+        html = html.replace(jquery, '$1\n<script src="/__preview-requests.js"></script>');
         return respond(200, contentTypes['.html'], html);
       }
       if (!/^\/(js|css|assets|_locales)\//.test(pathname))
@@ -352,4 +344,4 @@ if (require.main === module) {
   );
 }
 
-module.exports = { createPreviewServer, chromeRuntime, ajaxRuntime };
+module.exports = { createPreviewServer, chromeRuntime, requestRuntime };
