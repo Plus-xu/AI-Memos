@@ -225,8 +225,8 @@ function loadStagedFiles({ responder, fetcher, sync = {}, local = {} } = {}) {
 }
 
 /** What a page and the service worker both have from the browser. */
-function hostGlobals() {
-  const chrome = createChrome();
+function hostGlobals(storage) {
+  const chrome = createChrome(storage);
   const event = { addListener() {} };
   Object.assign(chrome.runtime, { id: 'extension', getURL: file => 'chrome-extension://extension/' + file });
   Object.assign(chrome.runtime, { onInstalled: event, onMessage: event, openOptionsPage() {} });
@@ -297,6 +297,23 @@ function loadPage(page) {
   return { context, scripts };
 }
 
+/**
+ * CaptureService as the service worker runs it, over an in-memory indexedDB. The injected page script
+ * answers with `page`, and `fetcher` answers each image request; `files` is the map behind the file store.
+ */
+function loadCapture({ page, fetcher, sync = {}, local = {} } = {}) {
+  const files = new Map();
+  const globals = hostGlobals({ sync, local });
+  globals.chrome.scripting = { executeScript: async ({ func }) => (func ? [{ result: page }] : []) };
+  const context = vm.createContext({
+    ...globals,
+    indexedDB: createIndexedDB(new Map([['ai-memos-files/files', files]])),
+    fetch: fetcher
+  });
+  loadScripts(context, ['draft-storage', 'clipper-core', 'staged-files', 'capture-service']);
+  return { context, capture: context.CaptureService, files, sync, local };
+}
+
 /** Runs the service worker; importScripts loads the files it names into the same context. */
 function loadWorker() {
   const scripts = ['js/background.js'];
@@ -322,6 +339,7 @@ module.exports = {
   loadPopup,
   loadSettings,
   loadStagedFiles,
+  loadCapture,
   loadPage,
   loadWorker
 };

@@ -153,7 +153,11 @@ var StagedFiles = (function () {
     });
   }
 
-  async function fromUrl(raw, label) {
+  /**
+   * Stages a remote image. `budget` is `{ each, left }` in bytes: the image must fit both, and what it
+   * takes is subtracted from `left`. An image that does not fit fails with 'imageTooLarge'.
+   */
+  async function fromUrl(raw, label, budget) {
     const url = new URL(raw);
     if (!['https:', 'http:', 'data:'].includes(url.protocol) || url.username || url.password)
       throw new Error('imageCaptureFailed');
@@ -163,8 +167,13 @@ var StagedFiles = (function () {
       signal: AbortSignal.timeout(20000)
     });
     if (!response.ok) throw new Error('imageCaptureFailed');
+    const room = () => (budget ? Math.min(budget.each, budget.left) : Infinity);
+    // A declared length saves the download; the bytes that arrive decide either way.
+    if (Number(response.headers?.get('content-length')) > room()) throw new Error('imageTooLarge');
     const blob = await response.blob();
     if (!blob.type.startsWith('image/')) throw new Error('imageCaptureFailed');
+    if (blob.size > room()) throw new Error('imageTooLarge');
+    if (budget) budget.left -= blob.size;
     let name = '';
     if (url.protocol !== 'data:') {
       try {
