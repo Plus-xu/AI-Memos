@@ -1,46 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const vm = require('node:vm');
 const fs = require('node:fs');
 const path = require('node:path');
-const { webcrypto } = require('node:crypto');
-
-function runtime(fetcher) {
-  const bucket = {},
-    sync = {},
-    document = {};
-  function store(data) {
-    return {
-      get: (defaults, callback) => callback({ ...defaults, ...structuredClone(data) }),
-      set: (fields, callback) => {
-        Object.assign(data, structuredClone(fields));
-        callback();
-      }
-    };
-  }
-  const $ = () => ({ ready() {} });
-  const chrome = {
-    runtime: {},
-    i18n: { getMessage: key => key },
-    storage: { local: store(bucket), sync: store(sync) }
-  };
-  const ctx = vm.createContext({
-    document,
-    $,
-    chrome,
-    URL,
-    URLSearchParams,
-    TextEncoder,
-    AbortSignal,
-    crypto: webcrypto,
-    fetch: fetcher,
-    console
-  });
-  for (const file of ['llm-config', 'draft-storage', 'model-catalog', 'ai-workflow', 'ai-optimize']) {
-    vm.runInContext(fs.readFileSync(path.resolve(__dirname, '../js/' + file + '.js'), 'utf8'), ctx, { filename: file });
-  }
-  return { ctx, bucket, sync, config: vm.runInContext('LLM_CONFIG', ctx) };
-}
+const { runtime } = require('./helpers/environments.cjs');
 
 const transports = [
   [

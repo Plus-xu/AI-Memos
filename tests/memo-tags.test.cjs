@@ -1,14 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
 const vm = require('node:vm');
+const { source } = require('./helpers/scripts.cjs');
 
 const context = vm.createContext({});
-vm.runInContext(
-  fs.readFileSync(path.join(__dirname, '../js/memo-tags.js'), 'utf8') + '\nglobalThis.tags = MemoTags;',
-  context
-);
+vm.runInContext(source('memo-tags') + '\nglobalThis.tags = MemoTags;', context);
 const tags = context.tags;
 const extract = content => Array.from(tags.extract(content));
 const strict = content => Array.from(tags.extract(content, true));

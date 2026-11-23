@@ -1,19 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const fs = require('node:fs');
-const path = require('node:path');
-const vm = require('node:vm');
-
-const root = path.join(__dirname, '..');
-const plain = value => JSON.parse(JSON.stringify(value));
-
-function loadRules() {
-  const context = vm.createContext({ URL });
-  for (const file of ['ai-workflow.js', 'clipper-core.js']) {
-    vm.runInContext(fs.readFileSync(path.join(root, 'js', file), 'utf8'), context, { filename: file });
-  }
-  return { ai: context.AIWorkflow, clipper: context.ClipperCore };
-}
+const { plain } = require('./helpers/scripts.cjs');
+const { loadRules } = require('./helpers/environments.cjs');
 
 test('each AI task builds a distinct instruction while retaining common source protections', () => {
   const { ai } = loadRules();
