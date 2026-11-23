@@ -20,7 +20,8 @@ async function startFixture() {
     failUpload: false,
     aiDelay: 0,
     spacesDelay: 0,
-    spaceReplies: 0
+    spaceReplies: 0,
+    uploadBytes: 33554432
   };
   const examples = ['memos/first', 'memos/second'].map((name, i) => ({
     name,
@@ -74,6 +75,8 @@ async function startFixture() {
           state.spaceReplies++;
           reply(200, { spaces: state.spaces });
         }, state.spacesDelay);
+      if (route === '/api/users/reader/usage')
+        return reply(200, { name: 'users/reader/usage', limits: { uploadBytes: String(state.uploadBytes) } });
       if (route === '/api/users/reader:getStats') {
         const tagCounts = {};
         for (const memo of Array.from(memos.values()).concat(examples))

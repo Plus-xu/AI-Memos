@@ -345,6 +345,28 @@ async function main() {
     fixture.state.spacesDelay = 0;
     await waitFor(panel, () => !document.getElementById('content').readOnly);
     pass('Tags and random review reuse one index per account, and the destination is drawn from remembered spaces');
+    const reopenWithLimit = async bytes => {
+      fixture.state.uploadBytes = bytes;
+      await panel.evaluate(() => chrome.storage.local.remove('memosUploadLimits'));
+      await panel.reload();
+      await waitFor(
+        panel,
+        async expected =>
+          !document.getElementById('content').readOnly &&
+          Object.values((await chrome.storage.local.get('memosUploadLimits')).memosUploadLimits || {})[0]?.bytes ===
+            expected,
+        bytes
+      );
+    };
+    await reopenWithLimit(10);
+    const staged = fixture.attachments.size;
+    await panel.locator('#inFile').setInputFiles(path.join(extension, 'assets', 'logo_24x24.png'));
+    await waitFor(panel, () => document.querySelector('.tip')?.textContent.includes('logo_24x24.png'));
+    assert.equal(await panel.inputValue('#content'), draft);
+    assert.equal(fixture.attachments.size, staged);
+    await reopenWithLimit(33554432);
+    assert.equal(await panel.inputValue('#content'), draft);
+    pass('A file over the upload limit the server reports is refused by name and never reaches the draft');
     await article.goto(fixture.base + '/short');
     await capture(page, 'capturePage');
     await waitFor(page, () => document.getElementById('content').value.includes('目录与索引'));
