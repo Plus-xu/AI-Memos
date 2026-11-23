@@ -228,9 +228,10 @@ function requestRuntime() {
   // Answers the requests the pages send through js/http.js: Memos API routes and AI calls.
   preview.request = (url, options) => {
     const method = String(options.method || 'GET').toUpperCase();
-    const match = url.origin === location.origin && url.pathname.match(/\\/api\\/(?:v1\\/)?(.*)$/);
-    const ai = !match;
-    if (ai && method !== 'POST') return null;
+    // An AI call is known by its endpoint; any other API route is Memos, whatever address the settings hold.
+    const ai = method === 'POST' && /\\/(responses|chat\\/completions|messages)$|:generateContent$/.test(url.pathname);
+    const match = !ai && url.pathname.match(/\\/api\\/(?:v1\\/)?(.*)$/);
+    if (!ai && !match) return null;
     preview.requests.push({ kind: ai ? 'ai' : 'memos', method, path: url.pathname });
     const respond = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
     return new Promise((resolve, reject) => {
@@ -243,7 +244,9 @@ function requestRuntime() {
           resolve(respond(failure.status || 500, { message: failure.message || '本地模拟请求失败', details: failure.details || [] }));
         }
       }, ai ? 850 : 120);
-      options.signal?.addEventListener('abort', () => { clearTimeout(timer); reject(options.signal.reason); });
+      const abort = () => { clearTimeout(timer); reject(options.signal.reason); };
+      if (options.signal?.aborted) abort();
+      else options.signal?.addEventListener('abort', abort, { once: true });
     });
   };
 })();`;
@@ -296,16 +299,13 @@ function createPreviewServer() {
         );
         html = html.replace(
           /<head>/i,
-          '<head>\n<script src="/__preview-chrome.js"></script>\n<link rel="stylesheet" href="/__preview-style.css">'
+          '<head>\n<script src="/__preview-chrome.js"></script>\n<script src="/__preview-requests.js"></script>\n<link rel="stylesheet" href="/__preview-style.css">'
         );
         html = html.replace(/<title>[^<]*<\/title>/i, '<title>AI-MEMOS 本地预览（模拟数据）</title>');
         html = html.replace(
           /(<body\b[^>]*>)/i,
           '$1\n<aside id="previewBanner" aria-label="本地模拟环境"><strong>AI-MEMOS 本地预览 · 仅模拟数据</strong>不会连接真实 Memos 或 AI 服务，也不会读取 Chrome 扩展配置。<div class="preview-controls"><button type="button" id="previewReset">重置模拟数据</button><button type="button" id="previewFailAI">模拟下次 AI 失败</button><button type="button" id="previewFailSave">模拟下次保存失败</button></div><span id="previewStatus" role="status">所有服务请求均在本页模拟，外网请求已阻止。</span></aside>'
         );
-        const jquery = /(<script\b[^>]*src=["']js\/jquery\.min\.js["'][^>]*><\/script>)/i;
-        if (!jquery.test(html)) throw new Error('Unable to locate popup jQuery script for isolated mocks');
-        html = html.replace(jquery, '$1\n<script src="/__preview-requests.js"></script>');
         return respond(200, contentTypes['.html'], html);
       }
       if (!/^\/(js|css|assets|_locales)\//.test(pathname))

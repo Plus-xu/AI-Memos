@@ -151,7 +151,8 @@ test('authentication errors, quota refusals, timeouts and uncertain writes are n
     refused(403),
     refused(429),
     refused(500),
-    { status: 0, statusText: 'timeout' }
+    { status: 0, statusText: 'timeout' },
+    { status: 0 }
   ]) {
     const { api, calls } = loadApi(() => {
       throw failure;

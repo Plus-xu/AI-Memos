@@ -67,7 +67,13 @@ async function startFixture() {
       if (!route.startsWith('/api/') && !route.startsWith('/v1/') && !route.startsWith('/file/')) return reply(404, {});
       if (req.headers.authorization !== (route.startsWith('/v1/') ? 'Bearer fixture-ai' : 'Bearer fixture-pat'))
         return reply(401, {});
-      calls.push({ route, method, query: Object.fromEntries(url.searchParams), body });
+      calls.push({
+        route,
+        method,
+        query: Object.fromEntries(url.searchParams),
+        body,
+        cookie: req.headers.cookie || ''
+      });
       if (route === '/api/auth/me') return reply(200, { user: { name: 'users/reader' } });
       if (route === '/api/instance/profile') return reply(200, { version: '26.11.1' });
       if (route === '/api/spaces')

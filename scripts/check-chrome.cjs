@@ -90,6 +90,8 @@ async function main() {
     await legacy.fill('#content', '');
     await waitFor(legacy, async () => (await DraftStorage.current()).open_content === '');
     await legacy.close();
+    // A Memos server or AI gateway behind a cookie-session access proxy depends on the site's cookies.
+    await context.addCookies([{ name: 'proxy_session', value: 'fixture', url: fixture.base }]);
     const options = await context.newPage();
     await options.goto(ext + '/options.html');
     await waitFor(
@@ -120,6 +122,7 @@ async function main() {
     await waitFor(options, () => !!document.getElementById('aiSettingsStatus').textContent);
     await options.reload();
     await waitFor(options, () => document.getElementById('llmModel').value === 'fixture-text');
+    assert.match(fixture.calls.find(r => r.route === '/api/auth/me').cookie, /proxy_session=fixture/);
     pass('Options validate the Memos account, refresh gateway text models and restore the saved model');
     const page = await context.newPage();
     await page.setViewportSize({ width: 468, height: 635 });
@@ -214,6 +217,7 @@ async function main() {
     await page.bringToFront();
     await page.click('#aiUndo');
     await waitFor(panel, original => document.querySelector('#content').value === original, clipped);
+    assert.match(fixture.calls.find(r => r.route === '/v1/chat/completions').cookie, /proxy_session=fixture/);
     pass('AI output can be edited, appended and undone from the other editor');
     await panel.bringToFront();
     fixture.state.spaces = [];
@@ -481,6 +485,18 @@ async function main() {
         () =>
           document.documentElement.dataset.view === 'panel' &&
           document.getElementById('content').value.includes('纠错机制')
+      );
+      // The preview answers AI and Memos requests itself, with no real server behind them.
+      await preview.evaluate(() => document.getElementById('ai_optimize').click());
+      await waitFor(
+        preview,
+        () => !document.getElementById('aiReviewPanel').hidden && !!document.getElementById('aiReviewResult').value
+      );
+      await preview.click('#aiReviewDiscard');
+      await preview.click('#content_submit_text');
+      await waitFor(
+        preview,
+        () => !document.getElementById('saveStatus').hidden && !document.getElementById('content').value
       );
       await preview.close();
       pass('The independent development preview serves the popup, options and panel with local data');

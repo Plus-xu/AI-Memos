@@ -34,7 +34,7 @@ test('a JSON answer completes with its data', async () => {
   });
 });
 
-test('the request carries the method, headers and JSON body, without cookies and with a time limit', async () => {
+test('the request carries the method, headers and JSON body, with a time limit and the cookies the old requests sent', async () => {
   const { http, calls } = loadHttp(async () => jsonResponse({}));
   await http.json({
     url: 'https://memos.example/api/memos',
@@ -50,17 +50,18 @@ test('the request carries the method, headers and JSON body, without cookies and
     { ...options.headers },
     { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: 'Bearer pat' }
   );
-  assert.equal(options.credentials, 'omit');
+  // From an extension page with host permissions this sends the site's cookies, as XMLHttpRequest did.
+  assert.equal(options.credentials, 'same-origin');
   assert.ok(options.signal instanceof AbortSignal);
 });
 
-test('a request without a body is a GET that declares no content type, and a caller header wins', async () => {
+test('a request without a body is a GET with the same headers, and a caller header wins', async () => {
   const { http, calls } = loadHttp(async () => jsonResponse({}));
   await http.json({ url: 'https://memos.example/api/auth/me', headers: { Accept: 'text/plain' } });
   const options = calls[0][1];
   assert.equal(options.method, 'GET');
   assert.equal(options.body, undefined);
-  assert.deepEqual({ ...options.headers }, { Accept: 'text/plain' });
+  assert.deepEqual({ ...options.headers }, { Accept: 'text/plain', 'Content-Type': 'application/json' });
 });
 
 test('204 completes without data', async () => {
@@ -123,6 +124,20 @@ test('a timeout fails with status 0 and the status text "timeout", also while th
   );
   assert.equal(during.status, 0);
   assert.equal(during.statusText, 'timeout');
+});
+
+test('an abort after the time limit is a timeout even where the browser reports it as an AbortError', async () => {
+  const { http } = loadHttp(
+    (_, options) =>
+      new Promise((resolve, reject) => {
+        options.signal.addEventListener('abort', () =>
+          reject(Object.assign(new Error('The user aborted a request.'), { name: 'AbortError' }))
+        );
+      })
+  );
+  const error = await failure(http.json({ url: 'https://memos.example/api/memos', timeout: 20 }));
+  assert.equal(error.status, 0);
+  assert.equal(error.statusText, 'timeout');
 });
 
 test('a network error fails with status 0 and is not a timeout', async () => {
