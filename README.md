@@ -47,7 +47,7 @@
 
 ## 开发与验收
 
-需要 Node.js 22.13 或以上。打包使用 PowerShell 7。首次克隆后可运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，让 `git blame` 跳过纯格式化提交。
+需要 Node.js 24 或以上。打包使用 PowerShell 7。首次克隆后可运行 `git config blame.ignoreRevsFile .git-blame-ignore-revs`，让 `git blame` 跳过纯格式化提交。
 
 ```powershell
 npm.cmd ci --ignore-scripts
