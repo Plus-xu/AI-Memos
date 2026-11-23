@@ -121,9 +121,22 @@ function missingGlobals({ context, scripts }) {
   return missing.sort();
 }
 
+/** Scripts no other script names, so nothing else notices when a page forgets them. */
+const entries = {
+  'popup.html': ['js/surface.js', 'js/message.js', 'js/theme-lang.js', 'js/oper.js'],
+  'options.html': ['js/surface.js', 'js/message.js', 'js/theme-lang.js', 'js/settings.js'],
+  'panel.html': ['js/surface.js']
+};
+
 for (const page of pages) {
   test(page + ' loads its scripts in a working order, and they find the globals they declare', () => {
     const loaded = loadPage(page);
+    assert.deepEqual(
+      entries[page].filter(script => !loaded.scripts.includes(script)),
+      [],
+      page + ' no longer loads a script it starts from'
+    );
+    if (loaded.context.$) assert.equal(typeof loaded.context.$.message, 'function', 'js/message.js adds $.message');
     assert.deepEqual(
       loaded.scripts,
       pageScripts(page).filter(script => ownScripts.includes(script))

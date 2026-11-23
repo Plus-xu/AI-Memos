@@ -246,14 +246,15 @@ const libraries = ['js/jquery.min.js', 'js/view-image.js'];
 
 /**
  * Runs a page's own scripts in the order its HTML lists them, in one context, up to the point where the
- * browser would fire DOMContentLoaded. `$` and `ViewImage` are stand-ins, present only when the page
- * includes the library; `scripts` are the own scripts that ran, as paths.
+ * browser would fire DOMContentLoaded. `$` and `ViewImage` are stand-ins, present from the place where
+ * the page includes the library; `scripts` are the own scripts that ran, as paths.
  */
 function loadPage(page) {
   const html = fs.readFileSync(path.join(root, page), 'utf8');
   const listed = pageScripts(page);
   const { $, document } = createDom();
   $.extend = extra => Object.assign($, extra);
+  delete $.message; // js/message.js adds it
   const dataset = Object.fromEntries(
     Array.from(html.match(/<html\b[^>]*>/)[0].matchAll(/\bdata-([a-z]+)="([^"]*)"/g), hit => [hit[1], hit[2]])
   );
@@ -268,10 +269,13 @@ function loadPage(page) {
     FileReader
   });
   context.window = context;
-  if (listed.includes('js/jquery.min.js')) context.$ = $;
-  if (listed.includes('js/view-image.js')) context.ViewImage = { init() {} };
   const scripts = listed.filter(script => !libraries.includes(script));
-  for (const script of scripts) runScript(context, script.replace(/^js\//, ''));
+  for (const script of listed) {
+    // A library exists only from its own place in the page onwards, as in a browser.
+    if (script === 'js/jquery.min.js') context.$ = $;
+    else if (script === 'js/view-image.js') context.ViewImage = { init() {} };
+    else runScript(context, script.replace(/^js\//, ''));
+  }
   return { context, scripts };
 }
 
