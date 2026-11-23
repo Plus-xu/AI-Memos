@@ -47,7 +47,7 @@
 
 ## 开发与验收
 
-需要 Node.js 22.8 或以上。打包使用 PowerShell 7。
+需要 Node.js 22.13 或以上。打包使用 PowerShell 7。
 
 ```powershell
 npm.cmd test
