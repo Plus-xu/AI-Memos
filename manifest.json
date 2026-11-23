@@ -18,18 +18,8 @@
   "background": {
     "service_worker": "js/background.js"
   },
-  "permissions": [
-    "tabs",
-    "storage",
-    "activeTab",
-    "contextMenus",
-    "scripting",
-    "sidePanel"
-  ],
-  "host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
+  "permissions": ["tabs", "storage", "activeTab", "contextMenus", "scripting", "sidePanel"],
+  "host_permissions": ["http://*/*", "https://*/*"],
   "commands": {
     "_execute_action": {
       "suggested_key": {

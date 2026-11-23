@@ -5,7 +5,10 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const context = vm.createContext({});
-vm.runInContext(fs.readFileSync(path.join(__dirname, '../js/memo-tags.js'), 'utf8') + '\nglobalThis.tags = MemoTags;', context);
+vm.runInContext(
+  fs.readFileSync(path.join(__dirname, '../js/memo-tags.js'), 'utf8') + '\nglobalThis.tags = MemoTags;',
+  context
+);
 const tags = context.tags;
 const extract = content => Array.from(tags.extract(content));
 const strict = content => Array.from(tags.extract(content, true));
@@ -29,7 +32,7 @@ test('link text and destinations are skipped; text outside them is scanned', () 
 
 test('headings are not tags; hierarchical tags yield every ancestor', () => {
   assert.deepEqual(extract('## 标题\n\n# Title\n\n#work/测试 #C++ #R&D.'), ['work', 'work/测试', 'C++', 'R&D']);
-  assert.deepEqual(extract('#book/ #first#second #tag\'s #users\''), ['book', 'first', 'second', "tag's", 'users']);
+  assert.deepEqual(extract("#book/ #first#second #tag's #users'"), ['book', 'first', 'second', "tag's", 'users']);
   assert.deepEqual(extract('#test🚀'), ['test🚀']);
 });
 
@@ -41,7 +44,10 @@ test('rule tags match with or without a leading hash', () => {
 });
 
 test('the hidden tag wins wherever it appears; no match keeps the selected visibility', () => {
-  assert.equal(tags.visibility('#公开 文本 #私密', { hidetag: '#私密', showtag: '公开', memo_lock: 'PROTECTED' }), 'PRIVATE');
+  assert.equal(
+    tags.visibility('#公开 文本 #私密', { hidetag: '#私密', showtag: '公开', memo_lock: 'PROTECTED' }),
+    'PRIVATE'
+  );
   assert.equal(tags.visibility('无标签', { hidetag: '私密', showtag: '公开', memo_lock: 'PROTECTED' }), 'PROTECTED');
   assert.equal(tags.visibility('#任意', { hidetag: '', showtag: '#', memo_lock: '' }), 'PRIVATE');
   assert.equal(tags.visibility('#work/secret', { hidetag: 'work', showtag: '', memo_lock: 'PUBLIC' }), 'PRIVATE');
@@ -51,8 +57,15 @@ test('the hidden tag wins wherever it appears; no match keeps the selected visib
 const rule = { hidetag: 'secret', showtag: 'open', memo_lock: 'PROTECTED' };
 
 test('ambiguous text counts for the hidden tag but never for the public tag', () => {
-  for (const content of ['- item\n    #secret', 'para\n    #secret', '- a\n    - b #secret', 'text\n\t#secret',
-    '见https://a.com，然后#secret', '链接https://a.com）#secret', '    #secret']) {
+  for (const content of [
+    '- item\n    #secret',
+    'para\n    #secret',
+    '- a\n    - b #secret',
+    'text\n\t#secret',
+    '见https://a.com，然后#secret',
+    '链接https://a.com）#secret',
+    '    #secret'
+  ]) {
     assert.equal(tags.visibility(content, rule), 'PRIVATE', content);
   }
   for (const content of ['    #open', '见https://a.com，然后#open', 'https://a.com/路径#open']) {
@@ -68,9 +81,18 @@ test('stray backticks and one-line backtick fences do not swallow later paragrap
 });
 
 test('long unbroken drafts are scanned quickly', () => {
-  const inputs = ['QUJD'.repeat(5000), '#' + 'a'.repeat(50000), '#' + 'a/'.repeat(5000), '[\n'.repeat(2000), '['.repeat(20000)];
+  const inputs = [
+    'QUJD'.repeat(5000),
+    '#' + 'a'.repeat(50000),
+    '#' + 'a/'.repeat(5000),
+    '[\n'.repeat(2000),
+    '['.repeat(20000)
+  ];
   const started = performance.now();
-  for (const input of inputs) { tags.extract(input); tags.extract(input, true); }
+  for (const input of inputs) {
+    tags.extract(input);
+    tags.extract(input, true);
+  }
   assert.ok(performance.now() - started < 400, 'took ' + (performance.now() - started) + 'ms');
   assert.equal(extract('#' + 'a/'.repeat(40) + 'b').length, 1);
 });

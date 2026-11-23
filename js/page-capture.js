@@ -16,7 +16,8 @@ globalThis.readMemosImage = async function (source) {
 globalThis.readMemosClip = async function (mode) {
   const title = document.title || location.hostname;
   const url = location.href;
-  const description = document.querySelector('meta[name="description"],meta[property="og:description"]')?.content?.trim() || '';
+  const description =
+    document.querySelector('meta[name="description"],meta[property="og:description"]')?.content?.trim() || '';
   const selection = window.getSelection();
   const selected = selection && !selection.isCollapsed && selection.rangeCount > 0;
   const tools = globalThis.MemosClipTools;
@@ -28,13 +29,15 @@ globalThis.readMemosClip = async function (mode) {
   if (selected) {
     kind = 'selection';
     fragment = document.createElement('div');
-    for (let index = 0; index < selection.rangeCount; index++) fragment.append(selection.getRangeAt(index).cloneContents());
+    for (let index = 0; index < selection.rangeCount; index++)
+      fragment.append(selection.getRangeAt(index).cloneContents());
   } else {
     if (mode === 'selection') return { kind: 'empty' };
     const doc = document.cloneNode(true);
     doc.querySelectorAll('script,style,nav,aside,footer,form,[hidden]').forEach(node => node.remove());
     const article = new tools.Readability(doc).parse();
-    if (!article || article.textContent.trim().length < 100) return { kind: 'summary', title, url, text: description || title, images: [] };
+    if (!article || article.textContent.trim().length < 100)
+      return { kind: 'summary', title, url, text: description || title, images: [] };
     kind = 'article';
     fragment = document.createElement('template');
     fragment.innerHTML = article.content;
@@ -44,13 +47,27 @@ globalThis.readMemosClip = async function (mode) {
   for (const img of fragment.querySelectorAll('img')) {
     const src = img.getAttribute('src') || img.getAttribute('data-src');
     let source;
-    try { source = new URL(src, document.baseURI); } catch (_) { /* use alternative text */ }
-    if (source?.protocol === 'blob:') {
-      try { source = new URL(await globalThis.readMemosImage(source.href)); }
-      catch (_) { source = null; }
+    try {
+      source = new URL(src, document.baseURI);
+    } catch (_) {
+      /* use alternative text */
     }
-    if (!src || !source || !['http:', 'https:', 'data:'].includes(source.protocol) || source.username || source.password) {
-      img.replaceWith(document.createTextNode(img.alt || '')); continue;
+    if (source?.protocol === 'blob:') {
+      try {
+        source = new URL(await globalThis.readMemosImage(source.href));
+      } catch (_) {
+        source = null;
+      }
+    }
+    if (
+      !src ||
+      !source ||
+      !['http:', 'https:', 'data:'].includes(source.protocol) ||
+      source.username ||
+      source.password
+    ) {
+      img.replaceWith(document.createTextNode(img.alt || ''));
+      continue;
     }
     const marker = 'MEMOSIMAGE' + Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16)).join('');
     images.push({ marker, url: source.href, alt: img.alt || '' });
@@ -61,7 +78,9 @@ globalThis.readMemosClip = async function (mode) {
       const link = new URL(anchor.getAttribute('href'), document.baseURI);
       if (!['http:', 'https:', 'mailto:'].includes(link.protocol) || link.username || link.password) throw Error();
       anchor.setAttribute('href', link.href.replaceAll('(', '%28').replaceAll(')', '%29'));
-    } catch (_) { anchor.replaceWith(...anchor.childNodes); }
+    } catch (_) {
+      anchor.replaceWith(...anchor.childNodes);
+    }
   }
   const wrapper = document.createElement('div');
   wrapper.append(fragment);

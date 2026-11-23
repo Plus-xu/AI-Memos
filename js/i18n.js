@@ -1,6 +1,8 @@
 let uiMessages = {};
 let uiLanguage = '';
-function uiMessage(key) { return uiMessages[key]?.message || chrome.i18n.getMessage(key) || key; }
+function uiMessage(key) {
+  return uiMessages[key]?.message || chrome.i18n.getMessage(key) || key;
+}
 async function setUiLanguage(language) {
   const raw = language || chrome.i18n.getUILanguage();
   const lang = raw.startsWith('zh') ? 'zh_CN' : raw.startsWith('ja') ? 'ja' : 'en';
@@ -10,7 +12,12 @@ async function setUiLanguage(language) {
   if (uiLanguage !== lang) return;
   uiMessages = messages;
   document.documentElement.lang = lang.replace('_', '-');
-  const attrs = { 'data-feature-message': 'textContent', 'data-placeholder': 'placeholder', 'data-title': 'title', 'data-label': 'aria-label' };
+  const attrs = {
+    'data-feature-message': 'textContent',
+    'data-placeholder': 'placeholder',
+    'data-title': 'title',
+    'data-label': 'aria-label'
+  };
   for (const [attr, target] of Object.entries(attrs)) {
     document.querySelectorAll('[' + attr + ']').forEach(node => {
       const value = uiMessage(node.getAttribute(attr));

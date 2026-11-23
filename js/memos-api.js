@@ -7,7 +7,9 @@ const MemosAPI = (function () {
   var apiPrefixes = new Map();
 
   function normalizeBaseUrl(apiUrl) {
-    var value = String(apiUrl || '').trim().replace(/\/+$/, '');
+    var value = String(apiUrl || '')
+      .trim()
+      .replace(/\/+$/, '');
     return value ? value + '/' : '';
   }
 
@@ -21,8 +23,9 @@ const MemosAPI = (function () {
   function isValidBaseUrl(apiUrl) {
     try {
       var url = new URL(apiUrl);
-      return /^https?:$/.test(url.protocol) && !!url.hostname &&
-        !url.username && !url.password && !url.search && !url.hash;
+      return (
+        /^https?:$/.test(url.protocol) && !!url.hostname && !url.username && !url.password && !url.search && !url.hash
+      );
     } catch (_) {
       return false;
     }
@@ -32,23 +35,26 @@ const MemosAPI = (function () {
     if (!xhr) return false;
     if (xhr.status === 404 || xhr.status === 410) return true;
     // Older servers can serve their SPA instead of an unknown API route.
-    return xhr.status === 200 && xhr.getResponseHeader &&
-      /text\/html/i.test(xhr.getResponseHeader('Content-Type') || '');
+    return (
+      xhr.status === 200 && xhr.getResponseHeader && /text\/html/i.test(xhr.getResponseHeader('Content-Type') || '')
+    );
   }
 
   function rawRequest(info, prefix, options) {
-    return Promise.resolve($.ajax({
-      url: normalizeBaseUrl(info.apiUrl) + prefix + options.path,
-      type: options.method || 'GET',
-      data: options.body === undefined ? undefined : JSON.stringify(options.body),
-      contentType: 'application/json',
-      dataType: 'json',
-      timeout: 30000,
-      headers: {
-        'Authorization': 'Bearer ' + String(info.apiTokens || '').trim(),
-        'Accept': 'application/json'
-      }
-    }));
+    return Promise.resolve(
+      $.ajax({
+        url: normalizeBaseUrl(info.apiUrl) + prefix + options.path,
+        type: options.method || 'GET',
+        data: options.body === undefined ? undefined : JSON.stringify(options.body),
+        contentType: 'application/json',
+        dataType: 'json',
+        timeout: 30000,
+        headers: {
+          Authorization: 'Bearer ' + String(info.apiTokens || '').trim(),
+          Accept: 'application/json'
+        }
+      })
+    );
   }
 
   function request(info, options) {
@@ -56,16 +62,18 @@ const MemosAPI = (function () {
     if (!isValidBaseUrl(baseUrl)) return Promise.reject(apiError('invalid_url'));
     var prefix = apiPrefixes.get(baseUrl) || 'api/';
 
-    return rawRequest(info, prefix, options).catch(function (xhr) {
-      // Only a missing route can be retried. Never replay an uncertain write,
-      // authentication failure, quota refusal, timeout, or server error.
-      if (!isMissingRoute(xhr)) throw xhr;
-      prefix = prefix === 'api/' ? 'api/v1/' : 'api/';
-      return rawRequest(info, prefix, options);
-    }).then(function (data) {
-      apiPrefixes.set(baseUrl, prefix);
-      return data;
-    });
+    return rawRequest(info, prefix, options)
+      .catch(function (xhr) {
+        // Only a missing route can be retried. Never replay an uncertain write,
+        // authentication failure, quota refusal, timeout, or server error.
+        if (!isMissingRoute(xhr)) throw xhr;
+        prefix = prefix === 'api/' ? 'api/v1/' : 'api/';
+        return rawRequest(info, prefix, options);
+      })
+      .then(function (data) {
+        apiPrefixes.set(baseUrl, prefix);
+        return data;
+      });
   }
 
   function getInstanceProfile(info) {
@@ -81,24 +89,26 @@ const MemosAPI = (function () {
     var info = { apiUrl: normalizeBaseUrl(apiUrl), apiTokens: apiTokens };
     return request(info, {
       path: 'auth/me'
-    }).catch(function (xhr) {
-      if (!isMissingRoute(xhr)) throw xhr;
-      return request(info, {
-        path: 'auth/sessions/current'
+    })
+      .catch(function (xhr) {
+        if (!isMissingRoute(xhr)) throw xhr;
+        return request(info, {
+          path: 'auth/sessions/current'
+        });
+      })
+      .then(function (response) {
+        if (!response) throw apiError('invalid_response');
+        var user = response.user || response;
+        var userName = user.name || response.name || '';
+        if (typeof userName !== 'string' || !/^users\/[^/]+$/.test(userName)) {
+          throw apiError('invalid_response');
+        }
+        return {
+          raw: response,
+          userName: userName,
+          userId: userName.split('/').pop()
+        };
       });
-    }).then(function (response) {
-      if (!response) throw apiError('invalid_response');
-      var user = response.user || response;
-      var userName = user.name || response.name || '';
-      if (typeof userName !== 'string' || !/^users\/[^/]+$/.test(userName)) {
-        throw apiError('invalid_response');
-      }
-      return {
-        raw: response,
-        userName: userName,
-        userId: userName.split('/').pop()
-      };
-    });
   }
 
   async function listMemoPage(info, query) {
@@ -113,7 +123,8 @@ const MemosAPI = (function () {
 
   async function listSpaces(info) {
     let token = '';
-    const seen = new Set(), spaces = [];
+    const seen = new Set(),
+      spaces = [];
     do {
       const query = new URLSearchParams({ pageSize: '100' });
       if (token) query.set('pageToken', token);
@@ -241,8 +252,13 @@ const MemosAPI = (function () {
 
     var fileId = attachment.publicId || attachment.filename || (attachment.name || '').split('/').pop();
     if (!attachment.name || !fileId) return '';
-    return normalizeBaseUrl(apiUrl) + 'file/' +
-      attachment.name.split('/').map(encodePathSegment).join('/') + '/' + encodePathSegment(fileId);
+    return (
+      normalizeBaseUrl(apiUrl) +
+      'file/' +
+      attachment.name.split('/').map(encodePathSegment).join('/') +
+      '/' +
+      encodePathSegment(fileId)
+    );
   }
 
   function managedFile(apiUrl, value) {
@@ -269,26 +285,32 @@ const MemosAPI = (function () {
   // external images, and links to already-bound files unchanged.
   function mapMarkdownLinks(content, transform) {
     var fence = null;
-    return String(content).split('\n').map(function (line) {
-      var marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-      if (fence) {
-        if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim()) fence = null;
-        return line;
-      }
-      if (marker) {
-        fence = marker[1];
-        return line;
-      }
-      if (/^( {4}|\t)/.test(line)) return line;
-      return line.replace(/(`+)[\s\S]*?\1|(!?\[(?:\\.|[^\]\\])*\]\()(<[^>\n]+>|[^\s)]+)(\s+(?:"[^"]*"|'[^']*'))?\)/g,
-        function (match, code, opening, destination, title) {
-          if (code) return match;
-          var angle = destination[0] === '<';
-          var url = angle ? destination.slice(1, -1) : destination;
-          var replacement = transform(url, opening[0] === '!');
-          return opening + (angle ? '<' + replacement + '>' : replacement) + (title || '') + ')';
-        });
-    }).join('\n');
+    return String(content)
+      .split('\n')
+      .map(function (line) {
+        var marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
+        if (fence) {
+          if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim())
+            fence = null;
+          return line;
+        }
+        if (marker) {
+          fence = marker[1];
+          return line;
+        }
+        if (/^( {4}|\t)/.test(line)) return line;
+        return line.replace(
+          /(`+)[\s\S]*?\1|(!?\[(?:\\.|[^\]\\])*\]\()(<[^>\n]+>|[^\s)]+)(\s+(?:"[^"]*"|'[^']*'))?\)/g,
+          function (match, code, opening, destination, title) {
+            if (code) return match;
+            var angle = destination[0] === '<';
+            var url = angle ? destination.slice(1, -1) : destination;
+            var replacement = transform(url, opening[0] === '!');
+            return opening + (angle ? '<' + replacement + '>' : replacement) + (title || '') + ')';
+          }
+        );
+      })
+      .join('\n');
   }
 
   function prepareMemo(info, body) {
@@ -302,23 +324,29 @@ const MemosAPI = (function () {
       return url;
     });
 
-    return Promise.all(Array.from(references.values()).map(function (reference) {
-      return request(info, { path: reference.file.name }).then(function (attachment) {
-        if (!attachment || attachment.name !== reference.file.name) throw apiError('invalid_response');
-        // Ordinary links can point at another memo's file. Managed images must
-        // belong to this memo, so let the server validate an existing binding.
-        reference.bind = !attachment.memo || reference.image;
-        return reference;
-      });
-    })).then(function (resolved) {
+    return Promise.all(
+      Array.from(references.values()).map(function (reference) {
+        return request(info, { path: reference.file.name }).then(function (attachment) {
+          if (!attachment || attachment.name !== reference.file.name) throw apiError('invalid_response');
+          // Ordinary links can point at another memo's file. Managed images must
+          // belong to this memo, so let the server validate an existing binding.
+          reference.bind = !attachment.memo || reference.image;
+          return reference;
+        });
+      })
+    ).then(function (resolved) {
       var prepared = Object.assign({}, body);
-      var attachments = resolved.filter(function (reference) { return reference.bind; });
+      var attachments = resolved.filter(function (reference) {
+        return reference.bind;
+      });
       prepared.content = mapMarkdownLinks(body.content, function (url, image) {
         var file = managedFile(info.apiUrl, url);
         return image && file ? file.path : url;
       });
       if (attachments.length) {
-        prepared.attachments = attachments.map(function (reference) { return { name: reference.file.name }; });
+        prepared.attachments = attachments.map(function (reference) {
+          return { name: reference.file.name };
+        });
       }
       return prepared;
     });
@@ -328,7 +356,7 @@ const MemosAPI = (function () {
     var file = managedFile(info.apiUrl, url);
     if (!file) return Promise.reject(apiError('invalid_attachment_url'));
     return fetch(file.url, {
-      headers: { 'Authorization': 'Bearer ' + String(info.apiTokens || '').trim() },
+      headers: { Authorization: 'Bearer ' + String(info.apiTokens || '').trim() },
       credentials: 'omit',
       redirect: 'error',
       signal: signal || AbortSignal.timeout(30000)
@@ -342,7 +370,10 @@ const MemosAPI = (function () {
     normalizeBaseUrl: normalizeBaseUrl,
     getInstanceProfile: getInstanceProfile,
     currentUser: currentUser,
-    listMemos, listMemoPage, listSpaces, isMissingRoute,
+    listMemos,
+    listMemoPage,
+    listSpaces,
+    isMissingRoute,
     buildContentFilter: buildContentFilter,
     getMemo: getMemo,
     prepareMemo: prepareMemo,

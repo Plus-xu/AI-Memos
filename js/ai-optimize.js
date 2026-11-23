@@ -48,8 +48,13 @@ function getProviderModelValues(provider) {
   if (!providerConfig || !providerConfig.models) {
     return [];
   }
-  const legacy = { openai: ['gpt-5.5', 'gpt-5.5-pro', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-4.1'], deepseek: ['deepseek-v4-flash'] };
-  return providerConfig.models.map(model => model.value).concat(legacy[provider] || [], typeof ModelCatalog === 'undefined' ? [] : ModelCatalog.list(provider));
+  const legacy = {
+    openai: ['gpt-5.5', 'gpt-5.5-pro', 'gpt-5.4-mini', 'gpt-5.4-nano', 'gpt-4.1'],
+    deepseek: ['deepseek-v4-flash']
+  };
+  return providerConfig.models
+    .map(model => model.value)
+    .concat(legacy[provider] || [], typeof ModelCatalog === 'undefined' ? [] : ModelCatalog.list(provider));
 }
 
 function normalizeProviderConfig(provider, config) {
@@ -80,7 +85,7 @@ function normalizeQuickPresets(presets) {
     normalized.push({});
   }
 
-  return normalized.map(function(preset) {
+  return normalized.map(function (preset) {
     if (!preset || !isValidProvider(preset.provider)) {
       return {};
     }
@@ -127,11 +132,21 @@ function applyModelSelection($modelSelect, $customInput, provider, model, custom
     customModel: customModel
   });
 
-  if (config.model === 'custom' && typeof ModelCatalog !== 'undefined' && ModelCatalog.list(provider).includes(config.customModel)) {
+  if (
+    config.model === 'custom' &&
+    typeof ModelCatalog !== 'undefined' &&
+    ModelCatalog.list(provider).includes(config.customModel)
+  ) {
     config.model = config.customModel;
     config.customModel = '';
   }
-  if (config.model !== 'custom' && !$modelSelect.find('option').toArray?.().some(option => option.value === config.model)) {
+  if (
+    config.model !== 'custom' &&
+    !$modelSelect
+      .find('option')
+      .toArray?.()
+      .some(option => option.value === config.model)
+  ) {
     $modelSelect.append($('<option></option>').val(config.model).text(config.model));
   }
   $modelSelect.val(config.model);
@@ -185,26 +200,25 @@ function loadLLMState(callback) {
     'llmBaseUrl'
   ];
 
-  chrome.storage.sync.get(keys, function(data) {
-    chrome.storage.local.get({ llmTaskPresets: null }, function(local) {
+  chrome.storage.sync.get(keys, function (data) {
+    chrome.storage.local.get({ llmTaskPresets: null }, function (local) {
       if (Array.isArray(local.llmTaskPresets)) data.llmQuickPresets = local.llmTaskPresets;
       llmProviderConfigs = data.llmProviderConfigs || {};
       llmMaxOutputTokens = normalizeMaxOutputTokens(data.llmMaxOutputTokens);
       const legacyConfig = buildLegacyConfig(data);
 
-
       if (legacyConfig && !llmProviderConfigs[legacyConfig.provider]) {
         llmProviderConfigs[legacyConfig.provider] = legacyConfig.config;
-
       }
 
-      Object.keys(LLM_CONFIG.providers).forEach(function(provider) {
+      Object.keys(LLM_CONFIG.providers).forEach(function (provider) {
         if (llmProviderConfigs[provider]) {
           llmProviderConfigs[provider] = normalizeProviderConfig(provider, llmProviderConfigs[provider]);
         }
       });
 
-      llmActiveProvider = data.llmActiveProvider || (legacyConfig && legacyConfig.provider) || LLM_CONFIG.defaults.provider;
+      llmActiveProvider =
+        data.llmActiveProvider || (legacyConfig && legacyConfig.provider) || LLM_CONFIG.defaults.provider;
       if (!isValidProvider(llmActiveProvider)) {
         llmActiveProvider = LLM_CONFIG.defaults.provider;
       }
@@ -240,36 +254,41 @@ function persistLLMState(callback) {
     limitField.value = llmMaxOutputTokens || '';
   }
 
-  chrome.storage.local.set({ llmTaskPresets: presets }, function() {
+  chrome.storage.local.set({ llmTaskPresets: presets }, function () {
     if (chrome.runtime.lastError) {
       if (callback) callback(chrome.runtime.lastError);
       else $.message({ message: getLLMMessage('draftSaveFailed') });
       return;
     }
-    chrome.storage.sync.set({
-      llmProviderConfigs: llmProviderConfigs,
-      llmActiveProvider: llmActiveProvider,
-      llmMaxOutputTokens: llmMaxOutputTokens,
-      llmQuickPresets: presets.map(function(preset) {
-        return preset.provider ? { provider: preset.provider, model: preset.model, customModel: preset.customModel } : {};
-      }),
-      // Keep legacy keys in sync for older extension versions.
-      llmProvider: llmActiveProvider,
-      llmModel: activeConfig.model,
-      llmCustomModel: activeConfig.customModel,
-      llmApiKey: activeConfig.apiKey,
-      llmBaseUrl: activeConfig.baseUrl
-    }, () => {
-      const error = chrome.runtime.lastError;
-      if (callback) callback(error);
-      else if (error) $.message({ message: getLLMMessage('settingsSaveFailed') });
-    });
+    chrome.storage.sync.set(
+      {
+        llmProviderConfigs: llmProviderConfigs,
+        llmActiveProvider: llmActiveProvider,
+        llmMaxOutputTokens: llmMaxOutputTokens,
+        llmQuickPresets: presets.map(function (preset) {
+          return preset.provider
+            ? { provider: preset.provider, model: preset.model, customModel: preset.customModel }
+            : {};
+        }),
+        // Keep legacy keys in sync for older extension versions.
+        llmProvider: llmActiveProvider,
+        llmModel: activeConfig.model,
+        llmCustomModel: activeConfig.customModel,
+        llmApiKey: activeConfig.apiKey,
+        llmBaseUrl: activeConfig.baseUrl
+      },
+      () => {
+        const error = chrome.runtime.lastError;
+        if (callback) callback(error);
+        else if (error) $.message({ message: getLLMMessage('settingsSaveFailed') });
+      }
+    );
   });
 }
 
 // 初始化LLM配置界面
 function initLLMConfig() {
-  loadLLMState(function() {
+  loadLLMState(function () {
     applyProviderConfigToForm(llmActiveProvider);
     $('#llmMaxTokens').val(llmMaxOutputTokens || '');
     initQuickPresetControls();
@@ -277,7 +296,7 @@ function initLLMConfig() {
     refreshLLMTexts();
   });
 
-  $('#llmProvider').change(function() {
+  $('#llmProvider').change(function () {
     const previousProvider = llmActiveProvider;
     if (isValidProvider(previousProvider)) {
       llmProviderConfigs[previousProvider] = getCurrentFormConfig(previousProvider);
@@ -292,7 +311,7 @@ function initLLMConfig() {
     applyProviderConfigToForm(provider);
   });
 
-  $('#llmModel').change(function() {
+  $('#llmModel').change(function () {
     toggleCustomModel($('#llmModel'), $('#llmCustomModel'));
   });
 }
@@ -301,7 +320,7 @@ function initLLMConfig() {
 function updateModelList(provider, $modelSelect) {
   const $select = $modelSelect || $('#llmModel');
   $select.empty();
-  
+
   const item = LLM_CONFIG.providers[provider];
   if (!item) return;
   function addGroup(label, models) {
@@ -310,32 +329,46 @@ function updateModelList(provider, $modelSelect) {
     for (const model of models) group.append($('<option></option>').val(model.value).text(model.label));
     $select.append(group);
   }
-  addGroup('modelRecommended', item.models.filter(model => model.value !== 'custom'));
+  addGroup(
+    'modelRecommended',
+    item.models.filter(model => model.value !== 'custom')
+  );
   const listed = typeof ModelCatalog === 'undefined' ? [] : ModelCatalog.list(provider);
-  addGroup('modelAccount', listed.filter(id => !item.models.some(m => m.value === id)).map(value => ({ value, label: value })));
+  addGroup(
+    'modelAccount',
+    listed.filter(id => !item.models.some(m => m.value === id)).map(value => ({ value, label: value }))
+  );
   $select.append($('<option></option>').val('custom').text(getLLMMessage('modelCustom')));
 }
 
 function rebuildModelChoices(provider) {
   if ($('#llmProvider').val() === provider) {
-    const model = $('#llmModel').val(), custom = $('#llmCustomModel').val();
+    const model = $('#llmModel').val(),
+      custom = $('#llmCustomModel').val();
     updateModelList(provider);
     applyModelSelection($('#llmModel'), $('#llmCustomModel'), provider, model, custom);
   }
   $('.quick-preset-row').each(function () {
     const row = $(this);
     if (row.find('.quick-preset-provider').val() === provider)
-      populateQuickPresetModelSelect(row, provider, row.find('.quick-preset-model').val(), row.find('.quick-preset-custom-model').val());
+      populateQuickPresetModelSelect(
+        row,
+        provider,
+        row.find('.quick-preset-model').val(),
+        row.find('.quick-preset-custom-model').val()
+      );
   });
 }
 
 async function restoreModelChoices() {
-  await Promise.all(Object.entries(llmProviderConfigs).map(async ([provider, config]) => {
-    if (isValidProvider(provider)) {
-      await ModelCatalog.restore(provider, config);
-      rebuildModelChoices(provider);
-    }
-  }));
+  await Promise.all(
+    Object.entries(llmProviderConfigs).map(async ([provider, config]) => {
+      if (isValidProvider(provider)) {
+        await ModelCatalog.restore(provider, config);
+        rebuildModelChoices(provider);
+      }
+    })
+  );
 }
 
 function toggleCustomModel($modelSelect, $customInput) {
@@ -361,7 +394,7 @@ function getModelDisplayName(provider, model, customModel) {
     return model || '';
   }
 
-  const matchedModel = providerConfig.models.find(function(item) {
+  const matchedModel = providerConfig.models.find(function (item) {
     return item.value === model;
   });
 
@@ -370,12 +403,19 @@ function getModelDisplayName(provider, model, customModel) {
 
 function getPresetLabel(preset, index) {
   if (!preset || !preset.provider) {
-    return getLLMMessage('llmQuickPresetEmpty', 'Not set') || ('Preset ' + (index + 1));
+    return getLLMMessage('llmQuickPresetEmpty', 'Not set') || 'Preset ' + (index + 1);
   }
 
   const modelLabel = getModelDisplayName(preset.provider, preset.model, preset.customModel);
   const taskLabel = getLLMMessage('aiTask_' + AIWorkflow.normalizeTask(preset.task));
-  return (preset.name && preset.name !== taskLabel ? preset.name + ' · ' : '') + taskLabel + ' · ' + getProviderDisplayName(preset.provider) + ' / ' + modelLabel;
+  return (
+    (preset.name && preset.name !== taskLabel ? preset.name + ' · ' : '') +
+    taskLabel +
+    ' · ' +
+    getProviderDisplayName(preset.provider) +
+    ' / ' +
+    modelLabel
+  );
 }
 
 function collectQuickPresetConfigs() {
@@ -385,7 +425,7 @@ function collectQuickPresetConfigs() {
   }
 
   const presets = [];
-  $rows.each(function() {
+  $rows.each(function () {
     const $row = $(this);
     const provider = $row.find('.quick-preset-provider').val();
     if (!provider || !isValidProvider(provider)) {
@@ -419,7 +459,7 @@ function populateProviderSelect($select, selectedProvider, includeEmpty) {
     $select.append(`<option value="">${getLLMMessage('llmQuickPresetEmpty', 'Not set')}</option>`);
   }
 
-  Object.keys(LLM_CONFIG.providers).forEach(function(provider) {
+  Object.keys(LLM_CONFIG.providers).forEach(function (provider) {
     $select.append(`<option value="${provider}">${getProviderDisplayName(provider)}</option>`);
   });
 
@@ -453,16 +493,25 @@ function buildQuickPresetRows() {
     const $name = $('<span class="quick-preset-name"></span>');
     const $providerSelect = $('<select class="inputer quick-preset-provider"></select>');
     const $modelSelect = $('<select class="inputer quick-preset-model"></select>');
-    const $customInput = $('<input class="inputer quick-preset-custom-model" type="text" maxlength="100" style="display: none;" />');
+    const $customInput = $(
+      '<input class="inputer quick-preset-custom-model" type="text" maxlength="100" style="display: none;" />'
+    );
     const $label = $('<input class="inputer quick-preset-label" type="text" maxlength="64" />');
     const $task = $('<select class="inputer quick-preset-task"></select>');
     const $prompt = $('<textarea class="quick-preset-prompt" rows="3" maxlength="8000"></textarea>');
     $label.val(preset.name || '').attr('aria-label', getLLMMessage('aiPresetName'));
-    AIWorkflow.tasks.forEach(function(task) {
-      $task.append($('<option></option>').val(task).text(getLLMMessage('aiTask_' + task)));
+    AIWorkflow.tasks.forEach(function (task) {
+      $task.append(
+        $('<option></option>')
+          .val(task)
+          .text(getLLMMessage('aiTask_' + task))
+      );
     });
     $task.val(AIWorkflow.normalizeTask(preset.task)).attr('aria-label', getLLMMessage('aiTaskLabel'));
-    $prompt.val(preset.prompt || '').attr('aria-label', getLLMMessage('aiCustomPrompt')).prop('hidden', preset.task !== 'custom');
+    $prompt
+      .val(preset.prompt || '')
+      .attr('aria-label', getLLMMessage('aiCustomPrompt'))
+      .prop('hidden', preset.task !== 'custom');
 
     $name.text(getLLMMessage('llmQuickPresetPrefix', 'Quick') + ' ' + (index + 1));
     $customInput.attr('placeholder', getLLMMessage('llmCustomModelPlaceholder', 'Custom model'));
@@ -476,7 +525,7 @@ function buildQuickPresetRows() {
 }
 
 function refreshQuickPresetRowLabels() {
-  $('.quick-preset-name').each(function(index) {
+  $('.quick-preset-name').each(function (index) {
     $(this).text(getLLMMessage('llmQuickPresetPrefix', 'Quick') + ' ' + (index + 1));
   });
 }
@@ -490,14 +539,14 @@ function updateQuickPresetMenu() {
   $menu.empty();
   llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
 
-  llmQuickPresets.forEach(function(preset, index) {
+  llmQuickPresets.forEach(function (preset, index) {
     const $item = $('<button type="button" class="ai-quick-item"></button>');
     $item.attr('data-index', index);
 
     if (!preset.provider) {
-      $item.prop('disabled', true).text((index + 1) + '. ' + getLLMMessage('llmQuickPresetEmpty', 'Not set'));
+      $item.prop('disabled', true).text(index + 1 + '. ' + getLLMMessage('llmQuickPresetEmpty', 'Not set'));
     } else {
-      $item.text((index + 1) + '. ' + getPresetLabel(preset, index));
+      $item.text(index + 1 + '. ' + getPresetLabel(preset, index));
     }
 
     $menu.append($item);
@@ -510,17 +559,25 @@ function refreshLLMTexts(messages) {
   }
 
   $('#llmQuickPresetsLabel').text(getLLMMessage('llmQuickPresetsLabel', 'Quick presets'));
-  ['llmProviderLabel', 'llmModelLabel', 'llmApiKeyLabel', 'llmBaseUrlLabel'].forEach(function(id) {
+  ['llmProviderLabel', 'llmModelLabel', 'llmApiKeyLabel', 'llmBaseUrlLabel'].forEach(function (id) {
     $('#' + id).text(getLLMMessage(id));
   });
   $('#ai_quick_toggle').attr('title', getLLMMessage('llmQuickPresetMenuTooltip', 'Quick AI presets'));
   $('.quick-preset-provider option[value=""]').text(getLLMMessage('llmQuickPresetEmpty', 'Not set'));
-  $('.quick-preset-label').attr('placeholder', getLLMMessage('aiPresetName')).attr('aria-label', getLLMMessage('aiPresetName'));
+  $('.quick-preset-label')
+    .attr('placeholder', getLLMMessage('aiPresetName'))
+    .attr('aria-label', getLLMMessage('aiPresetName'));
   $('.quick-preset-task').attr('aria-label', getLLMMessage('aiTaskLabel'));
-  $('.quick-preset-task').each(function() {
-    $(this).find('option').each(function() { $(this).text(getLLMMessage('aiTask_' + this.value)); });
+  $('.quick-preset-task').each(function () {
+    $(this)
+      .find('option')
+      .each(function () {
+        $(this).text(getLLMMessage('aiTask_' + this.value));
+      });
   });
-  $('.quick-preset-prompt').attr('placeholder', getLLMMessage('aiCustomPrompt')).attr('aria-label', getLLMMessage('aiCustomPrompt'));
+  $('.quick-preset-prompt')
+    .attr('placeholder', getLLMMessage('aiCustomPrompt'))
+    .attr('aria-label', getLLMMessage('aiCustomPrompt'));
   AIReview.refreshTexts();
   refreshQuickPresetRowLabels();
   updatePlaceholders();
@@ -531,7 +588,7 @@ function initQuickPresetControls() {
   buildQuickPresetRows();
   refreshLLMTexts();
 
-  $('#quickPresetRows').on('change', '.quick-preset-provider', function() {
+  $('#quickPresetRows').on('change', '.quick-preset-provider', function () {
     const $row = $(this).closest('.quick-preset-row');
     const provider = $(this).val();
     populateQuickPresetModelSelect($row, provider, null, '');
@@ -539,36 +596,40 @@ function initQuickPresetControls() {
     updateQuickPresetMenu();
   });
 
-  $('#quickPresetRows').on('change', '.quick-preset-model', function() {
+  $('#quickPresetRows').on('change', '.quick-preset-model', function () {
     const $row = $(this).closest('.quick-preset-row');
     toggleCustomModel($row.find('.quick-preset-model'), $row.find('.quick-preset-custom-model'));
     llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
     updateQuickPresetMenu();
   });
 
-  $('#quickPresetRows').on('input', '.quick-preset-custom-model', function() {
+  $('#quickPresetRows').on('input', '.quick-preset-custom-model', function () {
     llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
     updateQuickPresetMenu();
   });
 
-  $('#quickPresetRows').on('input change', '.quick-preset-label, .quick-preset-task, .quick-preset-prompt', function() {
-    const $row = $(this).closest('.quick-preset-row');
-    $row.find('.quick-preset-prompt').prop('hidden', $row.find('.quick-preset-task').val() !== 'custom');
-    llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
-    chrome.storage.local.set({ llmTaskPresets: llmQuickPresets }, function() {
-      if (chrome.runtime.lastError) $.message({ message: getLLMMessage('draftSaveFailed') });
-    });
-    updateQuickPresetMenu();
-  });
+  $('#quickPresetRows').on(
+    'input change',
+    '.quick-preset-label, .quick-preset-task, .quick-preset-prompt',
+    function () {
+      const $row = $(this).closest('.quick-preset-row');
+      $row.find('.quick-preset-prompt').prop('hidden', $row.find('.quick-preset-task').val() !== 'custom');
+      llmQuickPresets = normalizeQuickPresets(collectQuickPresetConfigs());
+      chrome.storage.local.set({ llmTaskPresets: llmQuickPresets }, function () {
+        if (chrome.runtime.lastError) $.message({ message: getLLMMessage('draftSaveFailed') });
+      });
+      updateQuickPresetMenu();
+    }
+  );
 
-  $('#ai_quick_toggle').click(function(e) {
+  $('#ai_quick_toggle').click(function (e) {
     e.preventDefault();
     updateQuickPresetMenu();
     $('#ai_quick_menu').toggleClass('hidden');
     $(this).attr('aria-expanded', !$('#ai_quick_menu').hasClass('hidden'));
   });
 
-  $('#ai_quick_menu').on('click', '.ai-quick-item', function(e) {
+  $('#ai_quick_menu').on('click', '.ai-quick-item', function (e) {
     e.preventDefault();
     const index = Number($(this).attr('data-index'));
     const preset = collectQuickPresetConfigs()[index];
@@ -582,7 +643,7 @@ function initQuickPresetControls() {
     optimizeWithAI(preset, $('#ai_optimize'));
   });
 
-  $(document).click(function(e) {
+  $(document).click(function (e) {
     if ($(e.target).closest('.ai-split-wrapper').length === 0) {
       $('#ai_quick_menu').addClass('hidden');
     }
@@ -614,23 +675,25 @@ function saveLLMConfig() {
 // 获取语言输出指令
 function getLanguageInstruction(languageCode) {
   const languageMap = {
-    'zh_CN': {
+    zh_CN: {
       name: '简体中文',
-      instruction: '# 输出语言要求\n\n⚠️ **重要**：你必须使用**简体中文（Simplified Chinese）**输出所有内容。\n\n- 所有文字说明、标题、列表项都使用简体中文\n- 标签使用简体中文：#工作 #学习 #生活\n- 即使用户输入是英文或其他语言，也必须翻译成简体中文输出\n- 保留原文中的专有名词、品牌名、代码、链接等无需翻译的内容'
+      instruction:
+        '# 输出语言要求\n\n⚠️ **重要**：你必须使用**简体中文（Simplified Chinese）**输出所有内容。\n\n- 所有文字说明、标题、列表项都使用简体中文\n- 标签使用简体中文：#工作 #学习 #生活\n- 即使用户输入是英文或其他语言，也必须翻译成简体中文输出\n- 保留原文中的专有名词、品牌名、代码、链接等无需翻译的内容'
     },
-    'en': {
+    en: {
       name: 'English',
-      instruction: '# Output Language Requirement\n\n⚠️ **Important**: You MUST output ALL content in **English**.\n\n- All text descriptions, titles, and list items must be in English\n- Tags must be in English: #work #study #life\n- Even if user input is in Chinese or other languages, translate it to English\n- Preserve proper nouns, brand names, code, links, and other content that should not be translated'
+      instruction:
+        '# Output Language Requirement\n\n⚠️ **Important**: You MUST output ALL content in **English**.\n\n- All text descriptions, titles, and list items must be in English\n- Tags must be in English: #work #study #life\n- Even if user input is in Chinese or other languages, translate it to English\n- Preserve proper nouns, brand names, code, links, and other content that should not be translated'
     },
-    'ja': {
+    ja: {
       name: '日本語',
-      instruction: '# 出力言語の要件\n\n⚠️ **重要**：すべてのコンテンツを**日本語（Japanese）**で出力する必要があります。\n\n- すべてのテキスト説明、タイトル、リスト項目は日本語で記述してください\n- タグは日本語で：#仕事 #勉強 #生活\n- ユーザー入力が中国語や英語であっても、日本語に翻訳して出力してください\n- 固有名詞、ブランド名、コード、リンクなど、翻訳すべきでない内容はそのまま保持してください'
+      instruction:
+        '# 出力言語の要件\n\n⚠️ **重要**：すべてのコンテンツを**日本語（Japanese）**で出力する必要があります。\n\n- すべてのテキスト説明、タイトル、リスト項目は日本語で記述してください\n- タグは日本語で：#仕事 #勉強 #生活\n- ユーザー入力が中国語や英語であっても、日本語に翻訳して出力してください\n- 固有名詞、ブランド名、コード、リンクなど、翻訳すべきでない内容はそのまま保持してください'
     }
   };
-  
+
   const languageInfo = languageMap[languageCode] || languageMap['en'];
-  
-  
+
   return languageInfo.instruction;
 }
 
@@ -654,14 +717,15 @@ function resolveOptimizationConfig(preset) {
   }
 
   const savedProviderConfig = normalizeProviderConfig(provider, llmProviderConfigs[provider]);
-  const modelConfig = preset && preset.provider
-    ? normalizeProviderConfig(provider, {
-      model: preset.model,
-      customModel: preset.customModel,
-      apiKey: savedProviderConfig.apiKey,
-      baseUrl: savedProviderConfig.baseUrl
-    })
-    : savedProviderConfig;
+  const modelConfig =
+    preset && preset.provider
+      ? normalizeProviderConfig(provider, {
+          model: preset.model,
+          customModel: preset.customModel,
+          apiKey: savedProviderConfig.apiKey,
+          baseUrl: savedProviderConfig.baseUrl
+        })
+      : savedProviderConfig;
 
   let modelName = modelConfig.model;
   if (modelConfig.model === 'custom') {
@@ -686,8 +750,8 @@ function resolveOptimizationConfig(preset) {
     model: modelName,
     apiKey: modelConfig.apiKey,
     baseUrl: modelConfig.baseUrl,
-    task: AIWorkflow.normalizeTask(preset && preset.task || $('#aiTask').val()),
-    prompt: preset && preset.prompt || ''
+    task: AIWorkflow.normalizeTask((preset && preset.task) || $('#aiTask').val()),
+    prompt: (preset && preset.prompt) || ''
   };
 }
 
@@ -701,7 +765,7 @@ function setAIButtonLoading($button, isLoading) {
 function optimizeWithAI(preset, $button) {
   if (AIReview.isBusy() || (typeof memoSaveInProgress !== 'undefined' && memoSaveInProgress)) return;
   const content = $('#content').val();
-  
+
   // 验证内容
   if (!content || content.trim() === '') {
     $.message({
@@ -725,25 +789,38 @@ function optimizeWithAI(preset, $button) {
 
   AIReview.setBusy(true, optimizationConfig.task);
   setAIButtonLoading($button, true);
-  const run = () => new Promise((resolve, reject) => {
-    chrome.storage.sync.get(['userLanguage'], data => {
-      if (chrome.runtime.lastError) { reject(new Error(getLLMMessage('aiInterrupted'))); return; }
-      $.message({ message: getLLMMessage('aiOptimizing') });
-      callLLMAPI(optimizationConfig.provider, optimizationConfig.model, optimizationConfig.apiKey, content,
-        data.userLanguage || getFallbackUserLanguage(), optimizationConfig.baseUrl,
-        optimizationConfig.task, optimizationConfig.prompt).then(result => {
+  const run = () =>
+    new Promise((resolve, reject) => {
+      chrome.storage.sync.get(['userLanguage'], data => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(getLLMMessage('aiInterrupted')));
+          return;
+        }
+        $.message({ message: getLLMMessage('aiOptimizing') });
+        callLLMAPI(
+          optimizationConfig.provider,
+          optimizationConfig.model,
+          optimizationConfig.apiKey,
+          content,
+          data.userLanguage || getFallbackUserLanguage(),
+          optimizationConfig.baseUrl,
+          optimizationConfig.task,
+          optimizationConfig.prompt
+        ).then(result => {
           AIReview.show(content, result.text, optimizationConfig.task, result.truncated);
           $.message({ message: getLLMMessage(result.truncated ? 'aiTruncatedWarning' : 'aiReviewReady') });
           resolve();
         }, reject);
+      });
     });
-  });
-  return AIReview.withJob(optimizationConfig.task, run).catch(error => {
-    $.message({ message: getLLMMessage('aiOptimizeFailed') + ' · ' + error.message });
-  }).finally(() => {
-    AIReview.setBusy(false);
-    setAIButtonLoading($button, false);
-  });
+  return AIReview.withJob(optimizationConfig.task, run)
+    .catch(error => {
+      $.message({ message: getLLMMessage('aiOptimizeFailed') + ' · ' + error.message });
+    })
+    .finally(() => {
+      AIReview.setBusy(false);
+      setAIButtonLoading($button, false);
+    });
 }
 
 function normalizeProviderBaseUrl(baseUrl) {
@@ -754,7 +831,7 @@ function buildOpenAIResponsesRequest(providerConfig, model, apiKey, systemPrompt
   return {
     url: providerConfig.apiUrl,
     headers: {
-      'Authorization': 'Bearer ' + apiKey
+      Authorization: 'Bearer ' + apiKey
     },
     body: {
       model: model,
@@ -778,7 +855,7 @@ function buildChatCompletionsRequest(providerConfig, model, apiKey, systemPrompt
   return {
     url: apiUrl,
     headers: {
-      'Authorization': 'Bearer ' + apiKey
+      Authorization: 'Bearer ' + apiKey
     },
     body: {
       model: model,
@@ -888,7 +965,11 @@ function extractOpenAIResponsesText(response) {
 function extractChatCompletionsText(response) {
   if (response.choices && response.choices.length > 0 && response.choices[0].message) {
     const content = response.choices[0].message.content;
-    if (Array.isArray(content)) return content.filter(part => part.type === 'text').map(part => part.text).join('');
+    if (Array.isArray(content))
+      return content
+        .filter(part => part.type === 'text')
+        .map(part => part.text)
+        .join('');
     return typeof content === 'string' ? content : '';
   }
   return '';
@@ -900,18 +981,22 @@ function extractGeminiText(response) {
   if (!Array.isArray(parts)) {
     return '';
   }
-  return parts.map(function (part) {
-    return part.thought ? '' : part.text || '';
-  }).join('');
+  return parts
+    .map(function (part) {
+      return part.thought ? '' : part.text || '';
+    })
+    .join('');
 }
 
 function extractAnthropicText(response) {
   if (!Array.isArray(response.content)) {
     return '';
   }
-  return response.content.map(function (part) {
-    return part.type === 'text' ? part.text || '' : '';
-  }).join('');
+  return response.content
+    .map(function (part) {
+      return part.type === 'text' ? part.text || '' : '';
+    })
+    .join('');
 }
 
 function extractLLMText(providerConfig, response) {
@@ -936,19 +1021,20 @@ function extractLLMErrorMessage(xhr) {
   if (!xhr.status || xhr.statusText === 'timeout') return getLLMMessage('aiInterrupted');
   const body = xhr.responseJSON;
   const reason = body && ((body.error && body.error.message) || body.message);
-  const detail = (xhr.status === 400 || xhr.status === 422) && typeof reason === 'string' ? reason.trim().slice(0, 240) : '';
+  const detail =
+    (xhr.status === 400 || xhr.status === 422) && typeof reason === 'string' ? reason.trim().slice(0, 240) : '';
   return getLLMMessage('apiFailed') + ' (HTTP ' + xhr.status + ')' + (detail ? ': ' + detail : '');
 }
 
 // 调用LLM API
 function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl, task, customPrompt) {
-  return new Promise(function(resolve, reject) {
+  return new Promise(function (resolve, reject) {
     const providerConfig = LLM_CONFIG.providers[provider];
     if (!providerConfig) {
       reject(new Error('未知的提供商'));
       return;
     }
-    
+
     let systemPrompt;
     try {
       systemPrompt = AIWorkflow.buildPrompt(task, customPrompt, LLM_CONFIG.systemPrompt);
@@ -956,11 +1042,11 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
       reject(error);
       return;
     }
-    
+
     // 根据用户语言设置，添加输出语言指令
     const languageInstruction = getLanguageInstruction(userLanguage);
     systemPrompt = systemPrompt + '\n\n' + languageInstruction;
-    
+
     let llmRequest;
     try {
       llmRequest = buildLLMRequest(providerConfig, model, apiKey, systemPrompt, userContent, baseUrl);
@@ -968,7 +1054,7 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
       reject(error);
       return;
     }
-    
+
     // 发送请求
     $.ajax({
       url: llmRequest.url,
@@ -978,10 +1064,10 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
       headers: llmRequest.headers,
       data: JSON.stringify(llmRequest.body),
       timeout: 90000,
-      success: function(response) {
-        
+      success: function (response) {
         // 提取优化后的内容
-        const finish = response.stop_reason || response.choices?.[0]?.finish_reason || response.candidates?.[0]?.finishReason;
+        const finish =
+          response.stop_reason || response.choices?.[0]?.finish_reason || response.candidates?.[0]?.finishReason;
         const truncated = ['max_tokens', 'length', 'MAX_TOKENS'].includes(finish) || response.status === 'incomplete';
         const optimizedContent = extractLLMText(providerConfig, response);
         if (typeof optimizedContent === 'string' && optimizedContent.trim()) {
@@ -990,7 +1076,7 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
           reject(new Error(getLLMMessage(truncated ? 'aiTruncated' : 'aiEmpty')));
         }
       },
-      error: function(xhr) {
+      error: function (xhr) {
         reject(new Error(extractLLMErrorMessage(xhr)));
       }
     });
@@ -998,24 +1084,26 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
 }
 
 function llmStateChanged(changes, area) {
-  return !!((area === 'sync' && (changes.llmProviderConfigs || changes.llmActiveProvider || changes.llmMaxOutputTokens)) ||
-    (area === 'local' && changes.llmTaskPresets));
+  return !!(
+    (area === 'sync' && (changes.llmProviderConfigs || changes.llmActiveProvider || changes.llmMaxOutputTokens)) ||
+    (area === 'local' && changes.llmTaskPresets)
+  );
 }
 
 // 页面加载完成后初始化
-$(document).ready(function() {
+$(document).ready(function () {
   // 初始化LLM配置界面
   initLLMConfig();
   if (document.getElementById('content')) AIReview.init();
   Clipper.init();
-  if (!document.getElementById('llmProvider')) chrome.storage.onChanged?.addListener((changes, area) => {
-    if (llmStateChanged(changes, area)) loadLLMState(updateQuickPresetMenu);
-  });
-  
+  if (!document.getElementById('llmProvider'))
+    chrome.storage.onChanged?.addListener((changes, area) => {
+      if (llmStateChanged(changes, area)) loadLLMState(updateQuickPresetMenu);
+    });
+
   // 绑定AI优化按钮点击事件
-  $('#ai_optimize').click(function(e) {
+  $('#ai_optimize').click(function (e) {
     e.preventDefault();
     optimizeWithAI();
   });
 });
-

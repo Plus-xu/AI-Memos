@@ -14,7 +14,9 @@ function harness(options = {}) {
   const handlers = new Map();
   const local = plain(options.local || {});
   const sync = {
-    apiUrl: 'https://memos.example/', apiTokens: 'memos-test-pat', memo_lock: 'PRIVATE',
+    apiUrl: 'https://memos.example/',
+    apiTokens: 'memos-test-pat',
+    memo_lock: 'PRIVATE',
     llmActiveProvider: 'openai',
     llmProviderConfigs: { openai: { model: 'gpt-5.5', apiKey: 'ai-test-key', baseUrl: '' } },
     ...(options.sync || {})
@@ -23,7 +25,8 @@ function harness(options = {}) {
   const requests = [];
   const inputChanges = [];
   const document = {
-    querySelectorAll: () => [], addEventListener() {},
+    querySelectorAll: () => [],
+    addEventListener() {},
     getElementById: id => node('#' + id)[0]
   };
 
@@ -31,46 +34,109 @@ function harness(options = {}) {
     if (selector === 'textarea[name=text]') selector = '#content';
     if (nodes.has(selector)) return nodes.get(selector);
     const element = {
-      value: '', selectionStart: 0, selectionEnd: 0, focus() {},
-      setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; }
+      value: '',
+      selectionStart: 0,
+      selectionEnd: 0,
+      focus() {},
+      setSelectionRange(start, end) {
+        this.selectionStart = start;
+        this.selectionEnd = end;
+      }
     };
     const wrapper = {
-      0: element, length: selector.startsWith('.') ? 0 : 1, attributes: {}, properties: {},
-      val(value) { if (value === undefined) return element.value; element.value = value; return this; },
-      text(value) { if (value === undefined) return this.textValue || ''; this.textValue = value; return this; },
-      html(value) { if (value === undefined) return this.htmlValue || ''; this.htmlValue = value; return this; },
-      attr(key, value) { if (value === undefined) return this.attributes[key]; this.attributes[key] = value; return this; },
-      removeAttr(key) { delete this.attributes[key]; return this; },
+      0: element,
+      length: selector.startsWith('.') ? 0 : 1,
+      attributes: {},
+      properties: {},
+      val(value) {
+        if (value === undefined) return element.value;
+        element.value = value;
+        return this;
+      },
+      text(value) {
+        if (value === undefined) return this.textValue || '';
+        this.textValue = value;
+        return this;
+      },
+      html(value) {
+        if (value === undefined) return this.htmlValue || '';
+        this.htmlValue = value;
+        return this;
+      },
+      attr(key, value) {
+        if (value === undefined) return this.attributes[key];
+        this.attributes[key] = value;
+        return this;
+      },
+      removeAttr(key) {
+        delete this.attributes[key];
+        return this;
+      },
       prop(key, value) {
         if (value === undefined) return this.properties[key];
-        this.properties[key] = value; element[key] = value; return this;
+        this.properties[key] = value;
+        element[key] = value;
+        return this;
       },
-      is(query) { return query === ':checked' && !!this.properties.checked; },
-      data(key) { return this.attributes['data-' + key]; },
+      is(query) {
+        return query === ':checked' && !!this.properties.checked;
+      },
+      data(key) {
+        return this.attributes['data-' + key];
+      },
       on(events, delegated, callback) {
         const fn = callback || delegated;
         for (const event of events.split(' ')) {
           const key = selector + ':' + event + (typeof delegated === 'string' ? ':' + delegated : '');
           const list = handlers.get(key) || [];
-          list.push(fn); handlers.set(key, list);
+          list.push(fn);
+          handlers.set(key, list);
         }
         return this;
       },
-      click(callback) { return callback ? this.on('click', callback) : this.trigger('click'); },
-      change(callback) { return this.on('change', callback); },
-      blur(callback) { return this.on('blur', callback); },
+      click(callback) {
+        return callback ? this.on('click', callback) : this.trigger('click');
+      },
+      change(callback) {
+        return this.on('change', callback);
+      },
+      blur(callback) {
+        return this.on('blur', callback);
+      },
       trigger(event) {
         const value = { target: element, preventDefault() {} };
         for (const callback of handlers.get(selector + ':' + event) || []) callback.call(element, value);
         if (selector === '#content' && event === 'input') inputChanges.push(element.value);
         return this;
       },
-      ready(callback) { this.readyCallback = callback; return this; },
-      each() { return this; },
-      find(child) { return node(selector + ' ' + child); }
+      ready(callback) {
+        this.readyCallback = callback;
+        return this;
+      },
+      each() {
+        return this;
+      },
+      find(child) {
+        return node(selector + ' ' + child);
+      }
     };
-    for (const method of ['hide', 'show', 'slideDown', 'slideToggle', 'toggleClass', 'addClass', 'removeClass', 'css', 'focus', 'toggle', 'empty', 'append']) {
-      wrapper[method] = function () { return this; };
+    for (const method of [
+      'hide',
+      'show',
+      'slideDown',
+      'slideToggle',
+      'toggleClass',
+      'addClass',
+      'removeClass',
+      'css',
+      'focus',
+      'toggle',
+      'empty',
+      'append'
+    ]) {
+      wrapper[method] = function () {
+        return this;
+      };
     }
     nodes.set(selector, wrapper);
     elementNodes.set(element, wrapper);
@@ -83,33 +149,70 @@ function harness(options = {}) {
     return node(selector);
   }
   $.message = value => messages.push(value.message);
-  $.ajax = value => { requests.push(value); return {}; };
+  $.ajax = value => {
+    requests.push(value);
+    return {};
+  };
   $.each = (items, callback) => items.forEach((item, index) => callback(index, item));
 
   function read(store, keys) {
-    if (Array.isArray(keys)) return Object.fromEntries(keys.filter(key => Object.hasOwn(store, key)).map(key => [key, plain(store[key])]));
-    return plain({ ...keys, ...Object.fromEntries(Object.keys(keys).filter(key => Object.hasOwn(store, key)).map(key => [key, store[key]])) });
+    if (Array.isArray(keys))
+      return Object.fromEntries(keys.filter(key => Object.hasOwn(store, key)).map(key => [key, plain(store[key])]));
+    return plain({
+      ...keys,
+      ...Object.fromEntries(
+        Object.keys(keys)
+          .filter(key => Object.hasOwn(store, key))
+          .map(key => [key, store[key]])
+      )
+    });
   }
 
   const chrome = {
     runtime: { lastError: null },
     i18n: {
-      getMessage: key => ['aiRunTask', 'aiRunningTask', 'aiExecutedTask'].includes(key) ? key + ': {task}' : key,
+      getMessage: key => (['aiRunTask', 'aiRunningTask', 'aiExecutedTask'].includes(key) ? key + ': {task}' : key),
       getUILanguage: () => 'zh-CN'
     },
     storage: {
-      local: { get(keys, callback) { callback(read(local, keys)); }, set(value, callback) { Object.assign(local, plain(value)); callback?.(); } },
-      sync: { get(keys, callback) { callback(read(sync, keys)); }, set(value, callback) { Object.assign(sync, plain(value)); callback?.(); } }
+      local: {
+        get(keys, callback) {
+          callback(read(local, keys));
+        },
+        set(value, callback) {
+          Object.assign(local, plain(value));
+          callback?.();
+        }
+      },
+      sync: {
+        get(keys, callback) {
+          callback(read(sync, keys));
+        },
+        set(value, callback) {
+          Object.assign(sync, plain(value));
+          callback?.();
+        }
+      }
     }
   };
   const context = vm.createContext({
-    $, chrome, document, URL, URLSearchParams, AbortController, AbortSignal, Blob,
-    window: { addEventListener() {} }, setTimeout() {},
+    $,
+    chrome,
+    document,
+    URL,
+    URLSearchParams,
+    AbortController,
+    AbortSignal,
+    Blob,
+    window: { addEventListener() {} },
+    setTimeout() {},
     console: { log() {}, error() {}, warn() {} },
     Clipper: { init() {} },
     MemosAPI: { normalizeBaseUrl: value => value && value.replace(/\/+$/, '') + '/' }
   });
-  function load(file) { vm.runInContext(fs.readFileSync(path.join(root, 'js', file), 'utf8'), context, { filename: file }); }
+  function load(file) {
+    vm.runInContext(fs.readFileSync(path.join(root, 'js', file), 'utf8'), context, { filename: file });
+  }
   for (const file of ['llm-config.js', 'ai-workflow.js', 'ai-review.js', 'ai-optimize.js']) load(file);
   node('#content').val(options.content === undefined ? 'Original draft' : options.content);
   node('#aiTask').val('organize');
@@ -153,10 +256,17 @@ test('adding a page source uses only existing tabs access and preserves the draf
   state.load('clipper-core.js');
   state.load('clipper.js');
   let url = 'https://example.org/read(1)?id=2';
-  state.context.chrome.tabs = { query(_, callback) { callback([{ title: 'An [article]', url }]); } };
+  state.context.chrome.tabs = {
+    query(_, callback) {
+      callback([{ title: 'An [article]', url }]);
+    }
+  };
   state.node('#content')[0].setSelectionRange('Original draft'.length, 'Original draft'.length);
   state.context.Clipper.addPageSource();
-  assert.match(state.node('#content').val(), /^Original draft\s*\[An \\\[article\\\]\]\(https:\/\/example\.org\/read%281%29\?id=2\)/);
+  assert.match(
+    state.node('#content').val(),
+    /^Original draft\s*\[An \\\[article\\\]\]\(https:\/\/example\.org\/read%281%29\?id=2\)/
+  );
   const before = state.node('#content').val();
   url = 'chrome://extensions/';
   state.context.Clipper.addPageSource();
@@ -168,7 +278,11 @@ test('the consolidated source action replaces only the selected range and omits 
   const state = harness({ content: 'Before OLD after' });
   state.load('clipper-core.js');
   state.load('clipper.js');
-  state.context.chrome.tabs = { query(_, callback) { callback([{ title: 'Article', url: 'https://example.org/article?id=7' }]); } };
+  state.context.chrome.tabs = {
+    query(_, callback) {
+      callback([{ title: 'Article', url: 'https://example.org/article?id=7' }]);
+    }
+  };
   state.context.Clipper.init();
   state.node('#content')[0].setSelectionRange(7, 10);
   state.context.Clipper.addPageSource();
@@ -186,7 +300,11 @@ test('an empty draft receives a clean source and the optional time choice persis
   const state = harness({ content: '' });
   state.load('clipper-core.js');
   state.load('clipper.js');
-  state.context.chrome.tabs = { query(_, callback) { callback([{ title: 'Article', url: 'https://example.org/article' }]); } };
+  state.context.chrome.tabs = {
+    query(_, callback) {
+      callback([{ title: 'Article', url: 'https://example.org/article' }]);
+    }
+  };
   state.context.Clipper.init();
   state.context.Clipper.addPageSource();
   assert.equal(state.node('#content').val(), '[Article](https://example.org/article)');
@@ -199,7 +317,10 @@ test('an empty draft receives a clean source and the optional time choice persis
   reopened.context.Clipper.init();
   assert.equal(reopened.node('#sourceIncludeTime').prop('checked'), true);
   reopened.context.Clipper.addPageSource();
-  assert.match(reopened.node('#content').val(), /^\[Article\]\(https:\/\/example\.org\/article\)\n\n\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/);
+  assert.match(
+    reopened.node('#content').val(),
+    /^\[Article\]\(https:\/\/example\.org\/article\)\n\n\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
+  );
 });
 
 test('task guidance and main-button labels follow the selected main task', () => {
@@ -261,7 +382,11 @@ test('the real AI request retains its input snapshot and cannot overwrite edits 
 test('a failed AI request leaves the original draft editable and available', async () => {
   const state = harness();
   state.context.optimizeWithAI();
-  state.requests[0].error({ status: 500, statusText: 'failure', responseJSON: { error: { message: 'Temporary failure' } } }, 'error', 'server failed');
+  state.requests[0].error(
+    { status: 500, statusText: 'failure', responseJSON: { error: { message: 'Temporary failure' } } },
+    'error',
+    'server failed'
+  );
   await flush();
   assert.equal(state.node('#content').val(), 'Original draft');
   assert.equal(state.context.AIReview.isBusy(), false);
@@ -314,8 +439,14 @@ test('the actual draft-load callback refreshes adoption after a review restores 
   let finishDraftLoad;
   state.context.DraftStorage = {
     get: async () => ({}),
-    load(callback) { finishDraftLoad = callback; return Promise.resolve(); },
-    save(value, callback) { state.local.memosDraft = plain(value); callback?.(); }
+    load(callback) {
+      finishDraftLoad = callback;
+      return Promise.resolve();
+    },
+    save(value, callback) {
+      state.local.memosDraft = plain(value);
+      callback?.();
+    }
   };
   state.context.Workspace = { configure() {}, refreshVisibility() {} };
   state.load('editor-draft.js');
@@ -360,20 +491,35 @@ test('saving a matching Memo clears its undo transaction but does not clear unre
 
 test('legacy model-only presets retain provider/model choices and default to the organize task', () => {
   const state = harness();
-  const migrated = plain(state.context.normalizeQuickPresets([
-    { provider: 'openai', model: 'gpt-4.1' },
-    { provider: 'deepseek', model: 'older-custom-model' },
-    {}
-  ]));
+  const migrated = plain(
+    state.context.normalizeQuickPresets([
+      { provider: 'openai', model: 'gpt-4.1' },
+      { provider: 'deepseek', model: 'older-custom-model' },
+      {}
+    ])
+  );
   assert.deepEqual(migrated, [
     { provider: 'openai', model: 'gpt-4.1', customModel: '', name: '', task: 'organize', prompt: '' },
-    { provider: 'deepseek', model: 'custom', customModel: 'older-custom-model', name: '', task: 'organize', prompt: '' },
+    {
+      provider: 'deepseek',
+      model: 'custom',
+      customModel: 'older-custom-model',
+      name: '',
+      task: 'organize',
+      prompt: ''
+    },
     {}
   ]);
 });
 
 test('local task presets override synced legacy presets and keep prompts out of the legacy sync record', () => {
-  const custom = { provider: 'openai', model: 'gpt-4.1', task: 'custom', name: 'Compare arguments', prompt: 'Compare the supported arguments.' };
+  const custom = {
+    provider: 'openai',
+    model: 'gpt-4.1',
+    task: 'custom',
+    name: 'Compare arguments',
+    prompt: 'Compare the supported arguments.'
+  };
   const state = harness({
     sync: { llmQuickPresets: [{ provider: 'openai', model: 'gpt-5.5' }] },
     local: { llmTaskPresets: [custom] }
@@ -383,7 +529,9 @@ test('local task presets override synced legacy presets and keep prompts out of 
   assert.equal(loaded[0].task, 'custom');
   assert.equal(loaded[0].prompt, custom.prompt);
   let saved = false;
-  state.context.persistLLMState(() => { saved = true; });
+  state.context.persistLLMState(() => {
+    saved = true;
+  });
   assert.equal(saved, true);
   assert.equal(state.local.llmTaskPresets[0].prompt, custom.prompt);
   assert.deepEqual(state.sync.llmQuickPresets[0], { provider: 'openai', model: 'gpt-4.1', customModel: '' });
@@ -393,8 +541,16 @@ test('task-specific instructions are passed into real provider request bodies', 
   const state = harness();
   const instructions = [];
   for (const task of ['organize', 'summary', 'keypoints', 'qa', 'custom']) {
-    const pending = state.context.callLLMAPI('openai', 'gpt-5.5', 'ai-test-key', 'Material with https://example.org/source', 'en', '', task,
-      task === 'custom' ? 'Compare supporting and opposing arguments.' : '');
+    const pending = state.context.callLLMAPI(
+      'openai',
+      'gpt-5.5',
+      'ai-test-key',
+      'Material with https://example.org/source',
+      'en',
+      '',
+      task,
+      task === 'custom' ? 'Compare supporting and opposing arguments.' : ''
+    );
     const request = state.requests.at(-1);
     const body = JSON.parse(request.data);
     assert.equal(body.model, 'gpt-5.5');
@@ -425,16 +581,25 @@ test('a truncated AI result is reviewable and carries a truncation warning', () 
 test('an invalid output limit is reported and nothing is saved', () => {
   const state = harness();
   const field = state.context.document.getElementById('llmMaxTokens');
-  for (const [value, validity] of [['100', {}], ['', { badInput: true }]]) {
-    field.value = value; field.validity = validity;
+  for (const [value, validity] of [
+    ['100', {}],
+    ['', { badInput: true }]
+  ]) {
+    field.value = value;
+    field.validity = validity;
     let result;
-    state.context.persistLLMState(error => { result = error; });
+    state.context.persistLLMState(error => {
+      result = error;
+    });
     assert.equal(result && result.message, 'aiMaxTokensInvalid');
     assert.equal(Object.hasOwn(state.sync, 'llmMaxOutputTokens'), false);
   }
-  field.value = '4096'; field.validity = {};
+  field.value = '4096';
+  field.validity = {};
   let result = 'unset';
-  state.context.persistLLMState(error => { result = error; });
+  state.context.persistLLMState(error => {
+    result = error;
+  });
   assert.ok(!result);
   assert.equal(state.sync.llmMaxOutputTokens, 4096);
 });

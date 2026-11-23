@@ -3,11 +3,20 @@ function relativeTime(value, lang, now) {
   if (Number.isNaN(time)) return '';
   var seconds = Math.round((time - (now === undefined ? Date.now() : now)) / 1000);
   // The present, and a server clock running slightly ahead, both read as "now".
-  if (seconds >= 0 && seconds < 60) return new Intl.RelativeTimeFormat(lang || 'en', { numeric: 'auto' }).format(0, 'second');
-  var units = [['second', 60], ['minute', 60], ['hour', 24], ['day', 30], ['month', 12], ['year', Infinity]];
+  if (seconds >= 0 && seconds < 60)
+    return new Intl.RelativeTimeFormat(lang || 'en', { numeric: 'auto' }).format(0, 'second');
+  var units = [
+    ['second', 60],
+    ['minute', 60],
+    ['hour', 24],
+    ['day', 30],
+    ['month', 12],
+    ['year', Infinity]
+  ];
   var amount = seconds;
   for (var i = 0; i < units.length; i++) {
-    if (Math.abs(amount) < units[i][1]) return new Intl.RelativeTimeFormat(lang || 'en').format(Math.trunc(amount), units[i][0]);
+    if (Math.abs(amount) < units[i][1])
+      return new Intl.RelativeTimeFormat(lang || 'en').format(Math.trunc(amount), units[i][0]);
     amount /= units[i][1];
   }
 }
@@ -27,7 +36,8 @@ function get_info(callback) {
       showtag: '',
       memo_lock: '',
       userid: '',
-      userName: '', memosVersion: ''
+      userName: '',
+      memosVersion: ''
     },
     function (items) {
       var returnObject = {
@@ -38,7 +48,8 @@ function get_info(callback) {
         showtag: items.showtag,
         memo_lock: items.memo_lock,
         userid: items.userid,
-        userName: items.userName, memosVersion: items.memosVersion
+        userName: items.userName,
+        memosVersion: items.memosVersion
       };
 
       if (callback) callback(returnObject);
@@ -53,24 +64,26 @@ function showApiError(prefix, xhr, fallbackMessage) {
     code: xhr && xhr.code
   });
 
-  var errorMsg = fallbackMessage || uiMessage("apiFailed") || 'API call failed';
+  var errorMsg = fallbackMessage || uiMessage('apiFailed') || 'API call failed';
   if (xhr && xhr.code === 'invalid_url') {
-    errorMsg = uiMessage("invalidUrl");
+    errorMsg = uiMessage('invalidUrl');
   } else if (xhr && xhr.status === 401) {
-    errorMsg = uiMessage("invalidToken");
+    errorMsg = uiMessage('invalidToken');
   } else if (xhr && xhr.status === 403) {
-    errorMsg = uiMessage("permissionDenied");
+    errorMsg = uiMessage('permissionDenied');
   } else if (xhr && (xhr.status === 404 || xhr.status === 410)) {
-    errorMsg = uiMessage("apiNotFound");
+    errorMsg = uiMessage('apiNotFound');
   } else if (xhr && xhr.status === 413) {
-    errorMsg = uiMessage("uploadTooLarge");
+    errorMsg = uiMessage('uploadTooLarge');
   } else if (xhr && xhr.status === 429) {
     var details = xhr.responseJSON && xhr.responseJSON.details;
     if (!Array.isArray(details)) details = [];
-    var quota = details.some(function (detail) { return detail.reason === 'QUOTA_EXCEEDED'; });
-    errorMsg = uiMessage(quota ? "quotaExceeded" : "requestLimited");
+    var quota = details.some(function (detail) {
+      return detail.reason === 'QUOTA_EXCEEDED';
+    });
+    errorMsg = uiMessage(quota ? 'quotaExceeded' : 'requestLimited');
   } else if (xhr && (xhr.statusText === 'timeout' || xhr.name === 'TimeoutError')) {
-    errorMsg = uiMessage("apiTimeout");
+    errorMsg = uiMessage('apiTimeout');
   } else if (xhr && xhr.responseJSON && typeof xhr.responseJSON.message === 'string') {
     errorMsg += ': ' + xhr.responseJSON.message.slice(0, 240);
   }
@@ -79,7 +92,7 @@ function showApiError(prefix, xhr, fallbackMessage) {
 }
 
 function resolveVisibility(info) {
-  return MemoTags.visibility($("textarea[name=text]").val(), info);
+  return MemoTags.visibility($('textarea[name=text]').val(), info);
 }
 
 var exposedMemo = null;
@@ -87,11 +100,15 @@ var exposedMemo = null;
 // Second check: the server's own tag list decides whether the rule applied.
 function checkSavedVisibility(info, memo) {
   var hidden = MemoTags.list(info.hidetag);
-  var exposed = Array.isArray(memo.tags) &&
+  var exposed =
+    Array.isArray(memo.tags) &&
     memo.tags.some(function (tag) {
-      return hidden.some(function (name) { return tag === name || String(tag).startsWith(name + '/'); });
+      return hidden.some(function (name) {
+        return tag === name || String(tag).startsWith(name + '/');
+      });
     }) &&
-    typeof memo.visibility === 'string' && memo.visibility !== 'PRIVATE';
+    typeof memo.visibility === 'string' &&
+    memo.visibility !== 'PRIVATE';
   exposedMemo = exposed ? { name: memo.name, scope: DraftStorage.scope(info) } : null;
   $('#visibilityWarning').prop('hidden', !exposed);
 }
@@ -99,10 +116,20 @@ function checkSavedVisibility(info, memo) {
 async function makeSavedMemoPrivate() {
   var entry = exposedMemo;
   if (!entry) return;
-  var info = await new Promise(function (resolve) { get_info(resolve); });
-  function dismiss() { if (exposedMemo === entry) { exposedMemo = null; $('#visibilityWarning').prop('hidden', true); } }
+  var info = await new Promise(function (resolve) {
+    get_info(resolve);
+  });
+  function dismiss() {
+    if (exposedMemo === entry) {
+      exposedMemo = null;
+      $('#visibilityWarning').prop('hidden', true);
+    }
+  }
   // The memo belongs to the account that saved it; never send its name to another one.
-  if (DraftStorage.scope(info) !== entry.scope) { dismiss(); return; }
+  if (DraftStorage.scope(info) !== entry.scope) {
+    dismiss();
+    return;
+  }
   try {
     await MemosAPI.setMemoVisibility(info, entry.name, 'PRIVATE');
     dismiss();
@@ -146,7 +173,15 @@ function previewLink(info, value, label) {
   if (!url) return escapeHtml(label || '');
   var file = MemosAPI.managedFile(info.apiUrl, url);
   var attributes = file ? ' class="memos-file-link" data-url="' + escapeHtml(url) + '"' : '';
-  return '<a href="' + escapeHtml(url) + '"' + attributes + ' target="_blank" rel="noreferrer noopener">' + escapeHtml(label) + '</a>';
+  return (
+    '<a href="' +
+    escapeHtml(url) +
+    '"' +
+    attributes +
+    ' target="_blank" rel="noreferrer noopener">' +
+    escapeHtml(label) +
+    '</a>'
+  );
 }
 
 function renderMarkdownPreview(content, info) {
@@ -166,13 +201,15 @@ function releaseMemoPreviews() {
   previewGeneration++;
   if (previewController) previewController.abort();
   previewController = null;
-  previewObjectUrls.forEach(function (url) { URL.revokeObjectURL(url); });
+  previewObjectUrls.forEach(function (url) {
+    URL.revokeObjectURL(url);
+  });
   previewObjectUrls.clear();
 }
 
 function clearMemoList() {
   releaseMemoPreviews();
-  $("#randomlist").html('').hide();
+  $('#randomlist').html('').hide();
 }
 
 function hydrateMemoImages(info) {
@@ -183,24 +220,30 @@ function hydrateMemoImages(info) {
   document.querySelectorAll('#randomlist img[data-memos-file]').forEach(function (element) {
     var url = element.getAttribute('data-memos-file');
     if (!files.has(url)) {
-      files.set(url, MemosAPI.fetchAttachmentBlob(info, url, signal).then(function (blob) {
-        if (generation !== previewGeneration) return '';
-        if (!blob.type.startsWith('image/')) throw new Error('invalid_image_response');
-        var objectUrl = URL.createObjectURL(blob);
-        previewObjectUrls.add(objectUrl);
-        return objectUrl;
-      }));
+      files.set(
+        url,
+        MemosAPI.fetchAttachmentBlob(info, url, signal).then(function (blob) {
+          if (generation !== previewGeneration) return '';
+          if (!blob.type.startsWith('image/')) throw new Error('invalid_image_response');
+          var objectUrl = URL.createObjectURL(blob);
+          previewObjectUrls.add(objectUrl);
+          return objectUrl;
+        })
+      );
     }
-    files.get(url).then(function (objectUrl) {
-      if (!objectUrl || generation !== previewGeneration) return;
-      element.src = objectUrl;
-      element.removeAttribute('no-view');
-    }).catch(function (error) {
-      if (generation !== previewGeneration) return;
-      element.alt = uiMessage('attachmentPreviewFailed');
-      element.title = element.alt;
-      console.error('Attachment preview failed', { status: error.status, code: error.code });
-    });
+    files
+      .get(url)
+      .then(function (objectUrl) {
+        if (!objectUrl || generation !== previewGeneration) return;
+        element.src = objectUrl;
+        element.removeAttribute('no-view');
+      })
+      .catch(function (error) {
+        if (generation !== previewGeneration) return;
+        element.alt = uiMessage('attachmentPreviewFailed');
+        element.title = element.alt;
+        console.error('Attachment preview failed', { status: error.status, code: error.code });
+      });
   });
 }
 
@@ -235,9 +278,21 @@ function buildMemoHtml(info, memo) {
   var timeText = relativeTime(createTime, document.documentElement.lang);
 
   var itemHtml = '<article class="random-item"><div class="random-time">' + escapeHtml(timeText);
-  itemHtml += '<button type="button" class="random-link" data-uid="' + escapeHtml(memoId) + '" data-url="' + escapeHtml(memoUrl) + '">' + escapeHtml(uiMessage('openSaved')) + '</button>';
+  itemHtml +=
+    '<button type="button" class="random-link" data-uid="' +
+    escapeHtml(memoId) +
+    '" data-url="' +
+    escapeHtml(memoUrl) +
+    '">' +
+    escapeHtml(uiMessage('openSaved')) +
+    '</button>';
   if (memo.creator === info.userName || !memo.creator)
-    itemHtml += '<button type="button" class="random-delete" data-name="' + escapeHtml(memo.name) + '">' + escapeHtml(uiMessage('archiveAction')) + '</button>';
+    itemHtml +=
+      '<button type="button" class="random-delete" data-name="' +
+      escapeHtml(memo.name) +
+      '">' +
+      escapeHtml(uiMessage('archiveAction')) +
+      '</button>';
   itemHtml += '</div><div class="random-content">' + renderMarkdownPreview(memo.content || '', info) + '</div>';
   itemHtml += buildMemoAttachmentHtml(info, memo);
   itemHtml += '</article>';
@@ -252,7 +307,7 @@ function renderMemoList(info, memos) {
     memoHtml += buildMemoHtml(info, memos[i]);
   }
 
-  $("#randomlist").html(memoHtml).show();
+  $('#randomlist').html(memoHtml).show();
   hydrateMemoImages(info);
   window.ViewImage && ViewImage.init('.random-image');
 }
@@ -271,8 +326,8 @@ function saveCurrentDraft() {
   return DraftEditor.flush();
 }
 
-$("textarea[name=text]").on('input', saveCurrentDraft);
-$("textarea[name=text]").on('keydown', function (event) {
+$('textarea[name=text]').on('input', saveCurrentDraft);
+$('textarea[name=text]').on('keydown', function (event) {
   if (!event.isComposing && event.code === 'Enter' && (event.ctrlKey || event.metaKey)) {
     event.preventDefault();
     $('#content_submit_text').click();
@@ -285,7 +340,8 @@ function add(text) {
   const start = editor.selectionStart ?? editor.value.length;
   const end = editor.selectionEnd ?? start;
   editor.value = editor.value.slice(0, start) + text + editor.value.slice(end);
-  editor.focus(); editor.setSelectionRange(start + text.length, start + text.length);
+  editor.focus();
+  editor.setSelectionRange(start + text.length, start + text.length);
   $('#content').trigger('input');
 }
 
@@ -298,55 +354,86 @@ async function addFiles(files) {
     add(references.join('\n'));
     await DraftEditor.flush();
     $.message({ message: uiMessage('fileStaged') });
-  } catch (_) { $.message({ message: uiMessage('picFailed') }); }
-  finally { pendingUploads--; }
+  } catch (_) {
+    $.message({ message: uiMessage('picFailed') });
+  } finally {
+    pendingUploads--;
+  }
 }
 
 document.addEventListener('paste', event => {
   if (event.target.id !== 'content' || !event.clipboardData?.files.length) return;
-  event.preventDefault(); addFiles(Array.from(event.clipboardData.files));
+  event.preventDefault();
+  addFiles(Array.from(event.clipboardData.files));
 });
 const memoEditor = document.getElementById('content');
 memoEditor.ondragover = event => event.preventDefault();
 memoEditor.ondrop = event => {
-  if (event.dataTransfer.files.length) { event.preventDefault(); addFiles(Array.from(event.dataTransfer.files)); }
+  if (event.dataTransfer.files.length) {
+    event.preventDefault();
+    addFiles(Array.from(event.dataTransfer.files));
+  }
 };
 $('#newtodo').click(() => add('\n- [ ] '));
 $('#upres').click(() => $('#inFile').click());
-$('#inFile').on('change', function () { addFiles(Array.from(this.files)); this.value = ''; });
+$('#inFile').on('change', function () {
+  addFiles(Array.from(this.files));
+  this.value = '';
+});
 
-$('#opensite').click(() => get_info(info => {
-  if (info.status) chrome.tabs.create({ url: info.apiUrl });
-  else chrome.runtime.openOptionsPage();
-}));
-$('#tags').click(() => get_info(async info => {
-  if (!info.status) { $.message({ message: uiMessage('connectMemos') }); return; }
-  try {
-    const memos = await MemosAPI.listMemos(info);
-    const tags = Array.from(new Set(memos.flatMap(m => m.tags || []))).sort();
-    if (!tags.length) { $.message({ message: uiMessage('noTagsFound') }); return; }
-    const list = $('#taglist').empty();
-    for (const tag of tags) list.append($('<button type="button" class="item-container"></button>').text('#' + tag));
-    list.toggle();
-  } catch (error) { showApiError('Tags', error, uiMessage('getTabFailed')); }
-}));
-$(document).on('click', '.item-container', function () { add($(this).text() + ' '); });
-$('#random').click(() => get_info(async info => {
-  if (!info.status) { $.message({ message: uiMessage('connectMemos') }); return; }
-  const run = Workspace.resetSearch();
-  try {
-    const memos = await MemosAPI.listMemos(info);
-    if (run !== Workspace.listRun()) return;
-    if (memos.length) Workspace.show([memos[Math.floor(Math.random() * memos.length)]]);
-    else $('#searchStatus').text(uiMessage('noMemosFound'));
-  } catch (error) { if (run === Workspace.listRun()) showApiError('Random memo', error, uiMessage('apiFailed')); }
-}));
+$('#opensite').click(() =>
+  get_info(info => {
+    if (info.status) chrome.tabs.create({ url: info.apiUrl });
+    else chrome.runtime.openOptionsPage();
+  })
+);
+$('#tags').click(() =>
+  get_info(async info => {
+    if (!info.status) {
+      $.message({ message: uiMessage('connectMemos') });
+      return;
+    }
+    try {
+      const memos = await MemosAPI.listMemos(info);
+      const tags = Array.from(new Set(memos.flatMap(m => m.tags || []))).sort();
+      if (!tags.length) {
+        $.message({ message: uiMessage('noTagsFound') });
+        return;
+      }
+      const list = $('#taglist').empty();
+      for (const tag of tags) list.append($('<button type="button" class="item-container"></button>').text('#' + tag));
+      list.toggle();
+    } catch (error) {
+      showApiError('Tags', error, uiMessage('getTabFailed'));
+    }
+  })
+);
+$(document).on('click', '.item-container', function () {
+  add($(this).text() + ' ');
+});
+$('#random').click(() =>
+  get_info(async info => {
+    if (!info.status) {
+      $.message({ message: uiMessage('connectMemos') });
+      return;
+    }
+    const run = Workspace.resetSearch();
+    try {
+      const memos = await MemosAPI.listMemos(info);
+      if (run !== Workspace.listRun()) return;
+      if (memos.length) Workspace.show([memos[Math.floor(Math.random() * memos.length)]]);
+      else $('#searchStatus').text(uiMessage('noMemosFound'));
+    } catch (error) {
+      if (run === Workspace.listRun()) showApiError('Random memo', error, uiMessage('apiFailed'));
+    }
+  })
+);
 
-$(document).on("click", ".random-link", function () {
+$(document).on('click', '.random-link', function () {
   var memoUrl = $(this).attr('data-url');
   var memoUid = $(this).attr('data-uid');
   get_info(function (info) {
-    chrome.tabs.create({ url: memoUrl || (info.apiUrl + "memos/" + encodeURIComponent(memoUid)) });
+    chrome.tabs.create({ url: memoUrl || info.apiUrl + 'memos/' + encodeURIComponent(memoUid) });
   });
 });
 
@@ -363,10 +450,12 @@ async function archiveMemoByName(name) {
   archivingNames.add(name);
   var info;
   try {
-    info = await new Promise(function (resolve) { get_info(resolve); });
+    info = await new Promise(function (resolve) {
+      get_info(resolve);
+    });
     await MemosAPI.archiveMemo(info, name);
   } catch (xhr) {
-    showApiError('Archive API failed', xhr, uiMessage("archiveFailed"));
+    showApiError('Archive API failed', xhr, uiMessage('archiveFailed'));
     return;
   } finally {
     archivingNames.delete(name);
@@ -378,7 +467,9 @@ async function archiveMemoByName(name) {
 async function undoArchive() {
   var entry = archivedEntry;
   if (!entry) return;
-  var info = await new Promise(function (resolve) { get_info(resolve); });
+  var info = await new Promise(function (resolve) {
+    get_info(resolve);
+  });
   if (DraftStorage.scope(info) !== entry.scope) {
     if (archivedEntry === entry) dismissArchiveNotice();
     return;
@@ -386,33 +477,37 @@ async function undoArchive() {
   try {
     await MemosAPI.restoreMemo(info, entry.name);
   } catch (xhr) {
-    showApiError('Restore API failed', xhr, uiMessage("apiFailed"));
+    showApiError('Restore API failed', xhr, uiMessage('apiFailed'));
     return;
   }
   if (archivedEntry === entry) dismissArchiveNotice();
   Workspace.restore(entry.removed);
-  $.message({ message: uiMessage("archiveUndone") });
+  $.message({ message: uiMessage('archiveUndone') });
 }
 
-$(document).on("click", ".random-delete", function () {
+$(document).on('click', '.random-delete', function () {
   archiveMemoByName($(this).data('name'));
 });
 $('#archiveUndo').click(undoArchive);
 
-$(document).on("click", ".memos-file-link", function (event) {
+$(document).on('click', '.memos-file-link', function (event) {
   event.preventDefault();
   var url = $(this).attr('data-url');
   get_info(function (info) {
-    MemosAPI.fetchAttachmentBlob(info, url).then(function (blob) {
-      var objectUrl = URL.createObjectURL(blob);
-      var link = document.createElement('a');
-      link.href = objectUrl;
-      link.download = MemosAPI.managedFile(info.apiUrl, url).filename;
-      link.click();
-      setTimeout(function () { URL.revokeObjectURL(objectUrl); }, 10000);
-    }).catch(function (xhr) {
-      showApiError('Attachment download failed', xhr, uiMessage("apiFailed"));
-    });
+    MemosAPI.fetchAttachmentBlob(info, url)
+      .then(function (blob) {
+        var objectUrl = URL.createObjectURL(blob);
+        var link = document.createElement('a');
+        link.href = objectUrl;
+        link.download = MemosAPI.managedFile(info.apiUrl, url).filename;
+        link.click();
+        setTimeout(function () {
+          URL.revokeObjectURL(objectUrl);
+        }, 10000);
+      })
+      .catch(function (xhr) {
+        showApiError('Attachment download failed', xhr, uiMessage('apiFailed'));
+      });
   });
 });
 
@@ -422,16 +517,22 @@ $('#makePrivate').click(makeSavedMemoPrivate);
 async function submitMemo(info, snapshot, destination) {
   const scope = DraftStorage.scope(info);
   const current = await DraftStorage.current();
-  if (snapshot.open_content !== current.open_content || snapshot.revision !== current.revision) throw new Error('draftChanged');
+  if (snapshot.open_content !== current.open_content || snapshot.revision !== current.revision)
+    throw new Error('draftChanged');
   const original = snapshot.open_content;
   if (!info.memosVersion) {
-    try { info.memosVersion = (await MemosAPI.getInstanceProfile(info)).version; }
-    catch (_) { /* Version discovery is optional on legacy instances. */ }
+    try {
+      info.memosVersion = (await MemosAPI.getInstanceProfile(info)).version;
+    } catch (_) {
+      /* Version discovery is optional on legacy instances. */
+    }
   }
   const modern = /^(\d+)\.(\d+)/.exec(info.memosVersion || '');
   const acceptsId = modern && (+modern[1] > 26 || (+modern[1] === 26 && +modern[2] >= 10));
   const input = new TextEncoder().encode(JSON.stringify([scope, original, destination]));
-  const signature = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', input)), b => b.toString(16).padStart(2, '0')).join('');
+  const signature = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', input)), b =>
+    b.toString(16).padStart(2, '0')
+  ).join('');
   const key = 'memosSaveAttempt:' + scope;
   const prior = (await DraftStorage.get('local', { [key]: null }))[key];
   const retry = prior?.signature === signature;
@@ -442,8 +543,11 @@ async function submitMemo(info, snapshot, destination) {
   const body = await MemosAPI.prepareMemo(info, { content, ...destination });
   let memo;
   if (memoId && retry) {
-    try { memo = await MemosAPI.getMemo(info, 'memos/' + memoId); }
-    catch (error) { if (!MemosAPI.isMissingRoute(error)) throw error; }
+    try {
+      memo = await MemosAPI.getMemo(info, 'memos/' + memoId);
+    } catch (error) {
+      if (!MemosAPI.isMissingRoute(error)) throw error;
+    }
     if (memo && (memo.name !== 'memos/' + memoId || memo.content !== body.content)) throw new Error('unconfirmedSave');
   }
   if (!memo) memo = await MemosAPI.createMemo(info, body, memoId);
@@ -451,7 +555,11 @@ async function submitMemo(info, snapshot, destination) {
   if (memoId && memo.name !== 'memos/' + memoId) throw new Error('unconfirmedSave');
   const sources = snapshot.sources.filter(source => original.includes(source.url));
   let historyError = false;
-  try { await DraftStorage.record(info, memo, sources); } catch (_) { historyError = true; }
+  try {
+    await DraftStorage.record(info, memo, sources);
+  } catch (_) {
+    historyError = true;
+  }
   if ($('#content').val() !== original) await DraftEditor.flush();
   AIReview.onMemoSaved(original);
   await DraftStorage.finish(snapshot);
@@ -467,24 +575,32 @@ async function submitMemo(info, snapshot, destination) {
 async function sendText() {
   if (memoSaveInProgress) return;
   const requested = $('#content').val();
-  if (!requested.trim()) { $.message({ message: uiMessage('placeContent') }); return; }
+  if (!requested.trim()) {
+    $.message({ message: uiMessage('placeContent') });
+    return;
+  }
   if (AIReview.isBusy() || pendingUploads) {
-    $.message({ message: uiMessage(pendingUploads ? 'picUploading' : 'aiOptimizing') }); return;
+    $.message({ message: uiMessage(pendingUploads ? 'picUploading' : 'aiOptimizing') });
+    return;
   }
   memoSaveInProgress = true;
   $('#content').prop('readOnly', true);
   $('#content_submit_text').prop('disabled', true);
   try {
-    if (!await DraftEditor.flush()) return;
+    if (!(await DraftEditor.flush())) return;
     const snapshot = DraftEditor.snapshot();
     if (snapshot.open_content !== requested) throw new Error('draftChanged');
     const info = await new Promise(resolve => get_info(resolve));
-    if (!info.status) { $.message({ message: uiMessage('connectMemos') }); return; }
+    if (!info.status) {
+      $.message({ message: uiMessage('connectMemos') });
+      return;
+    }
     $.message({ message: uiMessage('memoUploading') });
     const target = await Workspace.destination(info);
     await DraftStorage.locked('memos-submit', () => submitMemo(info, snapshot, target));
   } catch (error) {
-    if (['draftChanged','spaceUnavailable','stagedFileMissing','unconfirmedSave'].includes(error.message)) $.message({ message: uiMessage(error.message) });
+    if (['draftChanged', 'spaceUnavailable', 'stagedFileMissing', 'unconfirmedSave'].includes(error.message))
+      $.message({ message: uiMessage(error.message) });
     else showApiError('Save memo', error, uiMessage('memoFailed'));
   } finally {
     memoSaveInProgress = false;

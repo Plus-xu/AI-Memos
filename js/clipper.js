@@ -12,7 +12,9 @@ var Clipper = (function () {
         var tab = tabs && tabs[0];
         if (runtimeError || !tab) throw new Error('source_unavailable');
         var url = ClipperCore.safeUrl(tab.url);
-        var title = String(tab.title || url).replace(/[\\\[\]]/g, '\\$&').replace(/[\r\n]+/g, ' ');
+        var title = String(tab.title || url)
+          .replace(/[\\\[\]]/g, '\\$&')
+          .replace(/[\r\n]+/g, ' ');
         var withTime = !!$('#sourceIncludeTime').prop('checked');
         var source = '[' + title + '](' + url + ')' + (withTime ? '\n\n' + new Date().toISOString() : '');
         var editor = $('#content')[0];
@@ -22,8 +24,8 @@ var Clipper = (function () {
         var before = current.slice(0, start);
         var after = current.slice(end);
         var separator = withTime ? '\n\n' : ' ';
-        var inserted = (before && !/\s$/.test(before) ? separator : '') + source +
-          (after && !/^\s/.test(after) ? separator : '');
+        var inserted =
+          (before && !/\s$/.test(before) ? separator : '') + source + (after && !/^\s/.test(after) ? separator : '');
         if (typeof DraftEditor !== 'undefined') DraftEditor.note({ url, title: tab.title || url });
         editor.value = before + inserted + after;
         editor.focus();
@@ -57,11 +59,18 @@ var Clipper = (function () {
   }
 
   function init() {
-    chrome.storage.local.get({ memosClipTemplate: ClipperCore.defaultTemplate, memosSourceIncludeTime: false }, function (data) {
-      try { template = ClipperCore.validateTemplate(data.memosClipTemplate); } catch (_) { template = ClipperCore.defaultTemplate; }
-      $('#clipTemplate').val(template);
-      $('#sourceIncludeTime').prop('checked', !!data.memosSourceIncludeTime);
-    });
+    chrome.storage.local.get(
+      { memosClipTemplate: ClipperCore.defaultTemplate, memosSourceIncludeTime: false },
+      function (data) {
+        try {
+          template = ClipperCore.validateTemplate(data.memosClipTemplate);
+        } catch (_) {
+          template = ClipperCore.defaultTemplate;
+        }
+        $('#clipTemplate').val(template);
+        $('#sourceIncludeTime').prop('checked', !!data.memosSourceIncludeTime);
+      }
+    );
     $('#captureSource').click(addPageSource);
     $('#sourceIncludeTime').on('change', function () {
       chrome.storage.local.set({ memosSourceIncludeTime: !!this.checked }, function () {
@@ -70,7 +79,10 @@ var Clipper = (function () {
     });
     $('#clipTemplate').on('change', saveTemplate);
     $('#saveTemplate').click(saveTemplate);
-    $('#clipTemplateReset').click(function () { $('#clipTemplate').val(ClipperCore.defaultTemplate); saveTemplate(); });
+    $('#clipTemplateReset').click(function () {
+      $('#clipTemplate').val(ClipperCore.defaultTemplate);
+      saveTemplate();
+    });
   }
 
   return { init: init, addPageSource: addPageSource };

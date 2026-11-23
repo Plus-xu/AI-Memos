@@ -9,10 +9,15 @@ document.addEventListener('DOMContentLoaded', () => {
     applyTheme(prefs.theme);
     setUiLanguage(prefs.userLanguage).catch(() => setUiLanguage('en'));
   });
-  $('#themeSelect').on('change', function () { chrome.storage.sync.set({ theme: this.value }); });
-  $('#languageSelect').on('change', function () { chrome.storage.sync.set({ userLanguage: this.value }); });
+  $('#themeSelect').on('change', function () {
+    chrome.storage.sync.set({ theme: this.value });
+  });
+  $('#languageSelect').on('change', function () {
+    chrome.storage.sync.set({ userLanguage: this.value });
+  });
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () =>
-    chrome.storage.sync.get({ theme: 'auto' }, p => applyTheme(p.theme)));
+    chrome.storage.sync.get({ theme: 'auto' }, p => applyTheme(p.theme))
+  );
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'sync') return;
     if (changes.theme) applyTheme(changes.theme.newValue);

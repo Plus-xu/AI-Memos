@@ -1,47 +1,201 @@
 <!doctype html>
-<html lang="en" data-view="popup"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI-MEMOS</title><link rel="stylesheet" href="css/main.css"><script src="js/surface.js"></script></head>
-<body class="body"><div class="shell">
-<header class="appbar"><button id="opensite" class="brand" data-title="openMemos"><img src="assets/logo_24x24.png" alt="">AI-MEMOS</button>
-<div class="header-tools"><button id="openPanel" class="quiet" data-feature-message="openPanel"></button><button id="blog_info_edit" class="icon-button open-settings" data-title="settingsBtn"><img src="assets/settings.svg" alt=""></button></div></header>
-<nav class="tabs" data-label="navigation"><button data-tab="write" aria-current="page" data-feature-message="navWrite"></button><button data-tab="search" data-feature-message="navSearch"></button><button data-tab="history" data-feature-message="navHistory"></button></nav>
-<main><section id="writeView">
-<div id="connectNotice" class="notice inline" hidden><span data-feature-message="connectHint"></span><button class="text-button open-settings" data-feature-message="connectMemos"></button></div>
-<div class="editor-card"><label class="sr-only" for="content" data-feature-message="navWrite"></label><textarea id="content" class="common-editor-inputer" name="text" rows="6" readonly data-placeholder="placeContent"></textarea>
-<div class="editor-tools"><div class="source-group"><button id="capturePage" class="quiet"><img src="assets/link.svg" alt=""><span data-feature-message="capturePage"></span></button>
-<details id="sourceMenu" class="tools-menu"><summary data-label="captureOptions">▾</summary><div class="menu"><button id="captureSelection" data-feature-message="captureSelection"></button><button id="captureSource" data-feature-message="clipAddSource"></button><label class="check"><input id="sourceIncludeTime" type="checkbox"><span data-feature-message="sourceIncludeTime"></span></label></div></details></div>
-<div class="editor-icons"><button id="tags" class="icon-button" data-title="tagsTooltip"><img src="assets/hash.svg" alt=""></button><button id="newtodo" class="icon-button" data-title="todoTooltip"><img src="assets/todo.svg" alt=""></button><button id="upres" class="icon-button" data-title="uploadTooltip"><img src="assets/paperclip.svg" alt=""></button></div>
-</div></div><div id="taglist" class="tag-list"></div><input type="file" id="inFile" multiple hidden>
-<div id="draftConflict" class="notice" hidden><p data-feature-message="draftConflict"></p><button id="draftKeepBoth" data-feature-message="draftKeepBoth"></button> <button id="draftUseLatest" data-feature-message="draftUseLatest"></button></div>
-<div id="duplicateNotice" class="notice inline" hidden><span data-feature-message="savedBefore"></span><a id="previousMemo" target="_blank" rel="noopener noreferrer" data-feature-message="openSaved"></a></div>
-<div class="destination"><label id="spaceField" hidden><span data-feature-message="spaceLabel"></span><select id="memoSpace"></select></label><label><span data-feature-message="visibilityTooltip"></span><select id="visibility"><option value="PRIVATE"  data-feature-message="lockPrivate"></option><option value="PROTECTED"  data-feature-message="lockProtected"></option><option value="PUBLIC"  data-feature-message="lockPublic"></option><option value="SPACE" id="spaceVisibility" hidden data-feature-message="lockSpace"></option></select></label><small id="effectiveVisibility" role="status"></small></div>
-<div class="action-row"><div class="ai-split-wrapper"><button id="ai_optimize" class="secondary"><img src="assets/wand-sparkles.svg" alt=""><span data-feature-message="aiAction"></span></button><button id="ai_quick_toggle" aria-expanded="false" class="ai-quick-toggle" data-title="aiTaskLabel">▾</button>
-<div id="ai_quick_menu" class="menu hidden"><label for="aiTask" data-feature-message="aiTaskLabel"></label><select id="aiTask"><option value="organize" data-feature-message="aiTask_organize"></option><option value="summary" data-feature-message="aiTask_summary"></option><option value="keypoints" data-feature-message="aiTask_keypoints"></option><option value="qa" data-feature-message="aiTask_qa"></option></select><small id="aiTaskHelp"></small><div id="quickItems"></div></div></div>
-<button id="aiUndo" class="text-button" disabled data-feature-message="aiUndo"></button><button id="content_submit_text" class="primary" data-feature-message="submitBtn"></button></div>
-<p id="aiTaskStatus" class="status" role="status" hidden></p><div id="saveStatus" class="inline status" role="status" hidden><span data-feature-message="memoSuccess"></span><a id="lastMemoLink" target="_blank" rel="noopener noreferrer" data-feature-message="openSaved"></a></div>
-<div id="visibilityWarning" class="notice inline" role="alert" hidden><span data-feature-message="hiddenTagExposed"></span><button id="makePrivate" class="text-button" data-feature-message="makePrivate"></button></div>
-<section id="aiReviewPanel" class="review" aria-labelledby="aiReviewTitle" hidden><div class="section-heading"><h2 id="aiReviewTitle" data-feature-message="aiReviewTitle"></h2><small id="aiReviewTask"></small></div>
-<p id="aiReviewWarning" class="notice" role="status" hidden></p><label for="aiReviewResult" data-feature-message="aiResult"></label><textarea id="aiReviewResult" rows="6"></textarea><details><summary data-feature-message="aiOriginal"></summary><textarea id="aiReviewOriginal" rows="5" readonly data-label="aiOriginal"></textarea></details>
-<div class="row wrap"><button id="aiReviewReplace" class="primary" data-feature-message="aiReplace"></button><button id="aiReviewAppend" data-feature-message="aiAppend"></button><button id="aiReviewDiscard" class="text-button" data-feature-message="aiDiscard"></button></div></section></section>
-<section id="searchView" hidden><form id="searchForm" class="search-form"><label for="searchQuery" data-feature-message="keyword"></label><input id="searchQuery" type="search" data-placeholder="searchPlaceholder"><label for="searchTag" data-feature-message="tagFilter"></label><input id="searchTag" data-placeholder="tagPlaceholder"><div class="row"><button id="search" type="submit" class="primary" data-feature-message="searchTooltip"></button><button type="button" id="random"><img src="assets/dice-3.svg" alt=""><span data-feature-message="randomTooltip"></span></button></div></form><p id="searchStatus" class="status" role="status"></p><div id="archiveNotice" class="notice inline" role="status" hidden><span data-feature-message="archiveDone"></span><button id="archiveUndo" class="text-button" data-feature-message="archiveUndo"></button></div><div id="randomlist" class="results"></div><button id="searchMore" hidden data-feature-message="loadMore"></button></section>
-<section id="historyView" hidden><label class="sr-only" for="historyQuery" data-feature-message="searchHistory"></label><input id="historyQuery" type="search" data-placeholder="searchHistory"><div id="historyList" class="results"></div></section>
-</main></div>
-<script src="js/jquery.min.js"></script>
-<script src="js/message.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/theme-lang.js"></script>
-<script src="js/llm-config.js"></script>
-<script src="js/model-catalog.js"></script>
-<script src="js/view-image.js"></script>
-<script src="js/ai-workflow.js"></script>
-<script src="js/ai-review.js"></script>
-<script src="js/clipper-core.js"></script>
-<script src="js/clipper.js"></script>
-<script src="js/ai-optimize.js"></script>
-<script src="js/memos-api.js"></script>
-<script src="js/draft-storage.js"></script>
-<script src="js/editor-draft.js"></script>
-<script src="js/staged-files.js"></script>
-<script src="js/memo-tags.js"></script>
-<script src="js/workspace.js"></script>
-<script src="js/oper.js"></script>
-</body></html>
+<html lang="en" data-view="popup">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI-MEMOS</title>
+    <link rel="stylesheet" href="css/main.css" />
+    <script src="js/surface.js"></script>
+  </head>
+  <body class="body">
+    <div class="shell">
+      <header class="appbar">
+        <button id="opensite" class="brand" data-title="openMemos">
+          <img src="assets/logo_24x24.png" alt="" />AI-MEMOS
+        </button>
+        <div class="header-tools">
+          <button id="openPanel" class="quiet" data-feature-message="openPanel"></button
+          ><button id="blog_info_edit" class="icon-button open-settings" data-title="settingsBtn">
+            <img src="assets/settings.svg" alt="" />
+          </button>
+        </div>
+      </header>
+      <nav class="tabs" data-label="navigation">
+        <button data-tab="write" aria-current="page" data-feature-message="navWrite"></button
+        ><button data-tab="search" data-feature-message="navSearch"></button
+        ><button data-tab="history" data-feature-message="navHistory"></button>
+      </nav>
+      <main>
+        <section id="writeView">
+          <div id="connectNotice" class="notice inline" hidden>
+            <span data-feature-message="connectHint"></span
+            ><button class="text-button open-settings" data-feature-message="connectMemos"></button>
+          </div>
+          <div class="editor-card">
+            <label class="sr-only" for="content" data-feature-message="navWrite"></label
+            ><textarea
+              id="content"
+              class="common-editor-inputer"
+              name="text"
+              rows="6"
+              readonly
+              data-placeholder="placeContent"
+            ></textarea>
+            <div class="editor-tools">
+              <div class="source-group">
+                <button id="capturePage" class="quiet">
+                  <img src="assets/link.svg" alt="" /><span data-feature-message="capturePage"></span>
+                </button>
+                <details id="sourceMenu" class="tools-menu">
+                  <summary data-label="captureOptions">▾</summary>
+                  <div class="menu">
+                    <button id="captureSelection" data-feature-message="captureSelection"></button
+                    ><button id="captureSource" data-feature-message="clipAddSource"></button
+                    ><label class="check"
+                      ><input id="sourceIncludeTime" type="checkbox" /><span
+                        data-feature-message="sourceIncludeTime"
+                      ></span
+                    ></label>
+                  </div>
+                </details>
+              </div>
+              <div class="editor-icons">
+                <button id="tags" class="icon-button" data-title="tagsTooltip">
+                  <img src="assets/hash.svg" alt="" /></button
+                ><button id="newtodo" class="icon-button" data-title="todoTooltip">
+                  <img src="assets/todo.svg" alt="" /></button
+                ><button id="upres" class="icon-button" data-title="uploadTooltip">
+                  <img src="assets/paperclip.svg" alt="" />
+                </button>
+              </div>
+            </div>
+          </div>
+          <div id="taglist" class="tag-list"></div>
+          <input type="file" id="inFile" multiple hidden />
+          <div id="draftConflict" class="notice" hidden>
+            <p data-feature-message="draftConflict"></p>
+            <button id="draftKeepBoth" data-feature-message="draftKeepBoth"></button>
+            <button id="draftUseLatest" data-feature-message="draftUseLatest"></button>
+          </div>
+          <div id="duplicateNotice" class="notice inline" hidden>
+            <span data-feature-message="savedBefore"></span
+            ><a id="previousMemo" target="_blank" rel="noopener noreferrer" data-feature-message="openSaved"></a>
+          </div>
+          <div class="destination">
+            <label id="spaceField" hidden
+              ><span data-feature-message="spaceLabel"></span
+              ><select id="memoSpace"></select></label
+            ><label
+              ><span data-feature-message="visibilityTooltip"></span
+              ><select id="visibility">
+                <option value="PRIVATE" data-feature-message="lockPrivate"></option>
+                <option value="PROTECTED" data-feature-message="lockProtected"></option>
+                <option value="PUBLIC" data-feature-message="lockPublic"></option>
+                <option
+                  value="SPACE"
+                  id="spaceVisibility"
+                  hidden
+                  data-feature-message="lockSpace"
+                ></option></select></label
+            ><small id="effectiveVisibility" role="status"></small>
+          </div>
+          <div class="action-row">
+            <div class="ai-split-wrapper">
+              <button id="ai_optimize" class="secondary">
+                <img src="assets/wand-sparkles.svg" alt="" /><span data-feature-message="aiAction"></span></button
+              ><button id="ai_quick_toggle" aria-expanded="false" class="ai-quick-toggle" data-title="aiTaskLabel">
+                ▾
+              </button>
+              <div id="ai_quick_menu" class="menu hidden">
+                <label for="aiTask" data-feature-message="aiTaskLabel"></label
+                ><select id="aiTask">
+                  <option value="organize" data-feature-message="aiTask_organize"></option>
+                  <option value="summary" data-feature-message="aiTask_summary"></option>
+                  <option value="keypoints" data-feature-message="aiTask_keypoints"></option>
+                  <option value="qa" data-feature-message="aiTask_qa"></option></select
+                ><small id="aiTaskHelp"></small>
+                <div id="quickItems"></div>
+              </div>
+            </div>
+            <button id="aiUndo" class="text-button" disabled data-feature-message="aiUndo"></button
+            ><button id="content_submit_text" class="primary" data-feature-message="submitBtn"></button>
+          </div>
+          <p id="aiTaskStatus" class="status" role="status" hidden></p>
+          <div id="saveStatus" class="inline status" role="status" hidden>
+            <span data-feature-message="memoSuccess"></span
+            ><a id="lastMemoLink" target="_blank" rel="noopener noreferrer" data-feature-message="openSaved"></a>
+          </div>
+          <div id="visibilityWarning" class="notice inline" role="alert" hidden>
+            <span data-feature-message="hiddenTagExposed"></span
+            ><button id="makePrivate" class="text-button" data-feature-message="makePrivate"></button>
+          </div>
+          <section id="aiReviewPanel" class="review" aria-labelledby="aiReviewTitle" hidden>
+            <div class="section-heading">
+              <h2 id="aiReviewTitle" data-feature-message="aiReviewTitle"></h2>
+              <small id="aiReviewTask"></small>
+            </div>
+            <p id="aiReviewWarning" class="notice" role="status" hidden></p>
+            <label for="aiReviewResult" data-feature-message="aiResult"></label
+            ><textarea id="aiReviewResult" rows="6"></textarea>
+            <details>
+              <summary data-feature-message="aiOriginal"></summary>
+              <textarea id="aiReviewOriginal" rows="5" readonly data-label="aiOriginal"></textarea>
+            </details>
+            <div class="row wrap">
+              <button id="aiReviewReplace" class="primary" data-feature-message="aiReplace"></button
+              ><button id="aiReviewAppend" data-feature-message="aiAppend"></button
+              ><button id="aiReviewDiscard" class="text-button" data-feature-message="aiDiscard"></button>
+            </div>
+          </section>
+        </section>
+        <section id="searchView" hidden>
+          <form id="searchForm" class="search-form">
+            <label for="searchQuery" data-feature-message="keyword"></label
+            ><input id="searchQuery" type="search" data-placeholder="searchPlaceholder" /><label
+              for="searchTag"
+              data-feature-message="tagFilter"
+            ></label
+            ><input id="searchTag" data-placeholder="tagPlaceholder" />
+            <div class="row">
+              <button id="search" type="submit" class="primary" data-feature-message="searchTooltip"></button
+              ><button type="button" id="random">
+                <img src="assets/dice-3.svg" alt="" /><span data-feature-message="randomTooltip"></span>
+              </button>
+            </div>
+          </form>
+          <p id="searchStatus" class="status" role="status"></p>
+          <div id="archiveNotice" class="notice inline" role="status" hidden>
+            <span data-feature-message="archiveDone"></span
+            ><button id="archiveUndo" class="text-button" data-feature-message="archiveUndo"></button>
+          </div>
+          <div id="randomlist" class="results"></div>
+          <button id="searchMore" hidden data-feature-message="loadMore"></button>
+        </section>
+        <section id="historyView" hidden>
+          <label class="sr-only" for="historyQuery" data-feature-message="searchHistory"></label
+          ><input id="historyQuery" type="search" data-placeholder="searchHistory" />
+          <div id="historyList" class="results"></div>
+        </section>
+      </main>
+    </div>
+    <script src="js/jquery.min.js"></script>
+    <script src="js/message.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/theme-lang.js"></script>
+    <script src="js/llm-config.js"></script>
+    <script src="js/model-catalog.js"></script>
+    <script src="js/view-image.js"></script>
+    <script src="js/ai-workflow.js"></script>
+    <script src="js/ai-review.js"></script>
+    <script src="js/clipper-core.js"></script>
+    <script src="js/clipper.js"></script>
+    <script src="js/ai-optimize.js"></script>
+    <script src="js/memos-api.js"></script>
+    <script src="js/draft-storage.js"></script>
+    <script src="js/editor-draft.js"></script>
+    <script src="js/staged-files.js"></script>
+    <script src="js/memo-tags.js"></script>
+    <script src="js/workspace.js"></script>
+    <script src="js/oper.js"></script>
+  </body>
+</html>

@@ -5,7 +5,9 @@ var AIReview = (function () {
   var busy = false;
   var runningTask = 'organize';
 
-  function message(key) { return getLLMMessage(key, key); }
+  function message(key) {
+    return getLLMMessage(key, key);
+  }
 
   function persist() {
     chrome.storage.local.set({ memosAIReview: currentReview, memosAIUndo: lastTransaction }, function () {
@@ -23,7 +25,9 @@ var AIReview = (function () {
     renderWarning();
   }
 
-  function taskName(task) { return message('aiTask_' + AIWorkflow.normalizeTask(task)); }
+  function taskName(task) {
+    return message('aiTask_' + AIWorkflow.normalizeTask(task));
+  }
 
   function refreshTaskHint() {
     var selected = AIWorkflow.normalizeTask($('#aiTask').val());
@@ -31,8 +35,12 @@ var AIReview = (function () {
     const taskLabel = message('aiRunTask').replace('{task}', taskName(selected));
     $('#ai_optimize').attr('title', taskLabel).attr('aria-label', taskLabel);
     $('#ai_optimize span').text('AI · ' + taskName(selected));
-    $('#aiTaskStatus').text(message('aiRunningTask').replace('{task}', taskName(runningTask))).prop('hidden', !busy);
-    $('#aiReviewTask').text(currentReview ? message('aiExecutedTask').replace('{task}', taskName(currentReview.task)) : '');
+    $('#aiTaskStatus')
+      .text(message('aiRunningTask').replace('{task}', taskName(runningTask)))
+      .prop('hidden', !busy);
+    $('#aiReviewTask').text(
+      currentReview ? message('aiExecutedTask').replace('{task}', taskName(currentReview.task)) : ''
+    );
   }
 
   function renderWarning() {
@@ -64,7 +72,13 @@ var AIReview = (function () {
   }
 
   function adopt(mode) {
-    if (!currentReview || !currentReview.result.trim() || busy || (typeof memoSaveInProgress !== 'undefined' && memoSaveInProgress)) return;
+    if (
+      !currentReview ||
+      !currentReview.result.trim() ||
+      busy ||
+      (typeof memoSaveInProgress !== 'undefined' && memoSaveInProgress)
+    )
+      return;
     try {
       lastTransaction = AIWorkflow.apply(currentReview, $('#content').val(), mode);
       $('#content').val(lastTransaction.after).trigger('input');
@@ -80,7 +94,9 @@ var AIReview = (function () {
   function undo() {
     if (busy || (typeof memoSaveInProgress !== 'undefined' && memoSaveInProgress)) return;
     try {
-      $('#content').val(AIWorkflow.undo(lastTransaction, $('#content').val())).trigger('input');
+      $('#content')
+        .val(AIWorkflow.undo(lastTransaction, $('#content').val()))
+        .trigger('input');
       lastTransaction = null;
       persist();
       render();
@@ -124,25 +140,35 @@ var AIReview = (function () {
   function withJob(task, work) {
     if (typeof navigator === 'undefined' || !navigator.locks) return work();
     return navigator.locks.request(jobLock, { ifAvailable: true }, async lock => {
-      if (!lock) { $.message({ message: message('aiOptimizing') }); return; }
+      if (!lock) {
+        $.message({ message: message('aiOptimizing') });
+        return;
+      }
       const job = { id: crypto.randomUUID(), task };
       await DraftStorage.put('local', { [jobKey]: job });
-      try { return await work(); }
-      finally { await DraftStorage.put('local', { [jobKey]: null }); }
+      try {
+        return await work();
+      } finally {
+        await DraftStorage.put('local', { [jobKey]: null });
+      }
     });
   }
 
   function init() {
-    chrome.storage.local.get({ memosAIReview: null, memosAIUndo: null, memosAITask: 'organize', memosAIJob: null }, function (data) {
-      var value = data.memosAIReview;
-      if (value && typeof value.input === 'string' && typeof value.result === 'string') currentReview = value;
-      var transaction = data.memosAIUndo;
-      if (transaction && typeof transaction.before === 'string' && typeof transaction.after === 'string') lastTransaction = transaction;
-      $('#aiTask').val(AIWorkflow.normalizeTask(data.memosAITask));
-      render();
-      refreshTexts();
-      observeJob(data.memosAIJob);
-    });
+    chrome.storage.local.get(
+      { memosAIReview: null, memosAIUndo: null, memosAITask: 'organize', memosAIJob: null },
+      function (data) {
+        var value = data.memosAIReview;
+        if (value && typeof value.input === 'string' && typeof value.result === 'string') currentReview = value;
+        var transaction = data.memosAIUndo;
+        if (transaction && typeof transaction.before === 'string' && typeof transaction.after === 'string')
+          lastTransaction = transaction;
+        $('#aiTask').val(AIWorkflow.normalizeTask(data.memosAITask));
+        render();
+        refreshTexts();
+        observeJob(data.memosAIJob);
+      }
+    );
     chrome.storage.onChanged?.addListener((changes, area) => {
       if (area !== 'local') return;
       if (changes.memosAIJob?.newValue) observeJob(changes.memosAIJob.newValue);
@@ -155,9 +181,17 @@ var AIReview = (function () {
       chrome.storage.local.set({ memosAITask: AIWorkflow.normalizeTask(this.value) });
       refreshTaskHint();
     });
-    $('#aiReviewReplace').click(function () { adopt('replace'); });
-    $('#aiReviewAppend').click(function () { adopt('append'); });
-    $('#aiReviewDiscard').click(function () { currentReview = null; persist(); render(); });
+    $('#aiReviewReplace').click(function () {
+      adopt('replace');
+    });
+    $('#aiReviewAppend').click(function () {
+      adopt('append');
+    });
+    $('#aiReviewDiscard').click(function () {
+      currentReview = null;
+      persist();
+      render();
+    });
     $('#aiReviewResult').on('input', function () {
       if (!currentReview) return;
       currentReview.result = this.value;
@@ -168,6 +202,17 @@ var AIReview = (function () {
     $('#aiUndo').click(undo);
   }
 
-  return { init: init, show: show, refresh: renderWarning, refreshTaskHint: refreshTaskHint, refreshTexts: refreshTexts, onMemoSaved: onMemoSaved,
-    isBusy: function () { return busy; }, setBusy, withJob };
+  return {
+    init: init,
+    show: show,
+    refresh: renderWarning,
+    refreshTaskHint: refreshTaskHint,
+    refreshTexts: refreshTexts,
+    onMemoSaved: onMemoSaved,
+    isBusy: function () {
+      return busy;
+    },
+    setBusy,
+    withJob
+  };
 })();

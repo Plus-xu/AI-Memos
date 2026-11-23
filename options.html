@@ -1,25 +1,139 @@
 <!doctype html>
-<html lang="en" data-view="options"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AI-MEMOS · Settings</title><link rel="stylesheet" href="css/main.css"><script src="js/surface.js"></script></head>
-<body class="body"><div class="settings-shell"><header class="appbar"><div class="brand"><img src="assets/logo_24x24.png" alt="">AI-MEMOS</div></header><main><h1 data-feature-message="settingsBtn"></h1>
-<section class="settings-card"><h2 data-feature-message="connectMemos"></h2><form id="connectionForm"><label for="apiUrl" data-feature-message="instanceUrl"></label><input id="apiUrl" type="url" placeholder="https://memos.example.com" required><label for="apiTokens" data-feature-message="tokenLabel"></label><input id="apiTokens" type="password" autocomplete="off"><div class="row wrap"><button id="saveKey" type="submit" class="primary" data-feature-message="saveConnection"></button><span id="connectionStatus" role="status"></span></div></form></section>
-<section class="settings-card"><h2 data-feature-message="aiSettings"></h2><div class="form-grid"><div><label for="llmProvider" id="llmProviderLabel"></label><select id="llmProvider"><option value="openai">OpenAI</option><option value="deepseek">DeepSeek</option><option value="gemini">Gemini</option><option value="anthropic">Anthropic</option><option value="newapi">New API</option></select></div><div><label for="llmApiKey" id="llmApiKeyLabel"></label><input id="llmApiKey" type="password" autocomplete="off"></div></div>
-<label id="llmBaseUrlLabel" for="llmBaseUrl"></label><input id="llmBaseUrl" type="url" autocomplete="off"><label for="llmModel" id="llmModelLabel"></label><div class="row"><select id="llmModel"></select><button id="refreshModels" data-feature-message="refreshModels"></button></div><input id="llmCustomModel" maxlength="160" data-label="llmCustomModelPlaceholder" style="display:none"><small id="modelStatus" role="status"></small><label for="llmMaxTokens" data-feature-message="aiMaxTokensLabel"></label><input id="llmMaxTokens" type="number" min="256" max="200000" step="1" inputmode="numeric" placeholder="8192">
-<details class="pref-details"><summary id="llmQuickPresetsLabel"></summary><div id="quickPresetRows"></div></details><div class="row"><button id="saveAI" class="primary" data-feature-message="saveAI"></button><span id="aiSettingsStatus" role="status"></span></div></section>
-<section class="settings-card"><h2 data-feature-message="captureSettings"></h2><label for="clipTemplate" data-feature-message="clipTemplateLabel"></label><textarea id="clipTemplate" rows="4" maxlength="8000"></textarea><small data-feature-message="clipTemplateHelp"></small><div class="row"><button id="saveTemplate" data-feature-message="saveBtn"></button><button id="clipTemplateReset" class="text-button" data-feature-message="clipTemplateReset"></button></div>
-<details class="pref-details"><summary data-feature-message="tagRules"></summary><label for="hideInput" data-feature-message="placeHideInput"></label><input id="hideInput" maxlength="200"><label for="showInput" data-feature-message="placeShowInput"></label><input id="showInput" maxlength="200"><button id="saveTag" data-feature-message="saveBtn"></button></details></section>
-<section class="settings-card"><h2 data-feature-message="appearance"></h2><div class="form-grid"><div><label for="themeSelect" data-feature-message="themeLabel"></label><select id="themeSelect"><option value="auto" data-feature-message="themeAuto"></option><option value="light" data-feature-message="themeLight"></option><option value="dark" data-feature-message="themeDark"></option></select></div><div><label for="languageSelect" data-feature-message="languageLabel"></label><select id="languageSelect"><option value="zh_CN">简体中文</option><option value="en">English</option><option value="ja">日本語</option></select></div></div></section>
-</main></div><script src="js/jquery.min.js"></script>
-<script src="js/message.js"></script>
-<script src="js/i18n.js"></script>
-<script src="js/theme-lang.js"></script>
-<script src="js/llm-config.js"></script>
-<script src="js/model-catalog.js"></script>
-<script src="js/ai-workflow.js"></script>
-<script src="js/ai-review.js"></script>
-<script src="js/clipper-core.js"></script>
-<script src="js/clipper.js"></script>
-<script src="js/ai-optimize.js"></script>
-<script src="js/memos-api.js"></script>
-<script src="js/draft-storage.js"></script>
-<script src="js/memo-tags.js"></script>
-<script src="js/settings.js"></script></body></html>
+<html lang="en" data-view="options">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AI-MEMOS · Settings</title>
+    <link rel="stylesheet" href="css/main.css" />
+    <script src="js/surface.js"></script>
+  </head>
+  <body class="body">
+    <div class="settings-shell">
+      <header class="appbar">
+        <div class="brand"><img src="assets/logo_24x24.png" alt="" />AI-MEMOS</div>
+      </header>
+      <main>
+        <h1 data-feature-message="settingsBtn"></h1>
+        <section class="settings-card">
+          <h2 data-feature-message="connectMemos"></h2>
+          <form id="connectionForm">
+            <label for="apiUrl" data-feature-message="instanceUrl"></label
+            ><input id="apiUrl" type="url" placeholder="https://memos.example.com" required /><label
+              for="apiTokens"
+              data-feature-message="tokenLabel"
+            ></label
+            ><input id="apiTokens" type="password" autocomplete="off" />
+            <div class="row wrap">
+              <button id="saveKey" type="submit" class="primary" data-feature-message="saveConnection"></button
+              ><span id="connectionStatus" role="status"></span>
+            </div>
+          </form>
+        </section>
+        <section class="settings-card">
+          <h2 data-feature-message="aiSettings"></h2>
+          <div class="form-grid">
+            <div>
+              <label for="llmProvider" id="llmProviderLabel"></label
+              ><select id="llmProvider">
+                <option value="openai">OpenAI</option>
+                <option value="deepseek">DeepSeek</option>
+                <option value="gemini">Gemini</option>
+                <option value="anthropic">Anthropic</option>
+                <option value="newapi">New API</option>
+              </select>
+            </div>
+            <div>
+              <label for="llmApiKey" id="llmApiKeyLabel"></label
+              ><input id="llmApiKey" type="password" autocomplete="off" />
+            </div>
+          </div>
+          <label id="llmBaseUrlLabel" for="llmBaseUrl"></label
+          ><input id="llmBaseUrl" type="url" autocomplete="off" /><label for="llmModel" id="llmModelLabel"></label>
+          <div class="row">
+            <select id="llmModel"></select
+            ><button id="refreshModels" data-feature-message="refreshModels"></button>
+          </div>
+          <input
+            id="llmCustomModel"
+            maxlength="160"
+            data-label="llmCustomModelPlaceholder"
+            style="display: none"
+          /><small id="modelStatus" role="status"></small
+          ><label for="llmMaxTokens" data-feature-message="aiMaxTokensLabel"></label
+          ><input
+            id="llmMaxTokens"
+            type="number"
+            min="256"
+            max="200000"
+            step="1"
+            inputmode="numeric"
+            placeholder="8192"
+          />
+          <details class="pref-details">
+            <summary id="llmQuickPresetsLabel"></summary>
+            <div id="quickPresetRows"></div>
+          </details>
+          <div class="row">
+            <button id="saveAI" class="primary" data-feature-message="saveAI"></button
+            ><span id="aiSettingsStatus" role="status"></span>
+          </div>
+        </section>
+        <section class="settings-card">
+          <h2 data-feature-message="captureSettings"></h2>
+          <label for="clipTemplate" data-feature-message="clipTemplateLabel"></label
+          ><textarea id="clipTemplate" rows="4" maxlength="8000"></textarea
+          ><small data-feature-message="clipTemplateHelp"></small>
+          <div class="row">
+            <button id="saveTemplate" data-feature-message="saveBtn"></button
+            ><button id="clipTemplateReset" class="text-button" data-feature-message="clipTemplateReset"></button>
+          </div>
+          <details class="pref-details">
+            <summary data-feature-message="tagRules"></summary>
+            <label for="hideInput" data-feature-message="placeHideInput"></label
+            ><input id="hideInput" maxlength="200" /><label
+              for="showInput"
+              data-feature-message="placeShowInput"
+            ></label
+            ><input id="showInput" maxlength="200" /><button id="saveTag" data-feature-message="saveBtn"></button>
+          </details>
+        </section>
+        <section class="settings-card">
+          <h2 data-feature-message="appearance"></h2>
+          <div class="form-grid">
+            <div>
+              <label for="themeSelect" data-feature-message="themeLabel"></label
+              ><select id="themeSelect">
+                <option value="auto" data-feature-message="themeAuto"></option>
+                <option value="light" data-feature-message="themeLight"></option>
+                <option value="dark" data-feature-message="themeDark"></option>
+              </select>
+            </div>
+            <div>
+              <label for="languageSelect" data-feature-message="languageLabel"></label
+              ><select id="languageSelect">
+                <option value="zh_CN">简体中文</option>
+                <option value="en">English</option>
+                <option value="ja">日本語</option>
+              </select>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+    <script src="js/jquery.min.js"></script>
+    <script src="js/message.js"></script>
+    <script src="js/i18n.js"></script>
+    <script src="js/theme-lang.js"></script>
+    <script src="js/llm-config.js"></script>
+    <script src="js/model-catalog.js"></script>
+    <script src="js/ai-workflow.js"></script>
+    <script src="js/ai-review.js"></script>
+    <script src="js/clipper-core.js"></script>
+    <script src="js/clipper.js"></script>
+    <script src="js/ai-optimize.js"></script>
+    <script src="js/memos-api.js"></script>
+    <script src="js/draft-storage.js"></script>
+    <script src="js/memo-tags.js"></script>
+    <script src="js/settings.js"></script>
+  </body>
+</html>

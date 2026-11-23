@@ -4,12 +4,16 @@ var StagedFiles = (function () {
   let database;
 
   function open() {
-    if (!database) database = new Promise((resolve, reject) => {
-      const request = indexedDB.open('ai-memos-files', 1);
-      request.onupgradeneeded = () => request.result.createObjectStore('files', { keyPath: 'id' });
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    }).catch(error => { database = null; throw error; });
+    if (!database)
+      database = new Promise((resolve, reject) => {
+        const request = indexedDB.open('ai-memos-files', 1);
+        request.onupgradeneeded = () => request.result.createObjectStore('files', { keyPath: 'id' });
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      }).catch(error => {
+        database = null;
+        throw error;
+      });
     return database;
   }
 
@@ -31,14 +35,18 @@ var StagedFiles = (function () {
       const bytes = new Blob([JSON.stringify([name, blob.type]), '\n', blob]);
       const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', await bytes.arrayBuffer()));
       const hex = Array.from(digest.slice(0, 16), byte => byte.toString(16).padStart(2, '0')).join('');
-      id = [hex.slice(0,8),hex.slice(8,12),hex.slice(12,16),hex.slice(16,20),hex.slice(20)].join('-');
+      id = [hex.slice(0, 8), hex.slice(8, 12), hex.slice(12, 16), hex.slice(16, 20), hex.slice(20)].join('-');
     }
     await DraftStorage.locked('memos-file-' + id, async () => {
-      const entry = reuse && await access('readonly', store => store.get(id));
-      await access('readwrite', store => store.put({ id, blob, name, uploads: entry?.uploads || {}, created: Date.now() }));
+      const entry = reuse && (await access('readonly', store => store.get(id)));
+      await access('readwrite', store =>
+        store.put({ id, blob, name, uploads: entry?.uploads || {}, created: Date.now() })
+      );
     });
     const alt = (label || name).replace(/[\r\n]/g, ' ');
-    return (blob.type.startsWith('image/') ? '!' : '') + '[' + alt.replace(/[\\[\]]/g, '\\$&') + '](' + prefix + id + ')';
+    return (
+      (blob.type.startsWith('image/') ? '!' : '') + '[' + alt.replace(/[\\[\]]/g, '\\$&') + '](' + prefix + id + ')'
+    );
   }
 
   function base64(blob) {
@@ -65,7 +73,9 @@ var StagedFiles = (function () {
         const cached = entry.uploads[account];
         if (cached?.attemptId === attemptId && cached.url) return cached.url;
         const file = await MemosAPI.uploadAttachment(info, {
-          filename: entry.name, type: entry.blob.type || 'application/octet-stream', content: await base64(entry.blob)
+          filename: entry.name,
+          type: entry.blob.type || 'application/octet-stream',
+          content: await base64(entry.blob)
         });
         const uploaded = MemosAPI.buildFileUrl(info.apiUrl, file);
         if (!file.name || !MemosAPI.managedFile(info.apiUrl, uploaded)) throw new Error('stagedFileMissing');
@@ -81,7 +91,12 @@ var StagedFiles = (function () {
   // Keep files used by current drafts and AI undo, including across a failed save.
   async function collect() {
     const draft = await DraftStorage.current();
-    const review = await DraftStorage.get('local', { memosAIReview: null, memosAIUndo: null, 'memosDraftConflict:popup': null, 'memosDraftConflict:panel': null });
+    const review = await DraftStorage.get('local', {
+      memosAIReview: null,
+      memosAIUndo: null,
+      'memosDraftConflict:popup': null,
+      'memosDraftConflict:panel': null
+    });
     const keep = new Set(ids(draft.open_content + JSON.stringify(review)));
     const cutoff = Date.now() - 7 * 86400000;
     await access('readwrite', store => {
@@ -97,14 +112,23 @@ var StagedFiles = (function () {
 
   async function fromUrl(raw, label) {
     const url = new URL(raw);
-    if (!['https:', 'http:', 'data:'].includes(url.protocol) || url.username || url.password) throw new Error('imageCaptureFailed');
-    const response = await fetch(url, { credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(20000) });
+    if (!['https:', 'http:', 'data:'].includes(url.protocol) || url.username || url.password)
+      throw new Error('imageCaptureFailed');
+    const response = await fetch(url, {
+      credentials: 'omit',
+      referrerPolicy: 'no-referrer',
+      signal: AbortSignal.timeout(20000)
+    });
     if (!response.ok) throw new Error('imageCaptureFailed');
     const blob = await response.blob();
     if (!blob.type.startsWith('image/')) throw new Error('imageCaptureFailed');
     let name = '';
     if (url.protocol !== 'data:') {
-      try { name = decodeURIComponent(url.pathname.split('/').pop()); } catch (_) { /* use a MIME-derived name */ }
+      try {
+        name = decodeURIComponent(url.pathname.split('/').pop());
+      } catch (_) {
+        /* use a MIME-derived name */
+      }
     }
     return stage(blob, name || 'image.' + blob.type.slice(6).split('+')[0], label, true);
   }

@@ -5,10 +5,18 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..');
 const contentTypes = {
-  '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8', '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml', '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg',
-  '.gif': 'image/gif', '.webp': 'image/webp', '.ico': 'image/x-icon', '.woff2': 'font/woff2'
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2'
 };
 
 function chromeRuntime(messages) {
@@ -260,55 +268,88 @@ html[data-view=popup]{margin:0 auto} #previewBanner{max-width:665px;margin-inlin
 function createPreviewServer() {
   return http.createServer(async (req, res) => {
     const headers = {
-      'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
       'Cross-Origin-Resource-Policy': 'same-origin',
-      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
+      'Content-Security-Policy':
+        "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'"
     };
-    function respond(status, type, value) { res.writeHead(status, { ...headers, 'Content-Type': type }); res.end(req.method === 'HEAD' ? '' : value); }
+    function respond(status, type, value) {
+      res.writeHead(status, { ...headers, 'Content-Type': type });
+      res.end(req.method === 'HEAD' ? '' : value);
+    }
     try {
-      if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(req.headers.host || '')) return respond(403, 'text/plain; charset=utf-8', 'Loopback preview only');
-      if (req.method !== 'GET' && req.method !== 'HEAD') return respond(405, 'text/plain; charset=utf-8', 'Read-only preview server');
+      if (!/^(127\.0\.0\.1|localhost)(:\d+)?$/i.test(req.headers.host || ''))
+        return respond(403, 'text/plain; charset=utf-8', 'Loopback preview only');
+      if (req.method !== 'GET' && req.method !== 'HEAD')
+        return respond(405, 'text/plain; charset=utf-8', 'Read-only preview server');
       const pathname = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname);
-      if (pathname === '/favicon.ico') { res.writeHead(204, headers); res.end(); return; }
+      if (pathname === '/favicon.ico') {
+        res.writeHead(204, headers);
+        res.end();
+        return;
+      }
       if (pathname === '/__preview-chrome.js') {
         const messages = JSON.parse(fs.readFileSync(path.join(root, '_locales/zh_CN/messages.json'), 'utf8'));
         return respond(200, contentTypes['.js'], chromeRuntime(messages));
       }
       if (pathname === '/__preview-ajax.js') return respond(200, contentTypes['.js'], ajaxRuntime());
       if (pathname === '/__preview-style.css') return respond(200, contentTypes['.css'], previewStyle);
-      if (pathname === '/panel.html') return respond(200, contentTypes['.html'], fs.readFileSync(path.join(root, 'panel.html'), 'utf8'));
+      if (pathname === '/panel.html')
+        return respond(200, contentTypes['.html'], fs.readFileSync(path.join(root, 'panel.html'), 'utf8'));
       if (['/', '/popup.html', '/options.html'].includes(pathname)) {
-        let html = fs.readFileSync(path.join(root, pathname === '/options.html' ? 'options.html' : 'popup.html'), 'utf8');
-        html = html.replace(/<head>/i, '<head>\n<script src="/__preview-chrome.js"></script>\n<link rel="stylesheet" href="/__preview-style.css">');
+        let html = fs.readFileSync(
+          path.join(root, pathname === '/options.html' ? 'options.html' : 'popup.html'),
+          'utf8'
+        );
+        html = html.replace(
+          /<head>/i,
+          '<head>\n<script src="/__preview-chrome.js"></script>\n<link rel="stylesheet" href="/__preview-style.css">'
+        );
         html = html.replace(/<title>[^<]*<\/title>/i, '<title>AI-MEMOS 本地预览（模拟数据）</title>');
-        html = html.replace(/(<body\b[^>]*>)/i, '$1\n<aside id="previewBanner" aria-label="本地模拟环境"><strong>AI-MEMOS 本地预览 · 仅模拟数据</strong>不会连接真实 Memos 或 AI 服务，也不会读取 Chrome 扩展配置。<div class="preview-controls"><button type="button" id="previewReset">重置模拟数据</button><button type="button" id="previewFailAI">模拟下次 AI 失败</button><button type="button" id="previewFailSave">模拟下次保存失败</button></div><span id="previewStatus" role="status">所有服务请求均在本页模拟，外网请求已阻止。</span></aside>');
+        html = html.replace(
+          /(<body\b[^>]*>)/i,
+          '$1\n<aside id="previewBanner" aria-label="本地模拟环境"><strong>AI-MEMOS 本地预览 · 仅模拟数据</strong>不会连接真实 Memos 或 AI 服务，也不会读取 Chrome 扩展配置。<div class="preview-controls"><button type="button" id="previewReset">重置模拟数据</button><button type="button" id="previewFailAI">模拟下次 AI 失败</button><button type="button" id="previewFailSave">模拟下次保存失败</button></div><span id="previewStatus" role="status">所有服务请求均在本页模拟，外网请求已阻止。</span></aside>'
+        );
         const jquery = /(<script\b[^>]*src=["']js\/jquery\.min\.js["'][^>]*><\/script>)/i;
         if (!jquery.test(html)) throw new Error('Unable to locate popup jQuery script for isolated mocks');
         html = html.replace(jquery, '$1\n<script src="/__preview-ajax.js"></script>');
         return respond(200, contentTypes['.html'], html);
       }
-      if (!/^\/(js|css|assets|_locales)\//.test(pathname)) return respond(404, 'text/plain; charset=utf-8', 'Preview resource not found');
+      if (!/^\/(js|css|assets|_locales)\//.test(pathname))
+        return respond(404, 'text/plain; charset=utf-8', 'Preview resource not found');
       const file = path.resolve(root, '.' + pathname);
       if (!file.startsWith(root + path.sep)) return respond(403, 'text/plain; charset=utf-8', 'Invalid resource path');
       const type = contentTypes[path.extname(file).toLowerCase()];
       if (!type) return respond(404, 'text/plain; charset=utf-8', 'Unsupported preview resource');
       const real = await fs.promises.realpath(file);
-      if (!real.startsWith(root + path.sep)) return respond(403, 'text/plain; charset=utf-8', 'Linked resources outside the project are blocked');
+      if (!real.startsWith(root + path.sep))
+        return respond(403, 'text/plain; charset=utf-8', 'Linked resources outside the project are blocked');
       const data = await fs.promises.readFile(real);
       respond(200, type, data);
     } catch (error) {
       const missing = error.code === 'ENOENT' || error.code === 'ENOTDIR';
-      respond(missing ? 404 : 400, 'text/plain; charset=utf-8', missing ? 'Preview resource not found' : 'Invalid preview request');
+      respond(
+        missing ? 404 : 400,
+        'text/plain; charset=utf-8',
+        missing ? 'Preview resource not found' : 'Invalid preview request'
+      );
     }
   });
 }
 
 if (require.main === module) {
   const port = Number(process.env.PORT || 4311);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) throw new Error('PORT must be an integer between 0 and 65535');
+  if (!Number.isInteger(port) || port < 0 || port > 65535)
+    throw new Error('PORT must be an integer between 0 and 65535');
   const server = createPreviewServer();
-  server.on('error', error => { console.error('Preview server failed:', error.message); process.exitCode = 1; });
-  server.listen(port, '127.0.0.1', () => console.log('AI-MEMOS isolated preview: http://127.0.0.1:' + server.address().port + '/popup.html'));
+  server.on('error', error => {
+    console.error('Preview server failed:', error.message);
+    process.exitCode = 1;
+  });
+  server.listen(port, '127.0.0.1', () =>
+    console.log('AI-MEMOS isolated preview: http://127.0.0.1:' + server.address().port + '/popup.html')
+  );
 }
 
 module.exports = { createPreviewServer, chromeRuntime, ajaxRuntime };

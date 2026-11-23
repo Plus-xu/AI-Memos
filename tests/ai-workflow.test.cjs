@@ -17,7 +17,9 @@ function loadRules() {
 
 test('each AI task builds a distinct instruction while retaining common source protections', () => {
   const { ai } = loadRules();
-  const prompts = ['organize', 'summary', 'keypoints', 'qa'].map(task => ai.buildPrompt(task, '', 'LEGACY_ORGANIZER_RULES'));
+  const prompts = ['organize', 'summary', 'keypoints', 'qa'].map(task =>
+    ai.buildPrompt(task, '', 'LEGACY_ORGANIZER_RULES')
+  );
   assert.equal(new Set(prompts).size, 4);
   assert.match(prompts[0], /without losing information/);
   assert.match(prompts[0], /LEGACY_ORGANIZER_RULES/);
@@ -30,7 +32,10 @@ test('each AI task builds a distinct instruction while retaining common source p
     assert.match(prompt, /Do not invent citations/);
   }
   for (const prompt of prompts.slice(1)) {
-    assert.ok(!prompt.includes('LEGACY_ORGANIZER_RULES'), 'summarizing and question generation must not inherit the organizer-only task');
+    assert.ok(
+      !prompt.includes('LEGACY_ORGANIZER_RULES'),
+      'summarizing and question generation must not inherit the organizer-only task'
+    );
   }
 });
 
@@ -104,13 +109,15 @@ test('append uses the latest draft and undo returns its exact original spacing',
 
 test('missing-reference warnings include source links and managed images without duplicates', () => {
   const { ai } = loadRules();
-  const input = '[source](https://example.org/report?id=7)\nhttps://example.org/report?id=7\n![image](/file/attachments/photo/a.png)';
+  const input =
+    '[source](https://example.org/report?id=7)\nhttps://example.org/report?id=7\n![image](/file/attachments/photo/a.png)';
   const review = ai.review(input, '[source](https://example.org/report?id=7)', 'summary');
   assert.deepEqual(plain(ai.missingReferences(review)), ['/file/attachments/photo/a.png']);
   review.result += '\n![image](/file/attachments/photo/a.png)';
   assert.deepEqual(plain(ai.missingReferences(review)), []);
   assert.deepEqual(plain(ai.missingReferences(ai.review(input, 'Text without references', 'summary'))), [
-    'https://example.org/report?id=7', '/file/attachments/photo/a.png'
+    'https://example.org/report?id=7',
+    '/file/attachments/photo/a.png'
   ]);
 });
 
@@ -122,7 +129,8 @@ test('a changed URL sharing the original prefix is still reported as missing', (
     'summary'
   );
   assert.deepEqual(plain(ai.missingReferences(review)), [
-    'https://example.org/article', '/file/attachments/photo/a.png'
+    'https://example.org/article',
+    '/file/attachments/photo/a.png'
   ]);
 });
 
@@ -149,20 +157,28 @@ const capture = {
 test('default clipping quotes every selected line and includes verifiable source and time', () => {
   const { clipper } = loadRules();
   const formatted = clipper.format(capture);
-  assert.equal(formatted, [
-    '> First selected paragraph.',
-    '> ',
-    '> Second selected paragraph.',
-    '',
-    '[A useful article](https://example.org/article?id=7&utm_source=test#part-two)',
-    '',
-    '2026-11-11T17:02:03.000Z'
-  ].join('\n'));
+  assert.equal(
+    formatted,
+    [
+      '> First selected paragraph.',
+      '> ',
+      '> Second selected paragraph.',
+      '',
+      '[A useful article](https://example.org/article?id=7&utm_source=test#part-two)',
+      '',
+      '2026-11-11T17:02:03.000Z'
+    ].join('\n')
+  );
 });
 
 test('capture formatting normalizes Windows line endings and safely escapes source titles and URL parentheses', () => {
   const { clipper } = loadRules();
-  const source = { ...capture, content: '  First\r\nSecond\r\n  ', title: 'Title [part] \\ more\r\ncontinued', url: 'https://example.org/a(b)?id=2' };
+  const source = {
+    ...capture,
+    content: '  First\r\nSecond\r\n  ',
+    title: 'Title [part] \\ more\r\ncontinued',
+    url: 'https://example.org/a(b)?id=2'
+  };
   const before = plain(source);
   const formatted = clipper.format(source);
   assert.match(formatted, /^> First\n> Second\n/);
@@ -173,7 +189,14 @@ test('capture formatting normalizes Windows line endings and safely escapes sour
 test('capture URLs allow HTTP(S) only and reject credentials or browser-owned pages', () => {
   const { clipper } = loadRules();
   assert.equal(clipper.safeUrl('http://example.org/source?id=7'), 'http://example.org/source?id=7');
-  for (const url of ['javascript:alert(1)', 'data:text/plain,secret', 'file:///C:/secret.txt', 'chrome://extensions/', 'blob:https://example.org/id', 'https://user:password@example.org/source']) {
+  for (const url of [
+    'javascript:alert(1)',
+    'data:text/plain,secret',
+    'file:///C:/secret.txt',
+    'chrome://extensions/',
+    'blob:https://example.org/id',
+    'https://user:password@example.org/source'
+  ]) {
     assert.throws(() => clipper.format({ ...capture, url }), /invalid_capture_url/);
   }
   assert.throws(() => clipper.format({ ...capture, url: 'not an absolute URL' }));
@@ -181,14 +204,22 @@ test('capture URLs allow HTTP(S) only and reject credentials or browser-owned pa
 
 test('templates require source and content, and enforce the configured size limit', () => {
   const { clipper } = loadRules();
-  for (const template of ['', '{{content}}', '{{url}}', '{{title}} {{date}}', null, '{{content}} {{url}}' + 'x'.repeat(8000)]) {
+  for (const template of [
+    '',
+    '{{content}}',
+    '{{url}}',
+    '{{title}} {{date}}',
+    null,
+    '{{content}} {{url}}' + 'x'.repeat(8000)
+  ]) {
     assert.throws(() => clipper.validateTemplate(template), /invalid_clip_template/);
   }
   const template = '### {{ title }}\n\n{{ content }}\n\nSource: {{ url }}';
   assert.equal(clipper.validateTemplate(template), template);
-  assert.equal(clipper.format(capture, template), [
-    '### A useful article', '', capture.content, '', 'Source: ' + capture.url
-  ].join('\n'));
+  assert.equal(
+    clipper.format(capture, template),
+    ['### A useful article', '', capture.content, '', 'Source: ' + capture.url].join('\n')
+  );
 });
 
 test('selection text that looks like a template stays literal and is not expanded a second time', () => {
