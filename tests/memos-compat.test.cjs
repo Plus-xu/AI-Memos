@@ -447,6 +447,14 @@ test('the service worker appends context-menu captures with source to the popup 
   assert.equal(reopened.node('textarea[name=text]').val(), popup.storage.memosDraft.open_content);
 });
 
+test('a recorded capture failure is announced when the popup opens, then cleared', async () => {
+  const failed = await loadPopup({}, { memosCaptureError: 'clipContextFailed' });
+  assert.deepEqual(failed.messages, ['clipContextFailed']);
+  assert.ok(!Object.hasOwn(failed.storage, 'memosCaptureError'));
+  const reopened = await loadPopup({}, failed.storage);
+  assert.deepEqual(reopened.messages, []);
+});
+
 test('visibility updates patch only the visibility field', async () => {
   const { api, calls } = loadApi(() => ({ name: 'memos/x', visibility: 'PRIVATE' }));
   await api.setMemoVisibility(info, 'memos/x', 'PRIVATE');
