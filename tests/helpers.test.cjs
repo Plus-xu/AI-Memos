@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createChrome } = require('./helpers/chrome.cjs');
 const { createDom } = require('./helpers/dom.cjs');
+const { createIndexedDB } = require('./helpers/indexeddb.cjs');
 
 const read = (area, keys) => new Promise(resolve => area.get(keys, resolve));
 
@@ -105,4 +106,101 @@ test('page stand-in: listeners added to the document itself are fired by key', (
   document.addEventListener('DOMContentLoaded', () => ready++);
   handlers.get('document:DOMContentLoaded')();
   assert.equal(ready, 2);
+});
+
+test('page stand-in: an element listener is fired by the same key as a jQuery handler', () => {
+  const { $, document, handlers } = createDom();
+  const calls = [];
+  $('#provider').on('change', () => calls.push('jquery'));
+  document.getElementById('provider').addEventListener('change', () => calls.push('element'));
+  handlers.get('#provider:change')();
+  assert.deepEqual(calls, ['jquery', 'element']);
+});
+
+/** Opens the stand-in the way a script would, creating one key-path store on first use. */
+function openFiles(indexedDB, upgrades = []) {
+  return new Promise(resolve => {
+    const request = indexedDB.open('db', 1);
+    request.onupgradeneeded = () => {
+      upgrades.push(request.result);
+      request.result.createObjectStore('files', { keyPath: 'id' });
+    };
+    request.onsuccess = () => resolve(request.result);
+  });
+}
+
+/** Runs work in one transaction; resolves with its request's result once the transaction completes. */
+function inFiles(db, mode, work) {
+  return new Promise(resolve => {
+    const tx = db.transaction('files', mode);
+    const request = work(tx.objectStore('files'));
+    tx.oncomplete = () => resolve(request?.result);
+  });
+}
+
+test('indexedDB stand-in: a record is stored and read back as a copy, with its Blob intact', async () => {
+  const db = await openFiles(createIndexedDB());
+  const record = { id: 'a', blob: new Blob(['bytes'], { type: 'image/png' }), uploads: {} };
+  assert.equal(await inFiles(db, 'readwrite', store => store.put(record)), 'a');
+  record.uploads.changedAfterPut = true;
+  (await inFiles(db, 'readonly', store => store.get('a'))).uploads.changedAfterGet = true;
+  const stored = await inFiles(db, 'readonly', store => store.get('a'));
+  assert.deepEqual(stored.uploads, {});
+  assert.equal(stored.blob.type, 'image/png');
+  assert.equal(await stored.blob.text(), 'bytes');
+  assert.equal(await inFiles(db, 'readonly', store => store.get('missing')), undefined);
+});
+
+test('indexedDB stand-in: the upgrade callback runs only when the version rises', async () => {
+  const indexedDB = createIndexedDB();
+  const upgrades = [];
+  await inFiles(await openFiles(indexedDB, upgrades), 'readwrite', store => store.put({ id: 'kept' }));
+  const reopened = await openFiles(indexedDB, upgrades);
+  assert.equal(upgrades.length, 1);
+  assert.deepEqual(await inFiles(reopened, 'readonly', store => store.get('kept')), { id: 'kept' });
+});
+
+test('indexedDB stand-in: a cursor visits records in key order and can delete as it goes', async () => {
+  const db = await openFiles(createIndexedDB());
+  for (const id of ['b', 'c', 'a']) await inFiles(db, 'readwrite', store => store.put({ id }));
+  const visited = [];
+  await inFiles(db, 'readwrite', store => {
+    const cursor = store.openCursor();
+    cursor.onsuccess = () => {
+      const item = cursor.result;
+      if (!item) return visited.push('end');
+      visited.push(item.key + '=' + item.value.id);
+      item.value.changedInCursor = true;
+      if (item.key === 'b') item.delete();
+      item.continue();
+    };
+  });
+  assert.deepEqual(visited, ['a=a', 'b=b', 'c=c', 'end']);
+  assert.equal(await inFiles(db, 'readonly', store => store.get('b')), undefined);
+  assert.deepEqual(await inFiles(db, 'readonly', store => store.get('c')), { id: 'c' });
+});
+
+test('indexedDB stand-in: a read-only transaction refuses writes, and a finished one refuses everything', async () => {
+  const db = await openFiles(createIndexedDB());
+  let finished;
+  await inFiles(db, 'readonly', store => {
+    finished = store;
+    assert.throws(() => store.put({ id: 'a' }), { name: 'ReadOnlyError' });
+  });
+  assert.throws(() => finished.get('a'), { name: 'TransactionInactiveError' });
+});
+
+test('indexedDB stand-in: a store can run on a map handed in, for tests to seed and inspect', async () => {
+  const files = new Map([['old', { id: 'old' }]]);
+  const db = await openFiles(createIndexedDB(new Map([['db/files', files]])));
+  assert.deepEqual(await inFiles(db, 'readonly', store => store.get('old')), { id: 'old' });
+  await inFiles(db, 'readwrite', store => store.put({ id: 'new' }));
+  assert.deepEqual(Array.from(files.keys()), ['old', 'new']);
+});
+
+test('indexedDB stand-in: unknown stores and transaction modes are refused, as a browser refuses them', async () => {
+  const db = await openFiles(createIndexedDB());
+  assert.throws(() => db.transaction('other', 'readonly'), { name: 'NotFoundError' });
+  assert.throws(() => db.transaction('files', 'write'), TypeError);
+  assert.throws(() => db.transaction('files', 'readonly').objectStore('other'), { name: 'NotFoundError' });
 });

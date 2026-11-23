@@ -58,6 +58,9 @@ function createDom() {
       focus() {},
       replaceChildren() {},
       add() {},
+      addEventListener(event, callback) {
+        register(selector + ':' + event, element, callback);
+      },
       setSelectionRange(start, end) {
         this.selectionStart = start;
         this.selectionEnd = end;

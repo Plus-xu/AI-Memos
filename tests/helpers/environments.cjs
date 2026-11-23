@@ -5,6 +5,7 @@ const { webcrypto } = require('node:crypto');
 const { plain, flush, source, loadScripts } = require('./scripts.cjs');
 const { createDom } = require('./dom.cjs');
 const { createChrome } = require('./chrome.cjs');
+const { createIndexedDB } = require('./indexeddb.cjs');
 
 const info = { apiUrl: 'https://memos.example/', apiTokens: 'test-pat', userName: 'users/tester' };
 
@@ -161,4 +162,46 @@ async function loadPopup(overrides = {}, saved = {}) {
   return { context, api, node, handlers, messages, storage, document };
 }
 
-module.exports = { info, harness, loadRules, runtime, loadApi, loadPopup };
+/** The settings page's connection and tag forms over the real MemosAPI; `element(id)` is a page element. */
+async function loadSettings(storage = {}, responder) {
+  const { context, calls } = loadApi(responder);
+  const { $, document, handlers, messages } = createDom();
+  $.ajax = context.$.ajax;
+  Object.assign(context, { $, document, chrome: createChrome({ sync: storage }), uiMessage: key => key });
+  loadScripts(context, ['draft-storage', 'memo-tags', 'settings']);
+  handlers.get('document:DOMContentLoaded')();
+  await flush();
+  return { context, element: id => document.getElementById(id), calls, storage, messages };
+}
+
+/** The one FileReader method the extension calls. */
+class FileReader {
+  readAsDataURL(blob) {
+    blob.arrayBuffer().then(
+      bytes => {
+        this.result = 'data:' + blob.type + ';base64,' + Buffer.from(bytes).toString('base64');
+        this.onload();
+      },
+      error => {
+        this.error = error;
+        this.onerror();
+      }
+    );
+  }
+}
+
+/** StagedFiles over an in-memory indexedDB and the real MemosAPI; `files` is the map behind its store. */
+function loadStagedFiles({ responder, fetcher, sync = {}, local = {} } = {}) {
+  const { context, calls } = loadApi(responder, fetcher);
+  const files = new Map();
+  Object.assign(context, {
+    chrome: createChrome({ sync, local }),
+    indexedDB: createIndexedDB(new Map([['ai-memos-files/files', files]])),
+    crypto: webcrypto,
+    FileReader
+  });
+  loadScripts(context, ['draft-storage', 'staged-files']);
+  return { context, staged: context.StagedFiles, files, calls, sync, local };
+}
+
+module.exports = { info, harness, loadRules, runtime, loadApi, loadPopup, loadSettings, loadStagedFiles };
