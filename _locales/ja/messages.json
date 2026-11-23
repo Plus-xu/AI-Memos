@@ -8,20 +8,8 @@
   "extDescription": {
     "message": "AI搭載のMemosブラウザ拡張機能 - アイデアと知識を素早く記録、賢く整理、美しく管理"
   },
-  "sendTo": {
-    "message": "Memosに送信 \"%s\""
-  },
-  "sendLinkTo": {
-    "message": "リンクをMemosに送信"
-  },
-  "sendImageTo": {
-    "message": "画像をMemosに送信"
-  },
   "saveBtn": {
     "message": "保存"
-  },
-  "placeApiUrl": {
-    "message": "MemosホームページURLを入力"
   },
   "placeApiTokens": {
     "message": "Memos Access Tokensを入力"
@@ -50,32 +38,11 @@
   "placeShowInput": {
     "message": "公開タグ：本文に含まれると「全員に表示」で保存します（複数はスペースかカンマで区切る）"
   },
-  "picDrag": {
-    "message": "ウィンドウにドラッグして画像をアップロード"
-  },
-  "picCancelDrag": {
-    "message": "アップロードをキャンセル"
-  },
   "picUploading": {
     "message": "画像をアップロード中..."
   },
-  "picSuccess": {
-    "message": "アップロード完了"
-  },
   "picFailed": {
     "message": "画像のアップロードに失敗"
-  },
-  "picPending": {
-    "message": "画像がアップロード待ち"
-  },
-  "saveSuccess": {
-    "message": "情報を保存しました"
-  },
-  "searchNow": {
-    "message": "何を検索しますか？"
-  },
-  "searchNone": {
-    "message": "見つかりません、別の言葉を試してください"
   },
   "archiveFailed": {
     "message": "アーカイブ失敗 😭"
@@ -107,12 +74,6 @@
   "themeDark": {
     "message": "ダーク"
   },
-  "languageChangeConfirm": {
-    "message": "言語を変更しますか？"
-  },
-  "languageChanged": {
-    "message": "言語を変更しました"
-  },
   "settingsBtn": {
     "message": "設定"
   },
@@ -124,9 +85,6 @@
   },
   "uploadTooltip": {
     "message": "添付ファイルを追加"
-  },
-  "linkTooltip": {
-    "message": "リンクを取得"
   },
   "randomTooltip": {
     "message": "ランダムレビュー"
@@ -164,14 +122,8 @@
   "llmApiKeyPlaceholder": {
     "message": "API キーを入力"
   },
-  "aiOptimizeTooltip": {
-    "message": "AI で最適化"
-  },
   "aiOptimizing": {
     "message": "AI が最適化中..."
-  },
-  "aiOptimizeSuccess": {
-    "message": "AI 最適化が完了しました！"
   },
   "aiOptimizeFailed": {
     "message": "AI 最適化に失敗しました"
@@ -263,9 +215,6 @@
   "aiReviewTitle": {
     "message": "AI 結果を確認"
   },
-  "aiReviewHelp": {
-    "message": "採用または追記するまで下書きは変更されません。"
-  },
   "aiOriginal": {
     "message": "元の文章"
   },
@@ -305,9 +254,6 @@
   "clipSelection": {
     "message": "選択範囲と出典を保存"
   },
-  "clipSelectionHelp": {
-    "message": "ウェブページで文章を選択し、右クリックして出典と一緒に保存できます。"
-  },
   "clipCaptureFailed": {
     "message": "このページの出典を取得できません。通常のページで再試行してください。"
   },
@@ -346,9 +292,6 @@
   },
   "aiTaskHelp_custom": {
     "message": "このプリセットで設定した指示に従います。"
-  },
-  "aiTaskUsageHint": {
-    "message": "メインボタンは上の選択、クイックメニューは各プリセットのタスクを実行します。"
   },
   "aiRunTask": {
     "message": "AI タスクを実行：{task}"
@@ -490,9 +433,6 @@
   },
   "openSaved": {
     "message": "メモを開く"
-  },
-  "openSource": {
-    "message": "元のページ"
   },
   "archiveAction": {
     "message": "アーカイブ"

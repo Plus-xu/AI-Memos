@@ -8,20 +8,8 @@
   "extDescription": {
     "message": "AI赋能的Memos浏览器扩展 - 快速记录、智能整理、优雅管理你的想法与知识"
   },
-  "sendTo": {
-    "message": "发送至 Memos “%s”"
-  },
-  "sendLinkTo": {
-    "message": "发送链接至 Memos"
-  },
-  "sendImageTo": {
-    "message": "发送图片至 Memos"
-  },
   "saveBtn": {
     "message": "保存"
-  },
-  "placeApiUrl": {
-    "message": "请填入 Memos 主页网址"
   },
   "placeApiTokens": {
     "message": "请填入 Memos Access Tokens"
@@ -50,32 +38,11 @@
   "placeShowInput": {
     "message": "公开标签：正文含这些标签时按“所有人可见”保存（多个用空格或逗号分隔）"
   },
-  "picDrag": {
-    "message": "拖拽到窗口上传该图片"
-  },
-  "picCancelDrag": {
-    "message": "取消上传"
-  },
   "picUploading": {
     "message": "图片上传中……"
   },
-  "picSuccess": {
-    "message": "上传完成"
-  },
   "picFailed": {
     "message": "上传图片失败"
-  },
-  "picPending": {
-    "message": "有图片等待上传"
-  },
-  "saveSuccess": {
-    "message": "保存信息成功"
-  },
-  "searchNow": {
-    "message": "想搜点啥？"
-  },
-  "searchNone": {
-    "message": "搜不到，换个词试试"
   },
   "archiveFailed": {
     "message": "归档失败 😭"
@@ -107,12 +74,6 @@
   "themeDark": {
     "message": "暗黑"
   },
-  "languageChangeConfirm": {
-    "message": "确定要切换语言吗？"
-  },
-  "languageChanged": {
-    "message": "语言已切换"
-  },
   "settingsBtn": {
     "message": "设置"
   },
@@ -124,9 +85,6 @@
   },
   "uploadTooltip": {
     "message": "添加本机附件"
-  },
-  "linkTooltip": {
-    "message": "获取链接"
   },
   "randomTooltip": {
     "message": "随机回顾"
@@ -164,14 +122,8 @@
   "llmApiKeyPlaceholder": {
     "message": "输入 API 密钥"
   },
-  "aiOptimizeTooltip": {
-    "message": "使用 AI 优化内容"
-  },
   "aiOptimizing": {
     "message": "AI 正在优化中..."
-  },
-  "aiOptimizeSuccess": {
-    "message": "AI 优化完成！"
   },
   "aiOptimizeFailed": {
     "message": "AI 优化失败"
@@ -263,9 +215,6 @@
   "aiReviewTitle": {
     "message": "确认 AI 结果"
   },
-  "aiReviewHelp": {
-    "message": "原文保持不变，请查看后选择采用或追加。"
-  },
   "aiOriginal": {
     "message": "原文"
   },
@@ -305,9 +254,6 @@
   "clipSelection": {
     "message": "摘录选区并附来源"
   },
-  "clipSelectionHelp": {
-    "message": "选中文本后，右键选择“摘录选区并附来源”，再打开扩展查看。"
-  },
   "clipCaptureFailed": {
     "message": "此页面暂时无法读取来源，请在普通网页重试。"
   },
@@ -346,9 +292,6 @@
   },
   "aiTaskHelp_custom": {
     "message": "按该快捷预设中填写的提示词执行。"
-  },
-  "aiTaskUsageHint": {
-    "message": "主 AI 按钮使用上方任务；快捷菜单显示并执行各预设自己的任务。"
   },
   "aiRunTask": {
     "message": "执行 AI 任务：{task}"
@@ -490,9 +433,6 @@
   },
   "openSaved": {
     "message": "查看笔记"
-  },
-  "openSource": {
-    "message": "原网页"
   },
   "archiveAction": {
     "message": "归档"

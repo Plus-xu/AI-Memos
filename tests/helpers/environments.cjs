@@ -1,8 +1,10 @@
 /** Ready-made contexts for the test files: each loads real scripts over the shared stand-ins. */
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const vm = require('node:vm');
 const { webcrypto } = require('node:crypto');
-const { plain, flush, source, loadScripts } = require('./scripts.cjs');
+const { root, plain, flush, source, loadScripts, pageScripts } = require('./scripts.cjs');
 const { createDom } = require('./dom.cjs');
 const { createChrome } = require('./chrome.cjs');
 const { createIndexedDB } = require('./indexeddb.cjs');
@@ -204,4 +206,100 @@ function loadStagedFiles({ responder, fetcher, sync = {}, local = {} } = {}) {
   return { context, staged: context.StagedFiles, files, calls, sync, local };
 }
 
-module.exports = { info, harness, loadRules, runtime, loadApi, loadPopup, loadSettings, loadStagedFiles };
+/** What a page and the service worker both have from the browser. */
+function hostGlobals() {
+  const chrome = createChrome();
+  const event = { addListener() {} };
+  Object.assign(chrome.runtime, { id: 'extension', getURL: file => 'chrome-extension://extension/' + file });
+  Object.assign(chrome.runtime, { onInstalled: event, onMessage: event, openOptionsPage() {} });
+  chrome.i18n.getUILanguage = () => 'en';
+  chrome.tabs = { query: async () => [], get: async () => ({}), create() {} };
+  chrome.contextMenus = { removeAll() {}, create() {}, onClicked: event };
+  return {
+    chrome,
+    URL,
+    URLSearchParams,
+    AbortController,
+    AbortSignal,
+    Blob,
+    TextEncoder,
+    crypto: webcrypto,
+    indexedDB: createIndexedDB(),
+    fetch: async () => {
+      throw new Error('Unexpected request');
+    },
+    setTimeout() {},
+    console: { log() {}, error() {}, warn() {} }
+  };
+}
+
+/** Runs one script of js/ in the context; an error it throws while loading names the script. */
+function runScript(context, script) {
+  try {
+    loadScripts(context, [script]);
+  } catch (error) {
+    throw new Error(script + ' failed while loading: ' + error.message, { cause: error });
+  }
+}
+
+const libraries = ['js/jquery.min.js', 'js/view-image.js'];
+
+/**
+ * Runs a page's own scripts in the order its HTML lists them, in one context, up to the point where the
+ * browser would fire DOMContentLoaded. `$` and `ViewImage` are stand-ins, present only when the page
+ * includes the library; `scripts` are the own scripts that ran, as paths.
+ */
+function loadPage(page) {
+  const html = fs.readFileSync(path.join(root, page), 'utf8');
+  const listed = pageScripts(page);
+  const { $, document } = createDom();
+  $.extend = extra => Object.assign($, extra);
+  const dataset = Object.fromEntries(
+    Array.from(html.match(/<html\b[^>]*>/)[0].matchAll(/\bdata-([a-z]+)="([^"]*)"/g), hit => [hit[1], hit[2]])
+  );
+  document.documentElement = { lang: 'en', dataset };
+  const context = vm.createContext({
+    ...hostGlobals(),
+    document,
+    location: { search: '', protocol: 'chrome-extension:', replace() {} },
+    matchMedia: () => ({ matches: false, addEventListener() {} }),
+    addEventListener() {},
+    Option: class {},
+    FileReader
+  });
+  context.window = context;
+  if (listed.includes('js/jquery.min.js')) context.$ = $;
+  if (listed.includes('js/view-image.js')) context.ViewImage = { init() {} };
+  const scripts = listed.filter(script => !libraries.includes(script));
+  for (const script of scripts) runScript(context, script.replace(/^js\//, ''));
+  return { context, scripts };
+}
+
+/** Runs the service worker; importScripts loads the files it names into the same context. */
+function loadWorker() {
+  const scripts = ['js/background.js'];
+  const context = vm.createContext({
+    ...hostGlobals(),
+    importScripts(...names) {
+      for (const name of names) {
+        scripts.push('js/' + name);
+        runScript(context, name);
+      }
+    }
+  });
+  runScript(context, 'background.js');
+  return { context, scripts };
+}
+
+module.exports = {
+  info,
+  harness,
+  loadRules,
+  runtime,
+  loadApi,
+  loadPopup,
+  loadSettings,
+  loadStagedFiles,
+  loadPage,
+  loadWorker
+};

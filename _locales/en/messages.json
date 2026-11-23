@@ -8,20 +8,8 @@
   "extDescription": {
     "message": "AI-powered Memos browser extension - Quickly capture, intelligently organize, and elegantly manage your thoughts and knowledge"
   },
-  "sendTo": {
-    "message": "SendTo Memos \"%s\""
-  },
-  "sendLinkTo": {
-    "message": "Send link to Memos"
-  },
-  "sendImageTo": {
-    "message": "Send image to Memos"
-  },
   "saveBtn": {
     "message": "Save"
-  },
-  "placeApiUrl": {
-    "message": "Memos Self Home Url"
   },
   "placeApiTokens": {
     "message": "Memos Access Tokens"
@@ -50,32 +38,11 @@
   "placeShowInput": {
     "message": "Public tags: memos containing any of these are saved as visible to everyone (separate with spaces or commas)"
   },
-  "picDrag": {
-    "message": "Drag upload the image"
-  },
-  "picCancelDrag": {
-    "message": "Cancel upload"
-  },
   "picUploading": {
     "message": "Upload the picture..."
   },
-  "picSuccess": {
-    "message": "Upload completed"
-  },
   "picFailed": {
     "message": "Uploading failed"
-  },
-  "picPending": {
-    "message": "Image uploading is in progress"
-  },
-  "saveSuccess": {
-    "message": "Save Info Success!"
-  },
-  "searchNow": {
-    "message": "What are you looking for?"
-  },
-  "searchNone": {
-    "message": "Try another word!"
   },
   "archiveFailed": {
     "message": "Archive Failed 😭"
@@ -107,12 +74,6 @@
   "themeDark": {
     "message": "Dark"
   },
-  "languageChangeConfirm": {
-    "message": "Change language?"
-  },
-  "languageChanged": {
-    "message": "Language changed"
-  },
   "settingsBtn": {
     "message": "Settings"
   },
@@ -124,9 +85,6 @@
   },
   "uploadTooltip": {
     "message": "Add a local attachment"
-  },
-  "linkTooltip": {
-    "message": "Get link"
   },
   "randomTooltip": {
     "message": "Random review"
@@ -164,14 +122,8 @@
   "llmApiKeyPlaceholder": {
     "message": "Enter API key"
   },
-  "aiOptimizeTooltip": {
-    "message": "Optimize with AI"
-  },
   "aiOptimizing": {
     "message": "AI is optimizing..."
-  },
-  "aiOptimizeSuccess": {
-    "message": "AI optimization completed!"
   },
   "aiOptimizeFailed": {
     "message": "AI optimization failed"
@@ -263,9 +215,6 @@
   "aiReviewTitle": {
     "message": "Review AI result"
   },
-  "aiReviewHelp": {
-    "message": "Your draft stays unchanged until you choose an action."
-  },
   "aiOriginal": {
     "message": "Original"
   },
@@ -305,9 +254,6 @@
   "clipSelection": {
     "message": "Clip selection with source"
   },
-  "clipSelectionHelp": {
-    "message": "Select text on a webpage, then right-click “Clip selection with source”."
-  },
   "clipCaptureFailed": {
     "message": "Cannot read this page source. Try a normal webpage."
   },
@@ -346,9 +292,6 @@
   },
   "aiTaskHelp_custom": {
     "message": "Follow the prompt configured in this quick preset."
-  },
-  "aiTaskUsageHint": {
-    "message": "The main AI button uses this selection; quick presets display and run their own tasks."
   },
   "aiRunTask": {
     "message": "Run AI task: {task}"
@@ -490,9 +433,6 @@
   },
   "openSaved": {
     "message": "Open memo"
-  },
-  "openSource": {
-    "message": "Source page"
   },
   "archiveAction": {
     "message": "Archive"
