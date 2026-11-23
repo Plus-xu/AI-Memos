@@ -1,0 +1,8 @@
+js/vendor/
+js/jquery.min.js
+js/view-image.js
+_metadata/
+package-lock.json
+*.md
+.superpowers/
+.claude/

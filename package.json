@@ -5,6 +5,8 @@
   "description": "Development and packaging tools for the AI-MEMOS browser extension",
   "scripts": {
     "test": "node --test tests/*.test.cjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "package": "pwsh -NoProfile -File scripts/package-extension.ps1",
     "preview": "node scripts/preview-server.cjs"
   },
@@ -13,6 +15,7 @@
   },
   "devDependencies": {
     "@mozilla/readability": "0.6.0",
+    "prettier": "3.10.1",
     "turndown": "7.2.5",
     "turndown-plugin-gfm": "1.0.2"
   }
