@@ -132,6 +132,7 @@ test('a network error fails with status 0 and is not a timeout', async () => {
   const error = await failure(http.json({ url: 'https://memos.example/api/memos' }));
   assert.equal(error.status, 0);
   assert.equal(error.statusText, 'error');
+  assert.equal(error.cause.message, 'Failed to fetch', 'what went wrong stays available for diagnosis');
 });
 
 test('the time limit given is the one the request is aborted after', async () => {

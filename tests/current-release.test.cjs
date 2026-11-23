@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const { runtime } = require('./helpers/environments.cjs');
+const { serverFetch } = require('./helpers/http.cjs');
 
 const transports = [
   [
@@ -56,10 +57,10 @@ for (const [provider, model, route, header, limit, response] of transports) {
     const { ctx, config } = runtime();
     if (provider !== 'newapi') assert.equal(config.providers[provider].models[0].value, model);
     let request;
-    ctx.$.ajax = value => {
-      request = value;
-      value.success(response);
-    };
+    ctx.fetch = serverFetch(options => {
+      request = options;
+      return response;
+    });
     const result = await ctx.callLLMAPI(
       provider,
       model,
@@ -95,14 +96,17 @@ test('generation errors distinguish permissions, rate limits, interrupted reques
     [403, 'aiUnavailable'],
     [429, 'requestLimited']
   ]) {
-    ctx.$.ajax = options => options.error({ status });
+    ctx.fetch = serverFetch(() => {
+      throw { status };
+    });
     await assert.rejects(request(), new RegExp(expected));
   }
   for (const [response, expected] of [
     [{ output_text: '  ' }, 'aiEmpty'],
+    [null, 'aiEmpty'],
     [{ status: 'incomplete', output_text: '  ' }, 'aiTruncated']
   ]) {
-    ctx.$.ajax = options => options.success(response);
+    ctx.fetch = serverFetch(() => response);
     await assert.rejects(request(), new RegExp(expected));
   }
 });
@@ -219,7 +223,7 @@ test('truncated output with visible text is returned for review instead of being
     ['deepseek', 'deepseek-flash', { choices: [{ finish_reason: 'length', message: { content: 'partial' } }] }]
   ];
   for (const [provider, model, response] of cases) {
-    ctx.$.ajax = options => options.success(response);
+    ctx.fetch = serverFetch(() => response);
     const result = await ctx.callLLMAPI(provider, model, 'key', 'note', 'en', '', 'summary', '');
     assert.equal(result.text, 'partial');
     assert.equal(result.truncated, true);
@@ -233,11 +237,11 @@ test('a configured output limit reaches every protocol and invalid values fall b
     await new Promise(resolve => ctx.loadLLMState(resolve));
     const seen = {};
     for (const [provider, model, , , , response] of transports) {
-      ctx.$.ajax = value => {
+      ctx.fetch = serverFetch(value => {
         const body = JSON.parse(value.data);
         seen[provider] = body.max_output_tokens ?? body.max_tokens ?? body.generationConfig?.maxOutputTokens;
-        value.success(response);
-      };
+        return response;
+      });
       await ctx.callLLMAPI(provider, model, 'key', 'note', 'en', 'https://fixture.test/gateway/v1/', 'summary', '');
     }
     return seen;
@@ -257,14 +261,19 @@ test('a configured output limit reaches every protocol and invalid values fall b
 test('request errors rejected by the provider show its reason, capped at 240 characters', async () => {
   const { ctx } = runtime();
   const request = () => ctx.callLLMAPI('openai', 'gpt-6.2-sol', 'key', 'note', 'en', '', 'summary', '');
-  ctx.$.ajax = options => options.error({ status: 400, responseJSON: { error: { message: 'max_tokens too large' } } });
+  const refuse = failure => {
+    ctx.fetch = serverFetch(() => {
+      throw failure;
+    });
+  };
+  refuse({ status: 400, responseJSON: { error: { message: 'max_tokens too large' } } });
   await assert.rejects(request(), /HTTP 400.*max_tokens too large/);
-  ctx.$.ajax = options => options.error({ status: 422, responseJSON: { message: 'x'.repeat(500) } });
+  refuse({ status: 422, responseJSON: { message: 'x'.repeat(500) } });
   await assert.rejects(
     request(),
     error => error.message.endsWith('x'.repeat(240)) && !error.message.includes('x'.repeat(241))
   );
-  ctx.$.ajax = options => options.error({ status: 500, responseJSON: { error: { message: 'internal detail' } } });
+  refuse({ status: 500, responseJSON: { error: { message: 'internal detail' } } });
   await assert.rejects(request(), error => !error.message.includes('internal detail'));
 });
 

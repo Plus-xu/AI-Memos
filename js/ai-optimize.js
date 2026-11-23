@@ -1,4 +1,4 @@
-/* global AIReview, AIWorkflow, Clipper, LLM_CONFIG, ModelCatalog, memoSaveInProgress, uiMessage */
+/* global AIReview, AIWorkflow, Clipper, Http, LLM_CONFIG, ModelCatalog, memoSaveInProgress, uiMessage */
 /* exported persistLLMState */
 /**
  * AI优化功能实现
@@ -1051,30 +1051,32 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
     }
 
     // 发送请求
-    $.ajax({
+    Http.json({
       url: llmRequest.url,
-      type: 'POST',
-      contentType: 'application/json',
-      dataType: 'json',
+      method: 'POST',
       headers: llmRequest.headers,
-      data: JSON.stringify(llmRequest.body),
-      timeout: 90000,
-      success: function (response) {
-        // 提取优化后的内容
-        const finish =
-          response.stop_reason || response.choices?.[0]?.finish_reason || response.candidates?.[0]?.finishReason;
-        const truncated = ['max_tokens', 'length', 'MAX_TOKENS'].includes(finish) || response.status === 'incomplete';
-        const optimizedContent = extractLLMText(providerConfig, response);
-        if (typeof optimizedContent === 'string' && optimizedContent.trim()) {
-          resolve({ text: optimizedContent, truncated: truncated });
-        } else {
-          reject(new Error(getLLMMessage(truncated ? 'aiTruncated' : 'aiEmpty')));
+      body: llmRequest.body,
+      timeout: 90000
+    })
+      .then(
+        function (answer) {
+          // 提取优化后的内容
+          const response = answer || {};
+          const finish =
+            response.stop_reason || response.choices?.[0]?.finish_reason || response.candidates?.[0]?.finishReason;
+          const truncated = ['max_tokens', 'length', 'MAX_TOKENS'].includes(finish) || response.status === 'incomplete';
+          const optimizedContent = extractLLMText(providerConfig, response);
+          if (typeof optimizedContent === 'string' && optimizedContent.trim()) {
+            resolve({ text: optimizedContent, truncated: truncated });
+          } else {
+            reject(new Error(getLLMMessage(truncated ? 'aiTruncated' : 'aiEmpty')));
+          }
+        },
+        function (xhr) {
+          reject(new Error(extractLLMErrorMessage(xhr)));
         }
-      },
-      error: function (xhr) {
-        reject(new Error(extractLLMErrorMessage(xhr)));
-      }
-    });
+      )
+      .catch(reject);
   });
 }
 

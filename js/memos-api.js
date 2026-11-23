@@ -1,4 +1,4 @@
-/* global DraftStorage */
+/* global DraftStorage, Http */
 /* exported MemosAPI */
 /**
  * Memos API compatibility helpers.
@@ -75,20 +75,13 @@ const MemosAPI = (function () {
   }
 
   function rawRequest(info, prefix, options) {
-    return Promise.resolve(
-      $.ajax({
-        url: normalizeBaseUrl(info.apiUrl) + prefix + options.path,
-        type: options.method || 'GET',
-        data: options.body === undefined ? undefined : JSON.stringify(options.body),
-        contentType: 'application/json',
-        dataType: 'json',
-        timeout: 30000,
-        headers: {
-          Authorization: 'Bearer ' + String(info.apiTokens || '').trim(),
-          Accept: 'application/json'
-        }
-      })
-    );
+    return Http.json({
+      url: normalizeBaseUrl(info.apiUrl) + prefix + options.path,
+      method: options.method || 'GET',
+      body: options.body,
+      timeout: 30000,
+      headers: { Authorization: 'Bearer ' + String(info.apiTokens || '').trim() }
+    });
   }
 
   function request(info, options) {

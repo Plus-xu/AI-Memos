@@ -151,6 +151,20 @@ test('the service worker loads, and its scripts find the globals they declare', 
   assert.deepEqual(missingGlobals(loaded), absent['background.js']);
 });
 
+test("the extension's own scripts request through js/http.js, never through $.ajax", () => {
+  assert.deepEqual(
+    ownScripts.filter(script => /\$\.ajax\b/.test(read(script))),
+    []
+  );
+  for (const page of ['popup.html', 'options.html']) {
+    const scripts = pageScripts(page);
+    const http = scripts.indexOf('js/http.js');
+    assert.ok(http >= 0, page + ' must load js/http.js');
+    for (const caller of ['js/memos-api.js', 'js/ai-optimize.js'])
+      assert.ok(http < scripts.indexOf(caller), page + ' must load js/http.js before ' + caller);
+  }
+});
+
 test('every npm script the CI workflow runs is defined in package.json', () => {
   const run = Array.from(read('.github/workflows/ci.yml').matchAll(/\bnpm run ([\w:-]+)/g), hit => hit[1]);
   assert.ok(run.length, 'the workflow runs no npm scripts');

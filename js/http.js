@@ -17,7 +17,9 @@ var Http = (function () {
 
   // Status 0 means no answer arrived: the request may or may not have reached the server.
   function unanswered(error) {
-    return failure(0, error && error.name === 'TimeoutError' ? 'timeout' : 'error');
+    var result = failure(0, error && error.name === 'TimeoutError' ? 'timeout' : 'error');
+    result.cause = error;
+    return result;
   }
 
   /** Resolves with the parsed answer; `body`, when given, is sent as JSON. `timeout` is in milliseconds. */

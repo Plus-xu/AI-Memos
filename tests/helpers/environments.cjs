@@ -8,6 +8,7 @@ const { root, plain, flush, source, loadScripts, pageScripts } = require('./scri
 const { createDom } = require('./dom.cjs');
 const { createChrome } = require('./chrome.cjs');
 const { createIndexedDB } = require('./indexeddb.cjs');
+const { serverFetch, pendingFetch } = require('./http.cjs');
 
 const info = { apiUrl: 'https://memos.example/', apiTokens: 'test-pat', userName: 'users/tester' };
 
@@ -24,10 +25,6 @@ function harness(options = {}) {
   };
   const { $, document, node, handlers, messages, inputChanges } = createDom();
   const requests = [];
-  $.ajax = value => {
-    requests.push(value);
-    return {};
-  };
   const chrome = createChrome({
     sync,
     local,
@@ -43,6 +40,7 @@ function harness(options = {}) {
     AbortController,
     AbortSignal,
     Blob,
+    fetch: pendingFetch(requests),
     window: { addEventListener() {} },
     setTimeout() {},
     console: { log() {}, error() {}, warn() {} },
@@ -52,7 +50,7 @@ function harness(options = {}) {
   const load = file => {
     loadScripts(context, [file]);
   };
-  loadScripts(context, ['llm-config', 'ai-workflow', 'ai-review', 'ai-optimize']);
+  loadScripts(context, ['http', 'llm-config', 'ai-workflow', 'ai-review', 'ai-optimize']);
   node('#content').val(options.content === undefined ? 'Original draft' : options.content);
   node('#aiTask').val('organize');
   node('#llmProvider').val('openai');
@@ -85,11 +83,15 @@ function runtime(fetcher) {
     fetch: fetcher,
     console
   });
-  loadScripts(ctx, ['llm-config', 'draft-storage', 'model-catalog', 'ai-workflow', 'ai-optimize']);
+  loadScripts(ctx, ['http', 'llm-config', 'draft-storage', 'model-catalog', 'ai-workflow', 'ai-optimize']);
   return { ctx, bucket, sync, config: vm.runInContext('LLM_CONFIG', ctx) };
 }
 
-/** MemosAPI alone; responder answers each $.ajax call, and `local` is the local storage it remembers in. */
+/**
+ * MemosAPI alone. responder(options) answers each request to an /api/ route (see helpers/http.cjs),
+ * `fetcher` answers every other request, such as those for files, and `local` is the local storage the API
+ * remembers in.
+ */
 function loadApi(
   responder = () => {
     throw new Error('Unexpected API request');
@@ -98,6 +100,12 @@ function loadApi(
   local = {}
 ) {
   const calls = [];
+  const api = serverFetch(responder, calls);
+  const files =
+    fetcher ||
+    (() => {
+      throw new Error('Unexpected file request');
+    });
   class TestURL extends URL {}
   const context = vm.createContext({
     chrome: createChrome({ local }),
@@ -107,19 +115,9 @@ function loadApi(
     AbortSignal,
     Blob,
     console: { error() {} },
-    fetch:
-      fetcher ||
-      (() => {
-        throw new Error('Unexpected file request');
-      }),
-    $: {
-      ajax(options) {
-        calls.push(options);
-        return Promise.resolve().then(() => responder(options));
-      }
-    }
+    fetch: (url, init) => (new URL(url).pathname.includes('/api/') ? api(url, init) : files(url, init))
   });
-  loadScripts(context, ['draft-storage']);
+  loadScripts(context, ['http', 'draft-storage']);
   vm.runInContext(source('memos-api') + '\nglobalThis.api = MemosAPI;', context);
   return { api: context.api, context, calls, local };
 }
@@ -186,7 +184,6 @@ async function loadPopup(overrides = {}, saved = {}, session = {}) {
 async function loadSettings(storage = {}, responder) {
   const { context, calls } = loadApi(responder);
   const { $, document, handlers, messages } = createDom();
-  $.ajax = context.$.ajax;
   Object.assign(context, { $, document, chrome: createChrome({ sync: storage }), uiMessage: key => key });
   loadScripts(context, ['draft-storage', 'memo-tags', 'settings']);
   handlers.get('document:DOMContentLoaded')();

@@ -158,7 +158,8 @@ test('authentication errors, quota refusals, timeouts and uncertain writes are n
     });
     await assert.rejects(
       api.createMemo(info, { content: 'keep me', visibility: 'PRIVATE' }),
-      error => error === failure
+      error =>
+        error.status === failure.status && (error.statusText === 'timeout') === (failure.statusText === 'timeout')
     );
     assert.equal(calls.length, 1);
   }
