@@ -23,4 +23,9 @@ function pageScripts(page) {
   return Array.from(html.matchAll(/<script\b[^>]*\bsrc="([^"]+)"/g), match => match[1]);
 }
 
-module.exports = { root, plain, flush, source, loadScripts, pageScripts };
+/** A real Response carrying JSON, as a server would answer. */
+function jsonResponse(data, status = 200, headers = {}) {
+  return new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json', ...headers } });
+}
+
+module.exports = { root, plain, flush, source, loadScripts, pageScripts, jsonResponse };
