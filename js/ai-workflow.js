@@ -47,12 +47,26 @@ var AIWorkflow = (function () {
     return '<note>\n' + text + '\n</note>';
   }
 
-  var wrapped = /^\s*<note>\n?([\s\S]*?)\n?<\/note>\s*$/;
+  var wrapped = /^\s*<note>\r?\n?([\s\S]*?)\r?\n?<\/note>\s*$/;
+  var opening = /^\s*<note>\r?\n?/;
+  var closing = /\r?\n?<\/note>\s*$/;
 
-  /** A model may echo the markers around its answer. They are removed unless the note itself came wrapped in them. */
+  function occurrences(text, marker) {
+    return text.split(marker).length - 1;
+  }
+
+  /**
+   * A model may echo the markers around its answer. They are removed unless the note itself came wrapped in them.
+   * A cut-off or partial echo leaves one marker without its partner; that one is removed as well,
+   * unless the note has a marker on the same side.
+   */
   function unwrapNote(result, input) {
     var match = wrapped.exec(result);
-    return match && !wrapped.test(input) ? match[1] : result;
+    if (match) return wrapped.test(input) ? result : match[1];
+    var unclosed = occurrences(result, '<note>') - occurrences(result, '</note>');
+    if (unclosed > 0 && opening.test(result) && !opening.test(input)) return result.replace(opening, '');
+    if (unclosed < 0 && closing.test(result) && !closing.test(input)) return result.replace(closing, '');
+    return result;
   }
 
   var outputLanguages = ['auto', 'ui', 'source'];

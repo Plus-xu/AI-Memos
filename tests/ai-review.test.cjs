@@ -354,6 +354,13 @@ test('markers echoed around a provider answer do not reach the review', async ()
   assert.deepEqual(plain(await pending), { text: 'A reviewed result', truncated: false });
 });
 
+test('a cut-off answer that began by echoing the opening marker reaches the review without it', async () => {
+  const state = harness();
+  const pending = state.context.callLLMAPI('openai', 'gpt-5.5', 'ai-test-key', 'Material', 'en', '', 'organize', '');
+  state.requests.at(-1).success({ status: 'incomplete', output_text: '<note>\nA partial result' });
+  assert.deepEqual(plain(await pending), { text: 'A partial result', truncated: true });
+});
+
 test('a truncated AI result is reviewable and carries a truncation warning', () => {
   const state = harness();
   state.context.AIReview.show('Original draft', 'Partial result', 'organize', true);

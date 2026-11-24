@@ -1,7 +1,17 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const { plain } = require('./helpers/scripts.cjs');
 const { loadRules } = require('./helpers/environments.cjs');
+
+/** Every sign by which the local preview takes a prompt for summary, key points or Q&A, read from the preview itself. */
+function previewTaskSigns() {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'scripts', 'preview-server.cjs'), 'utf8');
+  const signs = Array.from(source.matchAll(/\/([^/\n]+)\/i\.test\(instructions\)/g), match => match[1]);
+  assert.equal(signs.length, 3, 'the preview tells three tasks apart by their instructions');
+  return new RegExp(signs.join('|'), 'i');
+}
 
 test('each AI task builds a distinct instruction while retaining common source protections', () => {
   const { ai } = loadRules();
@@ -248,7 +258,7 @@ test('every task says where the note is in the user message and to leave the mar
 
 test('the local preview cannot mistake the organizer or a custom task for another task', () => {
   const { ai } = loadRules();
-  const others = /study questions|question.*answer|key points|concise.*summary|摘要|问答/i;
+  const others = previewTaskSigns();
   assert.doesNotMatch(ai.buildPrompt('organize'), others);
   assert.doesNotMatch(ai.buildPrompt('custom', 'Fix the grammar.'), others);
 });
@@ -264,6 +274,22 @@ test('markers a model echoes around its answer are removed, unless the note itse
   assert.equal(ai.unwrapNote('  <note>A</note>\n', 'x'), 'A');
   assert.equal(ai.unwrapNote('A <note>b</note>', 'x'), 'A <note>b</note>');
   assert.equal(ai.unwrapNote('<note>\nA\n</note>', '<note>\nx\n</note>'), '<note>\nA\n</note>');
+  assert.equal(ai.unwrapNote('<note>\r\nA\r\n</note>\r\n', 'x'), 'A');
+});
+
+test('a marker left without its partner by a cut-off or partial echo is removed too', () => {
+  const { ai } = loadRules();
+  assert.equal(ai.unwrapNote('<note>\nPartial text', 'x'), 'Partial text');
+  assert.equal(ai.unwrapNote('<note>\r\nPartial text', 'x'), 'Partial text');
+  assert.equal(ai.unwrapNote('Result\n</note>', 'x'), 'Result');
+  assert.equal(ai.unwrapNote('Result\r\n</note>\n', 'x'), 'Result');
+});
+
+test('a marker the result pairs up itself, or that the note has on the same side, is left alone', () => {
+  const { ai } = loadRules();
+  assert.equal(ai.unwrapNote('<note>a</note> tail', 'x'), '<note>a</note> tail');
+  assert.equal(ai.unwrapNote('<note>\nPartial text', '<note> draft'), '<note>\nPartial text');
+  assert.equal(ai.unwrapNote('Result\n</note>', 'draft </note>'), 'Result\n</note>');
 });
 
 test('the output language setting and the task together choose the language instruction', () => {
@@ -312,7 +338,7 @@ test('unrecognized output language values and tasks fall back to automatic and o
 
 test('no language instruction makes the local preview mistake the organizer or a custom task', () => {
   const { ai } = loadRules();
-  const others = /study questions|question.*answer|key points|concise.*summary|摘要|问答/i;
+  const others = previewTaskSigns();
   for (const mode of ai.outputLanguages) {
     for (const task of ['organize', 'custom']) {
       for (const language of ['zh_CN', 'en', 'ja']) {
