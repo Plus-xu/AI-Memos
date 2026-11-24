@@ -80,12 +80,21 @@ for (const [provider, model, route, header, limit, response] of transports) {
     assert.equal(request.headers[header], header === 'Authorization' ? 'Bearer fixture-key' : 'fixture-key');
     assert.equal(JSON.stringify(body).includes('fixture-key'), false);
     assert.equal(JSON.stringify(body).includes('temperature'), false);
+    const sent =
+      body.input ?? body.messages?.findLast(item => item.role === 'user').content ?? body.contents[0].parts[0].text;
+    assert.equal(sent, '<note>\nPlain note\n</note>');
     if (limit) assert.equal(body[limit], 8192);
     if (provider === 'newapi') assert.ok(!Object.hasOwn(body, 'max_tokens'));
     if (provider === 'gemini') assert.equal(body.generationConfig.maxOutputTokens, 8192);
     else assert.equal(body.model, model);
   });
 }
+
+test('the bundled configuration no longer carries the old organizer prompt or an unused temperature', () => {
+  const { config } = runtime();
+  assert.equal(config.systemPrompt, undefined);
+  assert.ok(!Object.hasOwn(config.defaults, 'temperature'));
+});
 
 test('generation errors distinguish permissions, rate limits, interrupted requests, empty and truncated responses', async () => {
   const { ctx } = runtime();

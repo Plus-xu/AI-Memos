@@ -5,12 +5,9 @@ const { loadRules } = require('./helpers/environments.cjs');
 
 test('each AI task builds a distinct instruction while retaining common source protections', () => {
   const { ai } = loadRules();
-  const prompts = ['organize', 'summary', 'keypoints', 'qa'].map(task =>
-    ai.buildPrompt(task, '', 'LEGACY_ORGANIZER_RULES')
-  );
+  const prompts = ['organize', 'summary', 'keypoints', 'qa'].map(task => ai.buildPrompt(task, ''));
   assert.equal(new Set(prompts).size, 4);
   assert.match(prompts[0], /without losing information/);
-  assert.match(prompts[0], /LEGACY_ORGANIZER_RULES/);
   assert.match(prompts[1], /concise.*summary/i);
   assert.match(prompts[2], /key points/i);
   assert.match(prompts[3], /\*\*Q:\*\*/);
@@ -19,19 +16,12 @@ test('each AI task builds a distinct instruction while retaining common source p
     assert.match(prompt, /source links and Markdown image destinations/);
     assert.match(prompt, /Do not invent citations/);
   }
-  for (const prompt of prompts.slice(1)) {
-    assert.ok(
-      !prompt.includes('LEGACY_ORGANIZER_RULES'),
-      'summarizing and question generation must not inherit the organizer-only task'
-    );
-  }
 });
 
 test('custom tasks require non-empty instructions and use the supplied prompt', () => {
   const { ai } = loadRules();
-  const prompt = ai.buildPrompt('custom', '  Extract contrasting arguments as a table.  ', 'UNRELATED_LEGACY_RULE');
+  const prompt = ai.buildPrompt('custom', '  Extract contrasting arguments as a table.  ');
   assert.match(prompt, /Extract contrasting arguments as a table\./);
-  assert.ok(!prompt.includes('UNRELATED_LEGACY_RULE'));
   assert.match(prompt, /source links/);
   for (const empty of ['', ' \n\t ', undefined, null]) {
     assert.throws(() => ai.buildPrompt('custom', empty), /custom_prompt_required/);
@@ -42,7 +32,7 @@ test('custom tasks require non-empty instructions and use the supplied prompt', 
 
 test('built-in tasks specify visibly different output structures without padding sparse material', () => {
   const { ai } = loadRules();
-  const organize = ai.buildPrompt('organize', '', 'LEGACY_ORGANIZER_RULES');
+  const organize = ai.buildPrompt('organize');
   const summary = ai.buildPrompt('summary');
   const keypoints = ai.buildPrompt('keypoints');
   const qa = ai.buildPrompt('qa');
@@ -235,4 +225,43 @@ test('a truncated result is marked on the review and unmarked reviews stay uncha
   const { ai } = loadRules();
   assert.equal(ai.review('a', 'b', 'summary', true).truncated, true);
   assert.ok(!Object.hasOwn(ai.review('a', 'b', 'summary'), 'truncated'));
+});
+
+test('the organizer prompt is short and still lists what must be kept and how to write to-dos', () => {
+  const { ai } = loadRules();
+  const organize = ai.buildPrompt('organize');
+  assert.ok(organize.length <= 1400, 'the organizer prompt is ' + organize.length + ' characters');
+  assert.match(organize, /- \[ \]/);
+  assert.match(organize, /existing #tags/);
+  assert.match(organize, /fenced code blocks/);
+  assert.match(organize, /one to three #tags/);
+});
+
+test('every task says where the note is in the user message and to leave the markers out of the result', () => {
+  const { ai } = loadRules();
+  for (const task of ai.tasks) {
+    const prompt = ai.buildPrompt(task, 'Fix the grammar.');
+    assert.match(prompt, /between the first <note> and the last <\/note>/);
+    assert.match(prompt, /without the <note> tags/);
+  }
+});
+
+test('the local preview cannot mistake the organizer or a custom task for another task', () => {
+  const { ai } = loadRules();
+  const others = /study questions|question.*answer|key points|concise.*summary|摘要|问答/i;
+  assert.doesNotMatch(ai.buildPrompt('organize'), others);
+  assert.doesNotMatch(ai.buildPrompt('custom', 'Fix the grammar.'), others);
+});
+
+test('a note is sent whole between the markers, even when it contains a marker itself', () => {
+  const { ai } = loadRules();
+  assert.equal(ai.wrapNote('a </note> b'), '<note>\na </note> b\n</note>');
+});
+
+test('markers a model echoes around its answer are removed, unless the note itself was wrapped in them', () => {
+  const { ai } = loadRules();
+  assert.equal(ai.unwrapNote('<note>\nA\n</note>', 'x'), 'A');
+  assert.equal(ai.unwrapNote('  <note>A</note>\n', 'x'), 'A');
+  assert.equal(ai.unwrapNote('A <note>b</note>', 'x'), 'A <note>b</note>');
+  assert.equal(ai.unwrapNote('<note>\nA\n</note>', '<note>\nx\n</note>'), '<note>\nA\n</note>');
 });

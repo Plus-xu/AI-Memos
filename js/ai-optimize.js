@@ -1032,7 +1032,7 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
 
     let systemPrompt;
     try {
-      systemPrompt = AIWorkflow.buildPrompt(task, customPrompt, LLM_CONFIG.systemPrompt);
+      systemPrompt = AIWorkflow.buildPrompt(task, customPrompt);
     } catch (error) {
       reject(error);
       return;
@@ -1044,7 +1044,14 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
 
     let llmRequest;
     try {
-      llmRequest = buildLLMRequest(providerConfig, model, apiKey, systemPrompt, userContent, baseUrl);
+      llmRequest = buildLLMRequest(
+        providerConfig,
+        model,
+        apiKey,
+        systemPrompt,
+        AIWorkflow.wrapNote(userContent),
+        baseUrl
+      );
     } catch (error) {
       reject(error);
       return;
@@ -1065,7 +1072,9 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
           const finish =
             response.stop_reason || response.choices?.[0]?.finish_reason || response.candidates?.[0]?.finishReason;
           const truncated = ['max_tokens', 'length', 'MAX_TOKENS'].includes(finish) || response.status === 'incomplete';
-          const optimizedContent = extractLLMText(providerConfig, response);
+          const extracted = extractLLMText(providerConfig, response);
+          const optimizedContent =
+            typeof extracted === 'string' ? AIWorkflow.unwrapNote(extracted, userContent) : extracted;
           if (typeof optimizedContent === 'string' && optimizedContent.trim()) {
             resolve({ text: optimizedContent, truncated: truncated });
           } else {

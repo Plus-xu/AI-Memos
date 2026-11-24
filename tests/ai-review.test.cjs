@@ -142,7 +142,7 @@ test('the real AI request retains its input snapshot and cannot overwrite edits 
   state.context.optimizeWithAI();
   assert.equal(state.requests.length, 1, 'a second click must not create another AI request');
   assert.equal(state.context.AIReview.isBusy(), true);
-  assert.equal(JSON.parse(state.requests[0].data).input, 'Original draft');
+  assert.equal(JSON.parse(state.requests[0].data).input, '<note>\nOriginal draft\n</note>');
   state.node('#content').val('Latest user edit').trigger('input');
   state.requests[0].success({ output_text: 'AI summary' });
   await flush();
@@ -334,7 +334,7 @@ test('task-specific instructions are passed into real provider request bodies', 
     const request = state.requests.at(-1);
     const body = JSON.parse(request.data);
     assert.equal(body.model, 'gpt-5.5');
-    assert.equal(body.input, 'Material with https://example.org/source');
+    assert.equal(body.input, '<note>\nMaterial with https://example.org/source\n</note>');
     assert.equal(request.headers.Authorization, 'Bearer ai-test-key');
     instructions.push(body.instructions);
     request.success({ output_text: 'A reviewed result' });
@@ -345,6 +345,13 @@ test('task-specific instructions are passed into real provider request bodies', 
   assert.match(instructions[3], /\*\*Q:\*\*/);
   assert.match(instructions[4], /Compare supporting and opposing arguments\./);
   assert.ok(instructions.every(prompt => /source links/.test(prompt)));
+});
+
+test('markers echoed around a provider answer do not reach the review', async () => {
+  const state = harness();
+  const pending = state.context.callLLMAPI('openai', 'gpt-5.5', 'ai-test-key', 'Material', 'en', '', 'organize', '');
+  state.requests.at(-1).success({ output_text: '<note>\nA reviewed result\n</note>' });
+  assert.deepEqual(plain(await pending), { text: 'A reviewed result', truncated: false });
 });
 
 test('a truncated AI result is reviewable and carries a truncation warning', () => {
