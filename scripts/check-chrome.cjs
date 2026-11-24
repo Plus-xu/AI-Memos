@@ -118,12 +118,18 @@ async function main() {
     await options.waitForSelector('#llmModel option[value="fixture-text"]', { state: 'attached' });
     assert.equal(await options.locator('#llmModel option[value*="embedding"]').count(), 0);
     await options.selectOption('#llmModel', 'fixture-text');
+    await options.selectOption('#llmOutputLanguage', 'source');
     await options.click('#saveAI');
     await waitFor(options, () => !!document.getElementById('aiSettingsStatus').textContent);
     await options.reload();
     await waitFor(options, () => document.getElementById('llmModel').value === 'fixture-text');
     assert.match(fixture.calls.find(r => r.route === '/api/auth/me').cookie, /proxy_session=fixture/);
     pass('Options validate the Memos account, refresh gateway text models and restore the saved model');
+    assert.equal(await options.inputValue('#llmOutputLanguage'), 'source');
+    const languageChoices = await options.locator('#llmOutputLanguage option').allTextContents();
+    assert.equal(languageChoices.length, 3);
+    assert.ok(languageChoices.every(text => text.trim()));
+    pass('The AI output language choice survives reopening the settings page');
     const page = await context.newPage();
     await page.setViewportSize({ width: 468, height: 635 });
     await page.goto(ext + '/popup.html');

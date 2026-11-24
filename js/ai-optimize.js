@@ -258,6 +258,11 @@ function persistLLMState(callback) {
     llmMaxOutputTokens = limit;
     limitField.value = llmMaxOutputTokens || '';
   }
+  // 下拉框没有可用的值（页面上没有这一项，或值不认识）时，保留已有的选择
+  const languageField = document.getElementById('llmOutputLanguage');
+  if (languageField && AIWorkflow.outputLanguages.indexOf(languageField.value) >= 0) {
+    llmOutputLanguage = languageField.value;
+  }
 
   chrome.storage.local.set({ llmTaskPresets: presets }, function () {
     if (chrome.runtime.lastError) {
@@ -270,6 +275,7 @@ function persistLLMState(callback) {
         llmProviderConfigs: llmProviderConfigs,
         llmActiveProvider: llmActiveProvider,
         llmMaxOutputTokens: llmMaxOutputTokens,
+        llmOutputLanguage: llmOutputLanguage,
         llmQuickPresets: presets.map(function (preset) {
           return preset.provider
             ? { provider: preset.provider, model: preset.model, customModel: preset.customModel }
@@ -296,6 +302,7 @@ function initLLMConfig() {
   loadLLMState(function () {
     applyProviderConfigToForm(llmActiveProvider);
     $('#llmMaxTokens').val(llmMaxOutputTokens || '');
+    $('#llmOutputLanguage').val(llmOutputLanguage);
     initQuickPresetControls();
     if (typeof ModelCatalog !== 'undefined' && document.getElementById('llmProvider')) restoreModelChoices();
     refreshLLMTexts();

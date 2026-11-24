@@ -538,5 +538,17 @@
   },
   "aiMaxTokensInvalid": {
     "message": "The output limit must be a whole number from 256 to 200000, or blank for the default. Nothing was saved."
+  },
+  "aiOutputLanguageLabel": {
+    "message": "AI output language"
+  },
+  "aiOutputLanguageAuto": {
+    "message": "Automatic: Organize keeps the note's language; Summarize, Key points and Study Q&A use the interface language"
+  },
+  "aiOutputLanguageUi": {
+    "message": "Always the interface language (notes in other languages are translated)"
+  },
+  "aiOutputLanguageSource": {
+    "message": "Always the note's language"
   }
 }

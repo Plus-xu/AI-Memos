@@ -68,7 +68,12 @@
             step="1"
             inputmode="numeric"
             placeholder="8192"
-          />
+          /><label for="llmOutputLanguage" data-feature-message="aiOutputLanguageLabel"></label
+          ><select id="llmOutputLanguage">
+            <option value="auto" data-feature-message="aiOutputLanguageAuto"></option>
+            <option value="ui" data-feature-message="aiOutputLanguageUi"></option>
+            <option value="source" data-feature-message="aiOutputLanguageSource"></option>
+          </select>
           <details class="pref-details">
             <summary id="llmQuickPresetsLabel"></summary>
             <div id="quickPresetRows"></div>

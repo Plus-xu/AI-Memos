@@ -390,3 +390,39 @@ test('an invalid output limit is reported and nothing is saved', () => {
   assert.ok(!result);
   assert.equal(state.sync.llmMaxOutputTokens, 4096);
 });
+
+test('the output language choice is saved, and an empty or unknown choice keeps the stored one', () => {
+  const save = (state, value) => {
+    state.node('#llmOutputLanguage').val(value);
+    let result = 'unset';
+    state.context.persistLLMState(error => {
+      result = error;
+    });
+    return result;
+  };
+  const state = harness({ sync: { llmOutputLanguage: 'ui' } });
+  assert.ok(!save(state, 'source'));
+  assert.equal(state.sync.llmOutputLanguage, 'source');
+  for (const unusable of ['', 'bogus']) {
+    const kept = harness({ sync: { llmOutputLanguage: 'ui' } });
+    assert.ok(!save(kept, unusable));
+    assert.equal(kept.sync.llmOutputLanguage, 'ui');
+  }
+  const fresh = harness();
+  assert.ok(!save(fresh, ''));
+  assert.equal(fresh.sync.llmOutputLanguage, 'auto');
+
+  const refused = harness({ sync: { llmOutputLanguage: 'ui' } });
+  refused.node('#llmMaxTokens').val('100');
+  assert.equal(save(refused, 'source').message, 'aiMaxTokensInvalid');
+  assert.equal(refused.sync.llmOutputLanguage, 'ui');
+});
+
+test('the settings page shows the stored output language', () => {
+  const state = harness({ sync: { llmOutputLanguage: 'source' } });
+  state.context.initLLMConfig();
+  assert.equal(state.node('#llmOutputLanguage').val(), 'source');
+  const unknown = harness({ sync: { llmOutputLanguage: 'zh' } });
+  unknown.context.initLLMConfig();
+  assert.equal(unknown.node('#llmOutputLanguage').val(), 'auto');
+});

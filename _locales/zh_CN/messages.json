@@ -538,5 +538,17 @@
   },
   "aiMaxTokensInvalid": {
     "message": "输出上限需为 256 到 200000 之间的整数，或留空使用默认值。未保存。"
+  },
+  "aiOutputLanguageLabel": {
+    "message": "AI 输出语言"
+  },
+  "aiOutputLanguageAuto": {
+    "message": "自动：整理格式保持原文语言，摘要、提取要点、生成问答使用界面语言"
+  },
+  "aiOutputLanguageUi": {
+    "message": "始终使用界面语言（外文笔记会被翻译）"
+  },
+  "aiOutputLanguageSource": {
+    "message": "始终保持原文语言"
   }
 }

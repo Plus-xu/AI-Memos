@@ -538,5 +538,17 @@
   },
   "aiMaxTokensInvalid": {
     "message": "出力上限は 256〜200000 の整数にするか、空欄にして既定値を使ってください。保存していません。"
+  },
+  "aiOutputLanguageLabel": {
+    "message": "AI の出力言語"
+  },
+  "aiOutputLanguageAuto": {
+    "message": "自動：文章を整理は原文の言語のまま、要約・要点を抽出・学習 Q&A は表示言語"
+  },
+  "aiOutputLanguageUi": {
+    "message": "常に表示言語（他言語のノートは翻訳されます）"
+  },
+  "aiOutputLanguageSource": {
+    "message": "常に原文の言語"
   }
 }
