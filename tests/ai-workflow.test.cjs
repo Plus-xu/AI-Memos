@@ -265,3 +265,59 @@ test('markers a model echoes around its answer are removed, unless the note itse
   assert.equal(ai.unwrapNote('A <note>b</note>', 'x'), 'A <note>b</note>');
   assert.equal(ai.unwrapNote('<note>\nA\n</note>', '<note>\nx\n</note>'), '<note>\nA\n</note>');
 });
+
+test('the output language setting and the task together choose the language instruction', () => {
+  const { ai } = loadRules();
+  assert.deepEqual(plain(ai.outputLanguages), ['auto', 'ui', 'source']);
+  const source = /^# Output language\n/;
+  const ui = /^# 输出语言要求\n/;
+  const weakSource = /^Unless the task above specifies an output language.*language the note is written in/;
+  const weakUi = /^Unless the task above specifies an output language.*Simplified Chinese \(简体中文\)/;
+  const table = {
+    auto: { organize: source, summary: ui, keypoints: ui, qa: ui },
+    ui: { organize: ui, summary: ui, keypoints: ui, qa: ui, custom: weakUi },
+    source: { organize: source, summary: source, keypoints: source, qa: source, custom: weakSource }
+  };
+  for (const [mode, row] of Object.entries(table)) {
+    for (const [task, expected] of Object.entries(row)) {
+      assert.match(ai.languageInstruction(mode, task, 'zh_CN'), expected, mode + ' ' + task);
+    }
+  }
+  assert.equal(ai.languageInstruction('auto', 'custom', 'zh_CN'), '');
+  assert.match(ai.languageInstruction('source', 'organize', 'zh_CN'), /Do not translate it into another language/);
+});
+
+test('the interface language instruction follows the interface language and falls back to English', () => {
+  const { ai } = loadRules();
+  const english = ai.languageInstruction('ui', 'summary', 'en');
+  assert.match(english, /^# Output Language Requirement\n/);
+  assert.match(ai.languageInstruction('ui', 'summary', 'ja'), /^# 出力言語の要件\n/);
+  for (const other of ['fr', '', undefined]) assert.equal(ai.languageInstruction('ui', 'summary', other), english);
+  assert.match(ai.languageInstruction('ui', 'custom', 'ja'), /write the output in Japanese \(日本語\)\.$/);
+  assert.match(ai.languageInstruction('ui', 'custom', 'fr'), /write the output in English\.$/);
+});
+
+test('unrecognized output language values and tasks fall back to automatic and organize', () => {
+  const { ai } = loadRules();
+  for (const invalid of [undefined, null, '', 'zh', 'AUTO', 1, {}]) {
+    assert.equal(ai.normalizeOutputLanguage(invalid), 'auto');
+  }
+  for (const valid of ['auto', 'ui', 'source']) assert.equal(ai.normalizeOutputLanguage(valid), valid);
+  assert.equal(ai.languageInstruction('bogus', 'summary', 'zh_CN'), ai.languageInstruction('auto', 'summary', 'zh_CN'));
+  assert.equal(
+    ai.languageInstruction('auto', 'unknown-task', 'zh_CN'),
+    ai.languageInstruction('auto', 'organize', 'zh_CN')
+  );
+});
+
+test('no language instruction makes the local preview mistake the organizer or a custom task', () => {
+  const { ai } = loadRules();
+  const others = /study questions|question.*answer|key points|concise.*summary|摘要|问答/i;
+  for (const mode of ai.outputLanguages) {
+    for (const task of ['organize', 'custom']) {
+      for (const language of ['zh_CN', 'en', 'ja']) {
+        assert.doesNotMatch(ai.languageInstruction(mode, task, language), others);
+      }
+    }
+  }
+});

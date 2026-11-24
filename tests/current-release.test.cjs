@@ -295,6 +295,38 @@ test('an open editor reloads AI settings when the output limit changes', () => {
   assert.equal(ctx.llmStateChanged({ theme: {} }, 'sync'), false);
 });
 
+test('the stored output language decides which language instruction each task sends', async () => {
+  const instructions = async (stored, task, prompt) => {
+    const { ctx, sync } = runtime();
+    if (stored !== undefined) sync.llmOutputLanguage = stored;
+    await new Promise(resolve => ctx.loadLLMState(resolve));
+    let seen;
+    ctx.fetch = serverFetch(value => {
+      seen = JSON.parse(value.data).instructions;
+      return { output_text: 'ok' };
+    });
+    await ctx.callLLMAPI('openai', 'gpt-6.2-sol', 'key', 'note', 'zh_CN', '', task, prompt);
+    return seen;
+  };
+  for (const stored of [undefined, 'auto', 'bogus', 7, null]) {
+    const organize = await instructions(stored, 'organize', '');
+    assert.match(organize, /# Output language/);
+    assert.doesNotMatch(organize, /输出语言要求/);
+    assert.match(await instructions(stored, 'summary', ''), /输出语言要求/);
+    const custom = await instructions(stored, 'custom', 'Translate into English.');
+    assert.doesNotMatch(custom, /# Output language|输出语言要求|Unless the task above/);
+    assert.match(custom, /without the <note> tags\.$/);
+  }
+  assert.match(await instructions('ui', 'organize', ''), /输出语言要求/);
+  assert.match(await instructions('source', 'summary', ''), /# Output language/);
+});
+
+test('an open editor reloads AI settings when the output language changes', () => {
+  const { ctx } = runtime();
+  assert.equal(ctx.llmStateChanged({ llmOutputLanguage: {} }, 'sync'), true);
+  assert.equal(ctx.llmStateChanged({ llmOutputLanguage: {} }, 'local'), false);
+});
+
 test('locales carry no archiveSuccess entry and all define aiMaxTokensInvalid', () => {
   for (const lang of ['zh_CN', 'en', 'ja']) {
     const messages = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '_locales', lang, 'messages.json'), 'utf8'));

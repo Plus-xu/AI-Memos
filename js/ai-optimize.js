@@ -11,6 +11,7 @@ let llmActiveProvider = LLM_CONFIG.defaults.provider;
 let llmQuickPresets = [];
 let llmMessagesOverride = null;
 let llmMaxOutputTokens = 0;
+let llmOutputLanguage = 'auto';
 
 function normalizeMaxOutputTokens(value) {
   const limit = typeof value === 'string' && value.trim() ? Number(value) : value;
@@ -195,6 +196,7 @@ function loadLLMState(callback) {
     'llmActiveProvider',
     'llmQuickPresets',
     'llmMaxOutputTokens',
+    'llmOutputLanguage',
     'llmProvider',
     'llmModel',
     'llmCustomModel',
@@ -207,6 +209,7 @@ function loadLLMState(callback) {
       if (Array.isArray(local.llmTaskPresets)) data.llmQuickPresets = local.llmTaskPresets;
       llmProviderConfigs = data.llmProviderConfigs || {};
       llmMaxOutputTokens = normalizeMaxOutputTokens(data.llmMaxOutputTokens);
+      llmOutputLanguage = AIWorkflow.normalizeOutputLanguage(data.llmOutputLanguage);
       const legacyConfig = buildLegacyConfig(data);
 
       if (legacyConfig && !llmProviderConfigs[legacyConfig.provider]) {
@@ -667,31 +670,6 @@ function updatePlaceholders() {
   $('.quick-preset-custom-model').attr('placeholder', getLLMMessage('llmCustomModelPlaceholder'));
 }
 
-// 获取语言输出指令
-function getLanguageInstruction(languageCode) {
-  const languageMap = {
-    zh_CN: {
-      name: '简体中文',
-      instruction:
-        '# 输出语言要求\n\n⚠️ **重要**：你必须使用**简体中文（Simplified Chinese）**输出所有内容。\n\n- 所有文字说明、标题、列表项都使用简体中文\n- 标签使用简体中文：#工作 #学习 #生活\n- 即使用户输入是英文或其他语言，也必须翻译成简体中文输出\n- 保留原文中的专有名词、品牌名、代码、链接等无需翻译的内容'
-    },
-    en: {
-      name: 'English',
-      instruction:
-        '# Output Language Requirement\n\n⚠️ **Important**: You MUST output ALL content in **English**.\n\n- All text descriptions, titles, and list items must be in English\n- Tags must be in English: #work #study #life\n- Even if user input is in Chinese or other languages, translate it to English\n- Preserve proper nouns, brand names, code, links, and other content that should not be translated'
-    },
-    ja: {
-      name: '日本語',
-      instruction:
-        '# 出力言語の要件\n\n⚠️ **重要**：すべてのコンテンツを**日本語（Japanese）**で出力する必要があります。\n\n- すべてのテキスト説明、タイトル、リスト項目は日本語で記述してください\n- タグは日本語で：#仕事 #勉強 #生活\n- ユーザー入力が中国語や英語であっても、日本語に翻訳して出力してください\n- 固有名詞、ブランド名、コード、リンクなど、翻訳すべきでない内容はそのまま保持してください'
-    }
-  };
-
-  const languageInfo = languageMap[languageCode] || languageMap['en'];
-
-  return languageInfo.instruction;
-}
-
 function getFallbackUserLanguage() {
   const browserLang = chrome.i18n.getUILanguage();
   if (browserLang.startsWith('zh')) {
@@ -1038,9 +1016,9 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
       return;
     }
 
-    // 根据用户语言设置，添加输出语言指令
-    const languageInstruction = getLanguageInstruction(userLanguage);
-    systemPrompt = systemPrompt + '\n\n' + languageInstruction;
+    // 输出语言指令由设置和任务共同决定；自定义任务在"自动"下不附带
+    const languageInstruction = AIWorkflow.languageInstruction(llmOutputLanguage, task, userLanguage);
+    if (languageInstruction) systemPrompt = systemPrompt + '\n\n' + languageInstruction;
 
     let llmRequest;
     try {
@@ -1091,7 +1069,11 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
 
 function llmStateChanged(changes, area) {
   return !!(
-    (area === 'sync' && (changes.llmProviderConfigs || changes.llmActiveProvider || changes.llmMaxOutputTokens)) ||
+    (area === 'sync' &&
+      (changes.llmProviderConfigs ||
+        changes.llmActiveProvider ||
+        changes.llmMaxOutputTokens ||
+        changes.llmOutputLanguage)) ||
     (area === 'local' && changes.llmTaskPresets)
   );
 }

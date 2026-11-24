@@ -55,6 +55,53 @@ var AIWorkflow = (function () {
     return match && !wrapped.test(input) ? match[1] : result;
   }
 
+  var outputLanguages = ['auto', 'ui', 'source'];
+
+  function normalizeOutputLanguage(value) {
+    return outputLanguages.indexOf(value) >= 0 ? value : 'auto';
+  }
+
+  var interfaceLanguages = {
+    zh_CN: {
+      name: 'Simplified Chinese (简体中文)',
+      instruction:
+        '# 输出语言要求\n\n⚠️ **重要**：你必须使用**简体中文（Simplified Chinese）**输出所有内容。\n\n- 所有文字说明、标题、列表项都使用简体中文\n- 标签使用简体中文：#工作 #学习 #生活\n- 即使用户输入是英文或其他语言，也必须翻译成简体中文输出\n- 保留原文中的专有名词、品牌名、代码、链接等无需翻译的内容'
+    },
+    en: {
+      name: 'English',
+      instruction:
+        '# Output Language Requirement\n\n⚠️ **Important**: You MUST output ALL content in **English**.\n\n- All text descriptions, titles, and list items must be in English\n- Tags must be in English: #work #study #life\n- Even if user input is in Chinese or other languages, translate it to English\n- Preserve proper nouns, brand names, code, links, and other content that should not be translated'
+    },
+    ja: {
+      name: 'Japanese (日本語)',
+      instruction:
+        '# 出力言語の要件\n\n⚠️ **重要**：すべてのコンテンツを**日本語（Japanese）**で出力する必要があります。\n\n- すべてのテキスト説明、タイトル、リスト項目は日本語で記述してください\n- タグは日本語で：#仕事 #勉強 #生活\n- ユーザー入力が中国語や英語であっても、日本語に翻訳して出力してください\n- 固有名詞、ブランド名、コード、リンクなど、翻訳すべきでない内容はそのまま保持してください'
+    }
+  };
+  var sourceLanguage =
+    '# Output language\n\nWrite the output in the language the note is written in. Do not translate it into another language. ' +
+    "If the note mixes languages, keep each passage in its original language, and write any new headings, labels and tags in the note's main language.";
+  var unlessSpecified = 'Unless the task above specifies an output language, write the output in ';
+
+  /**
+   * The language instruction appended to a task's prompt; '' when none applies.
+   * A custom task states its own language, so it gets none under 'auto' and only a yielding one otherwise.
+   */
+  function languageInstruction(mode, task, uiLanguage) {
+    mode = normalizeOutputLanguage(mode);
+    task = normalizeTask(task);
+    var ui = interfaceLanguages[uiLanguage] || interfaceLanguages.en;
+    var followSource = mode === 'source' || (mode === 'auto' && task === 'organize');
+    if (task === 'custom') {
+      if (mode === 'auto') return '';
+      return (
+        unlessSpecified +
+        (followSource ? 'the language the note is written in and do not translate it.' : ui.name + '.')
+      );
+    }
+    return followSource ? sourceLanguage : ui.instruction;
+  }
+
   function references(text) {
     var input = String(text);
     var starts = /https?:\/\/|memos-local:\/\/|\/file\/attachments\//g;
@@ -118,6 +165,9 @@ var AIWorkflow = (function () {
     buildPrompt: buildPrompt,
     wrapNote: wrapNote,
     unwrapNote: unwrapNote,
+    outputLanguages: outputLanguages,
+    normalizeOutputLanguage: normalizeOutputLanguage,
+    languageInstruction: languageInstruction,
     review: review,
     missingReferences: missingReferences,
     apply: apply,
