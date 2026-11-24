@@ -93,10 +93,20 @@ async function startFixture() {
       if (route === '/v1/chat/completions') {
         if (body.model !== 'fixture-text') return reply(403, {});
         const phrase = '阅读室的周末开放时间是读者最关心的问题。';
-        return setTimeout(
-          () => reply(200, { choices: [{ finish_reason: 'stop', message: { content: phrase } }] }),
-          state.aiDelay
-        );
+        if (!body.stream)
+          return setTimeout(
+            () => reply(200, { choices: [{ finish_reason: 'stop', message: { content: phrase } }] }),
+            state.aiDelay
+          );
+        // A streamed answer opens at once and delivers the rest after the delay, so a check can act in between.
+        const chunk = (content, finish) =>
+          'data: ' + JSON.stringify({ choices: [{ index: 0, delta: { content }, finish_reason: finish }] }) + '\n\n';
+        res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
+        res.write(chunk(phrase.slice(0, 8), null));
+        return setTimeout(() => {
+          // The editor may have stopped the generation, or closed, in the meantime.
+          if (!res.destroyed) res.end(chunk(phrase.slice(8), 'stop') + 'data: [DONE]\n\n');
+        }, state.aiDelay);
       }
       if (route === '/api/attachments' && method === 'POST') {
         if (state.failUpload) {

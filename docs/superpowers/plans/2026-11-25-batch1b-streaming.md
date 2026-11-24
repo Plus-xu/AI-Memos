@@ -43,6 +43,8 @@
 
 事件流正常结束却没出现过上表的"结束"信号，按连接中断处理。不是 JSON 的 `data`（如 `[DONE]` 之外的杂项）跳过。
 
+（实施时定下的两点：`data: [DONE]` 对四种接口都算结束信号，不只是 Chat Completions；已经出现过结束信号的回答算完整，此后连接断开或用户点停止都不改变结果。）
+
 ## Review Focus
 
 1. 一个多字节字符、一行、或一对 `\r\n` 被拆在两段数据里：解出的文字与一次收全时相同。（Task 1）
@@ -63,19 +65,19 @@
 **Interfaces（Produces）:**
 - `Http.stream({ url, method = 'POST', headers = {}, body, idle = 90000, signal, onEvent }) → Promise<{ streamed: true } | { streamed: false, data }>`
   - 事件流：每个事件调用一次 `onEvent(data, name)`，`data` 是该事件各 `data:` 行以 `\n` 相连的文字，`name` 是 `event:` 的值，缺省为 `'message'`。注释行（以 `:` 开头）和没有 `data` 的事件不调用。流结束时缓冲里还有未以空行收尾的事件，也发出去。
-  - 其他回答：读完整段后按 `Http.json` 的规则解析并返回 `{ streamed: false, data }`；状态码不是 2xx 时抛出与 `Http.json` 相同形状的失败对象。正文不是 JSON 但看起来是事件流时，按事件流解读并返回 `{ streamed: true }`。
+  - 其他回答：读完整段后按 `Http.json` 的规则解析并返回 `{ streamed: false, data }`；状态码不是 2xx 时抛出与 `Http.json` 相同形状的失败对象。正文以 `data:` / `event:` / `id:` / `retry:` / `:` 开头时（JSON 不会这样开头），从头就按事件流边收边发出，返回 `{ streamed: true }`（实施时改的：原计划是读完整段再解读，那样静默超时管不到这种流，用户点停止时也留不下已收到的部分）。没有正文可读的回答（如 204）返回 `{ streamed: false }`；状态码不是 2xx 的回答即使标成或长得像事件流，也按拒绝处理。
   - 失败对象的 `statusText`：静默超时为 `'timeout'`，调用方中止为 `'abort'`，其余网络错误为 `'error'`，`status` 都是 0。读到一半失败也是这样抛出，已经发出的事件不撤回。
   - `onEvent` 里抛出的异常原样向外抛，不包成失败对象。
 - `tests/helpers/http.cjs` 的 `streamingFetch(requests)`：每个请求推入 `requests`，带 `send(text)`、`end()`、`fail(error)`，回答是一个真实的 `Response`，`Content-Type: text/event-stream`；请求的 `signal` 中止时，正文以 `AbortError` 出错。
 
 - [ ] **Step 1: 写失败的测试**（`tests/http.test.cjs`，`loadHttp` 的上下文补上 `AbortController`、`TextDecoder`、`setTimeout`、`clearTimeout`）
   - `'an event stream is delivered one event at a time, with its name'`：正文 `event: a\ndata: 1\n\n: comment\n\ndata: 2\ndata: 3\n\n`，收到 `[['1','a'],['2\n3','message']]`，结果 `{ streamed: true }`。
-  - `'events split across chunks, lines, CRLF pairs and multi-byte characters are put back together'`：把 `data: 你好\r\n\r\ndata: b\r\n\r\n` 的字节在每个位置切成两段各试一次，每次都收到 `['你好','b']`。
+  - `'events split across chunks, lines, CRLF pairs and multi-byte characters are put back together'`：把 `event: a\r\ndata: 你好\r\ndata: b\r\n\r\ndata: c\r\n\r\n` 的字节在每个位置切成两段各试一次，每次都收到 `[['你好\nb','a'],['c','message']]`（实施时换的正文：原来只有单行事件，一对 `\r\n` 被拆开时多出的空行不改变结果，去掉这段处理测试也通过）。
   - `'an event without its closing blank line is still delivered when the stream ends'`。
   - `'an answer that is not an event stream is parsed as JSON, and a refusal fails as json() does'`：`application/json` 的 200 得到 `{ streamed: false, data }`；400 带 JSON 正文抛出 `status === 400` 且 `responseJSON` 在。
-  - `'an event stream under another content type is still read as events'`：`text/plain` 正文 `data: {"a":1}\n\n`。
-  - `'the request declares both answer types and carries the same cookies and JSON body as json()'`：`Accept`、`Content-Type`、`credentials`、`body`。
-  - `'silence longer than the idle limit is a timeout, while a slow stream that keeps sending is not'`：`idle: 40`，每 15 毫秒一段共 6 段成功；发一段后不再发，失败且 `statusText === 'timeout'`。
+  - `'an event stream under another content type is still read as events, as they arrive'`：`text/plain` 和 `application/json` 各一条，事件在流结束之前就已发出。
+  - `'a streamed request declares both answer types and carries the same cookies and JSON body as json()'`：`Accept`、`Content-Type`、`credentials`、`body`。
+  - `'silence longer than the idle limit is a timeout, while a slow stream that keeps sending is not'`：`idle: 240`，每 70 毫秒一段共 6 段成功，标成 `text/plain` 的流也一样；`idle: 60` 发一段后不再发，失败且 `statusText === 'timeout'`（实施时放宽了时间：Windows 的定时器粒度约 15 毫秒，原定的 40 / 15 在忙的机器上会误报）。
   - `'stopping through the caller\'s signal fails with "abort", before the answer and in the middle of it'`。
   - `'an error thrown by onEvent is not turned into a request failure'`。
 - [ ] **Step 2: 运行 `node --test tests/http.test.cjs`，新用例失败（`http.stream is not a function`）**
@@ -87,7 +89,7 @@
 
 **Files:**
 - Create: `js/llm-transport.js`
-- Modify: `js/ai-optimize.js`（删去搬走的函数，改写 `callLLMAPI` 与 `extractLLMErrorMessage`）、`popup.html`（在 `js/ai-optimize.js` 之前加载新脚本）、`tests/helpers/environments.cjs`（`harness`、`runtime` 加载新脚本并补上所需的全局名）、`tests/consistency.test.cjs`（设置页不加载新脚本，记入 `absent`）、`scripts/preview-server.cjs`（识别 `:streamGenerateContent`）
+- Modify: `js/ai-optimize.js`（删去搬走的函数，改写 `callLLMAPI` 与 `extractLLMErrorMessage`）、`_locales/{zh_CN,en,ja}/messages.json`（只加 `aiStopped`：`callLLMAPI` 用到它，而一致性测试要求用到的词条都存在；实施时从 Task 3 提前）、`popup.html`（在 `js/ai-optimize.js` 之前加载新脚本）、`tests/helpers/environments.cjs`（`harness`、`runtime` 加载新脚本并补上所需的全局名）、`tests/consistency.test.cjs`（设置页不加载新脚本，记入 `absent`）、`scripts/preview-server.cjs`（识别 `:streamGenerateContent`）
 - Test: 新建 `tests/llm-transport.test.cjs`；改 `tests/current-release.test.cjs`
 
 **Interfaces:**
@@ -98,7 +100,7 @@
     - `onText(text)`：每当可见文字变长时调用，参数是到目前为止的全文。
     - 正常结束：`{ text, truncated }`，`text` 可以是空串（由调用方决定怎么提示）。
     - 停止、超时、网络错误、流内错误事件、缺少结束信号：已有非空白文字时返回 `{ text, truncated: true, interrupted }`，`interrupted` 为 `'stopped'`（调用方中止）或 `'interrupted'`（其余）；没有文字时抛出失败对象。流内错误和缺少结束信号的失败对象是 `{ status: 0, statusText: 'stream', reason }`，`reason` 是服务商给的原因，可能为空串。
-  - `callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl, task, customPrompt, { signal, onText } = {})`：结果在原来的 `{ text, truncated }` 之外，被打断时多一个 `interrupted`。`onText` 收到的是已按 `AIWorkflow.unwrapNote(text, userContent, true)` 去掉回显标记的文字。被停止且没有文字时，拒绝的 `Error` 带 `stopped: true`，文字是 `aiStopped`。
+  - `callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl, task, customPrompt, { signal, onText } = {})`：结果在原来的 `{ text, truncated }` 之外，被打断时多一个 `interrupted`。`onText` 收到的是已按 `AIWorkflow.unwrapNote(text, userContent, true)` 去掉回显标记的文字，只在要显示的文字有变化时调用（实施时补上：只收到回显标记时不调用，免得面板空着打开）。整段回答不经过 `onText`。不是请求失败的错误（如 `onText` 自己抛出的）原样拒绝，不换成"请求中断"。被停止且没有文字时，拒绝的 `Error` 带 `stopped: true`，文字是 `aiStopped`。
   - `extractLLMErrorMessage(failure)`：`statusText === 'stream'` 时为 `aiInterrupted` 的文字，`reason` 非空则在后面加 `' (' + reason 的前 240 个字符 + ')'`；其余不变。
 
 - [ ] **Step 1: 写失败的测试**（`tests/llm-transport.test.cjs`，用 `runtime()` 和 `streamingFetch`）
@@ -115,7 +117,7 @@
   - `'text shown while streaming never carries an echoed opening marker'`：流的开头是 `<note>\n`，`onText` 收到的每一段都不含 `<note>`。
 - [ ] **Step 2: 改现有测试**（`tests/current-release.test.cjs`）：`transports` 表里 Gemini 的路径改为 `…:streamGenerateContent`，查询串断言改为 Gemini 是 `?alt=sse`、其余为空；每个请求体断言 `stream === true`（Gemini 除外）。其余用例靠"整段 JSON 回答"这条路继续通过，不改。
 - [ ] **Step 3: 运行 `npm test`，新用例失败**
-- [ ] **Step 4: 实现**。`buildXxxRequest`、`extractXxxText`、`buildLLMRequest`、`extractLLMText`、`normalizeProviderBaseUrl` 从 `js/ai-optimize.js` 删除，逻辑搬进 `LLMTransport`；截断判断（`max_tokens` / `length` / `MAX_TOKENS` / `CONTINUATION` / `status === 'incomplete'`）整段回答和流式事件共用一个函数。`callLLMAPI` 里先算 New API 的网关地址，算不出时照旧以 `aiBaseUrlRequired` 拒绝。
+- [ ] **Step 4: 实现**。`buildXxxRequest`、`extractXxxText`、`buildLLMRequest`、`extractLLMText`、`normalizeProviderBaseUrl` 从 `js/ai-optimize.js` 删除，逻辑搬进 `LLMTransport`；截断判断（`max_tokens` / `length` / `MAX_TOKENS` / `CONTINUATION` / `status === 'incomplete'`）整段回答和流式事件共用一个函数。`callLLMAPI` 里先算 New API 的网关地址，算不出时以 `modelGatewayUrl` 的文字拒绝（实施时改的：原计划写"照旧以 `aiBaseUrlRequired` 拒绝"，但原来的代码走不到那一句，用户看到的是没有翻译的 `modelGatewayUrl`；地址为空的情况在调用 `callLLMAPI` 之前已经用 `aiBaseUrlRequired` 拦下）。
 - [ ] **Step 5: 运行 `npm run check`，全部通过**
 - [ ] **Step 6: 提交** `git commit -m "新增 js/llm-transport.js：四种接口改为流式请求，中断时保留已收到的文字"`
 
@@ -131,7 +133,7 @@
   - `AIWorkflow.review(input, result, task, truncated)`：`truncated` 为 `'stopped'` 或 `'interrupted'` 时原样记入，其余真值记为 `true`。
   - `AIWorkflow.incompleteMessage(truncated) → 'aiStoppedWarning' | 'aiInterruptedWarning' | 'aiTruncatedWarning' | ''`。
   - `AIReview.stream(input, text, task)`：显示生成中的文字，不写存储。面板可见，结果框只读，「取消结果」停用，不显示警告，任务一栏显示"正在执行"。
-  - `AIReview.setBusy(value, task, stop)`：`stop` 是函数时显示 `#aiStop`，点击后隐藏按钮并调用它一次；`value` 为假时清掉生成中的文字和 `stop`，面板回到存储里的待审结果（没有就隐藏）。不带 `stop` 的 `setBusy(true, …)`（本页自己写入任务记录后也会收到一次）不得把已有的 `stop` 清掉。
+  - `AIReview.setBusy(value, task, stop)`：`stop` 是函数时显示 `#aiStop`，点击后隐藏按钮并调用它一次；`value` 为假时清掉生成中的文字和 `stop`，面板回到存储里的待审结果（没有就隐藏）。不带 `stop` 的 `setBusy(true, …)`（本页自己写入任务记录后也会收到一次）不得把已有的 `stop` 清掉。`AIReview.show(…)` 也结束"生成中"的显示（实施时补上：结果一定稿就可以编辑，不必等任务记录清掉）。
   - `popup.html`：`#aiUndo` 之后加 `<button id="aiStop" class="text-button" hidden data-feature-message="aiStop"></button>`。
 
 - [ ] **Step 1: 写失败的测试**
@@ -154,7 +156,7 @@
 - Modify: `scripts/fixture-server.cjs`、`scripts/check-chrome.cjs`、`README.md`、`CHANGELOG.md`、`docs/superpowers/specs/2026-11-20-optimization-roadmap-design.md`（状态行）
 
 - [ ] **Step 1: `scripts/fixture-server.cjs`**：`/v1/chat/completions` 收到 `stream: true` 时以事件流回答：立即发出那句话的前 8 个字，等 `state.aiDelay` 毫秒后发其余部分（带 `finish_reason: 'stop'`）和 `[DONE]`；连接已断时不再写。不带 `stream` 的请求照旧。
-- [ ] **Step 2: `scripts/check-chrome.cjs`**：在 "AI output can be edited, appended and undone from the other editor" 之后加一条：`aiDelay` 设为 6000，侧栏点 AI，等结果框里出现前 8 个字且 `#aiStop` 可见，断言结果框只读，点 `#aiStop`，等到不再忙且存储里的待审结果 `truncated === 'stopped'`；断言草稿不变、结果框只有前 8 个字、警告可见、`#aiStop` 隐藏；最后点「取消结果」并把 `aiDelay` 复位。通过名：`Stopping a generation leaves the draft unchanged and the partial result ready for review`。
+- [ ] **Step 2: `scripts/check-chrome.cjs`**：在 "AI output can be edited, appended and undone from the other editor" 之后加一条：`aiDelay` 设为 6000，侧栏点 AI，等结果框里出现前 8 个字且 `#aiStop` 可见，断言结果框只读，点 `#aiStop`，等到不再忙且存储里的待审结果 `truncated === 'stopped'`；断言草稿不变、结果框只有前 8 个字、警告可见、`#aiStop` 隐藏；最后点「取消结果」并把 `aiDelay` 复位。生成期间另断言弹窗那一侧处于"正在执行"、没有「停止」按钮、也不显示生成中的文字（实施时补上）。通过名：`Stopping a generation leaves the draft unchanged and the partial result ready for review`。
 - [ ] **Step 3: 按 `e2e-environment` 的跑法运行验收脚本（先备份 `artifacts/acceptance-<版本>`，跑完还原），全部 PASS**
 - [ ] **Step 4: 文档**。`README.md` 的 AI 一段写明边生成边显示、可停止、停止或中断时保留已生成的部分；`CHANGELOG.md` "未发布"加一条；路线图状态行加上本批的提交范围和计划路径，A4 第一阶段标为已完成。
 - [ ] **Step 5: 运行 `npm run check`，提交** `git commit -m "模拟服务器按事件流回答，验收脚本覆盖生成中停止，更新说明、修改记录与路线图进度"`
