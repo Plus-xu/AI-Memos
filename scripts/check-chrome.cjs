@@ -225,15 +225,16 @@ async function main() {
     await waitFor(panel, original => document.querySelector('#content').value === original, clipped);
     assert.match(fixture.calls.find(r => r.route === '/v1/chat/completions').cookie, /proxy_session=fixture/);
     pass('AI output can be edited, appended and undone from the other editor');
-    // The fixture sends the first eight characters at once and holds the rest back for the delay.
-    const opening = '阅读室的周末开放';
+    // The fixture sends the first eight characters at once, two more soon after, and holds the rest back.
+    const answer = '阅读室的周末开放时间是读者最关心的问题。';
     fixture.state.aiDelay = 6000;
     await panel.bringToFront();
     await panel.evaluate(() => document.getElementById('ai_optimize').click());
     await waitFor(
       panel,
-      text => document.getElementById('aiReviewResult').value === text && !document.getElementById('aiStop').hidden,
-      opening
+      text =>
+        document.getElementById('aiReviewResult').value.startsWith(text) && !document.getElementById('aiStop').hidden,
+      answer.slice(0, 8)
     );
     assert.equal(await panel.evaluate(() => document.getElementById('aiReviewResult').readOnly), true);
     // The other editor knows a generation is running, and has neither its text nor a way to stop it.
@@ -242,6 +243,12 @@ async function main() {
       await page.evaluate(() => ['aiStop', 'aiReviewPanel'].map(id => document.getElementById(id).hidden)),
       [true, true]
     );
+    // What arrives after the first text is drawn with a later frame, while the generation goes on.
+    await waitFor(
+      panel,
+      text => document.getElementById('aiReviewResult').value === text && AIReview.isBusy(),
+      answer.slice(0, 10)
+    );
     await panel.click('#aiStop');
     await waitFor(
       panel,
@@ -249,14 +256,41 @@ async function main() {
         !AIReview.isBusy() && (await chrome.storage.local.get('memosAIReview')).memosAIReview?.truncated === 'stopped'
     );
     assert.equal(await panel.inputValue('#content'), clipped);
-    assert.equal(await panel.inputValue('#aiReviewResult'), opening);
+    assert.equal(await panel.inputValue('#aiReviewResult'), answer.slice(0, 10));
     assert.deepEqual(
-      await panel.evaluate(() => ['aiReviewWarning', 'aiStop'].map(id => document.getElementById(id).hidden)),
-      [false, true]
+      await panel.evaluate(() => [
+        document.getElementById('aiReviewWarning').textContent.includes(uiMessage('aiStoppedWarning')),
+        document.getElementById('aiReviewWarning').hidden,
+        document.getElementById('aiStop').hidden
+      ]),
+      [true, false, true]
     );
     await panel.click('#aiReviewDiscard');
     fixture.state.aiDelay = 0;
     pass('Stopping a generation leaves the draft unchanged and the partial result ready for review');
+    // A model or gateway that refuses to stream is asked again without the flag, and answers in one piece.
+    const chatCalls = () => fixture.calls.filter(call => call.route === '/v1/chat/completions');
+    const asked = chatCalls().length;
+    fixture.state.refuseStream = true;
+    await panel.evaluate(() => document.getElementById('ai_optimize').click());
+    await waitFor(
+      panel,
+      async () => !AIReview.isBusy() && !!(await chrome.storage.local.get('memosAIReview')).memosAIReview
+    );
+    assert.deepEqual(
+      chatCalls()
+        .slice(asked)
+        .map(call => call.body.stream),
+      [true, undefined]
+    );
+    assert.equal(await panel.inputValue('#aiReviewResult'), answer);
+    assert.equal(
+      await panel.evaluate(async () => (await chrome.storage.local.get('memosAIReview')).memosAIReview.truncated),
+      undefined
+    );
+    await panel.click('#aiReviewDiscard');
+    fixture.state.refuseStream = false;
+    pass('A gateway that refuses to stream still delivers its answer, asked again in one piece');
     await panel.bringToFront();
     fixture.state.spaces = [];
     await panel.click('#content_submit_text');

@@ -19,6 +19,7 @@ async function startFixture() {
     loseReceipt: false,
     failUpload: false,
     aiDelay: 0,
+    refuseStream: false,
     spacesDelay: 0,
     spaceReplies: 0,
     uploadBytes: 33554432
@@ -93,20 +94,37 @@ async function startFixture() {
       if (route === '/v1/chat/completions') {
         if (body.model !== 'fixture-text') return reply(403, {});
         const phrase = '阅读室的周末开放时间是读者最关心的问题。';
+        // A model or gateway that does not stream may refuse the flag outright.
+        if (body.stream && state.refuseStream)
+          return reply(400, {
+            error: {
+              message: 'This model does not support streaming.',
+              type: 'invalid_request_error',
+              param: 'stream',
+              code: 'unsupported_value'
+            }
+          });
         if (!body.stream)
           return setTimeout(
             () => reply(200, { choices: [{ finish_reason: 'stop', message: { content: phrase } }] }),
             state.aiDelay
           );
-        // A streamed answer opens at once and delivers the rest after the delay, so a check can act in between.
+        // A streamed answer opens at once, goes on a tenth of the delay later and ends after the delay, so a
+        // check can act in between.
         const chunk = (content, finish) =>
           'data: ' + JSON.stringify({ choices: [{ index: 0, delta: { content }, finish_reason: finish }] }) + '\n\n';
+        // The editor may have stopped the generation, or closed, in the meantime.
+        const unlessGone = write => () => res.destroyed || write();
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store' });
         res.write(chunk(phrase.slice(0, 8), null));
-        return setTimeout(() => {
-          // The editor may have stopped the generation, or closed, in the meantime.
-          if (!res.destroyed) res.end(chunk(phrase.slice(8), 'stop') + 'data: [DONE]\n\n');
-        }, state.aiDelay);
+        setTimeout(
+          unlessGone(() => res.write(chunk(phrase.slice(8, 10), null))),
+          state.aiDelay / 10
+        );
+        return setTimeout(
+          unlessGone(() => res.end(chunk(phrase.slice(10), 'stop') + 'data: [DONE]\n\n')),
+          state.aiDelay
+        );
       }
       if (route === '/api/attachments' && method === 'POST') {
         if (state.failUpload) {

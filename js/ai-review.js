@@ -8,6 +8,8 @@ var AIReview = (function () {
   var runningTask = 'organize';
   // The answer this editor is generating, as { input, text, task }: shown while it arrives, never stored.
   var streaming = null;
+  // Whether a frame is awaited in which the text that arrived since the last one will be drawn.
+  var frameAwaited = false;
   // Stops the generation this editor started; only that editor has a stop button.
   var stopGeneration = null;
 
@@ -70,11 +72,10 @@ var AIReview = (function () {
   function render() {
     var shown = streaming || currentReview;
     $('#aiReviewPanel').prop('hidden', !shown);
-    if (shown) {
-      var result = streaming ? streaming.text : currentReview.result;
-      $('#aiReviewOriginal').val(shown.input);
-      if ($('#aiReviewResult').val() !== result) $('#aiReviewResult').val(result);
-    }
+    if (shown) $('#aiReviewOriginal').val(shown.input);
+    // Text that is still arriving is put in the box by stream() and draw(), a frame at a time.
+    if (!streaming && currentReview && $('#aiReviewResult').val() !== currentReview.result)
+      $('#aiReviewResult').val(currentReview.result);
     $('#aiReviewResult').prop('readOnly', !!streaming);
     $('#aiReviewDiscard').prop('disabled', !!streaming);
     renderWarning();
@@ -88,13 +89,31 @@ var AIReview = (function () {
     render();
   }
 
-  /** Shows the text of a generation still running, in place of a pending review, until setBusy(false). */
+  /**
+   * Shows the text of a generation still running, in place of a pending review, until show() or
+   * setBusy(false). The first text opens the panel at once, read from its start. Later text can arrive
+   * faster than a page lays it out, so the box takes the latest of it once a frame and nothing else changes.
+   */
   function stream(input, text, task) {
+    var opening = !streaming;
+    streaming = { input: input, text: text, task: AIWorkflow.normalizeTask(task) };
+    if (opening) {
+      render();
+      $('#aiReviewResult').val(text);
+    } else if (!frameAwaited) {
+      frameAwaited = true;
+      requestAnimationFrame(draw);
+    }
+  }
+
+  function draw() {
+    frameAwaited = false;
+    // The generation may have ended since this frame was asked for.
+    if (!streaming) return;
     var box = $('#aiReviewResult')[0];
     // The box keeps up with the text only for a reader who is at its end.
     var follow = box.scrollHeight - box.scrollTop - box.clientHeight < 8;
-    streaming = { input: input, text: text, task: AIWorkflow.normalizeTask(task) };
-    render();
+    box.value = streaming.text;
     if (follow) box.scrollTop = box.scrollHeight;
   }
 

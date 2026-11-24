@@ -12,7 +12,10 @@ const { serverFetch, pendingFetch } = require('./http.cjs');
 
 const info = { apiUrl: 'https://memos.example/', apiTokens: 'test-pat', userName: 'users/tester' };
 
-/** The popup's AI surface: model settings, the review panel and the task runner, with requests recorded. */
+/**
+ * The popup's AI surface: model settings, the review panel and the task runner, with requests recorded.
+ * What the page leaves for its next frame happens when the test calls frame().
+ */
 function harness(options = {}) {
   const local = plain(options.local || {});
   const sync = {
@@ -31,6 +34,9 @@ function harness(options = {}) {
     messages: key => (['aiRunTask', 'aiRunningTask', 'aiExecutedTask'].includes(key) ? key + ': {task}' : key)
   });
   chrome.i18n.getUILanguage = () => 'zh-CN';
+  // The page draws a frame when the test says so: frame() runs what was asked for the next one.
+  const frames = [];
+  const frame = () => frames.splice(0).forEach(callback => callback(0));
   const context = vm.createContext({
     $,
     chrome,
@@ -43,6 +49,7 @@ function harness(options = {}) {
     TextDecoder,
     fetch: pendingFetch(requests),
     window: { addEventListener() {} },
+    requestAnimationFrame: callback => frames.push(callback),
     setTimeout() {},
     clearTimeout() {},
     console: { log() {}, error() {}, warn() {} },
@@ -60,7 +67,7 @@ function harness(options = {}) {
   node('#llmApiKey').val('ai-test-key');
   context.loadLLMState(() => {});
   context.AIReview.init();
-  return { context, node, handlers, local, sync, messages, requests, inputChanges, load };
+  return { context, node, handlers, local, sync, messages, requests, inputChanges, load, frame };
 }
 
 /** The pure rule modules, with no browser APIs at all. */

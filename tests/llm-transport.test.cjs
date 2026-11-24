@@ -162,6 +162,17 @@ test('a gateway that answers whole, or labels its stream as something else, stil
   for (const event of streams.deepseek(['Hel', 'lo'])) sent[0].send(event);
   sent[0].end();
   assert.deepEqual(plain(await result), { text: 'Hello', truncated: false });
+
+  // The other way round: a whole answer that calls itself an event stream.
+  const whole = { choices: [{ finish_reason: 'length', message: { content: 'Whole answer' } }] };
+  const labelled = runtime(
+    async () => new Response(JSON.stringify(whole), { headers: { 'Content-Type': 'text/event-stream' } })
+  );
+  const chat = labelled.ctx.LLMTransport.request(labelled.config.providers.deepseek, { model: 'm', apiKey: 'k' });
+  assert.deepEqual(plain(await labelled.ctx.LLMTransport.generate('chat-completions', chat)), {
+    text: 'Whole answer',
+    truncated: true
+  });
 });
 
 test('a stream that fails, ends without its closing signal or goes silent keeps the text it delivered, marked incomplete', async () => {
@@ -335,4 +346,102 @@ test('a chat stream that closes with [DONE] alone is complete, and data that is 
   sent[0].send(sse('[DONE]'));
   sent[0].end();
   assert.deepEqual(plain(await result), { text: 'Hello', truncated: false });
+});
+
+const asked = { model: 'm', apiKey: 'k', system: 's', user: 'u', maxTokens: 64 };
+
+test('a server that refuses to stream is asked once more, for the answer in one piece', async () => {
+  const refusals = [
+    [
+      'openai',
+      400,
+      {
+        error: {
+          message: 'Your organization must be verified to stream this model.',
+          type: 'invalid_request_error',
+          param: 'stream',
+          code: 'unsupported_value'
+        }
+      },
+      { status: 'completed', output_text: 'Whole answer' }
+    ],
+    [
+      'deepseek',
+      422,
+      { message: 'Streaming is not supported for this model' },
+      { choices: [{ finish_reason: 'stop', message: { content: 'Whole answer' } }] }
+    ]
+  ];
+  for (const [provider, status, refusal, whole] of refusals) {
+    const bodies = [];
+    const { ctx, config } = runtime(async (url, options) => {
+      bodies.push(JSON.parse(options.body));
+      return bodies.at(-1).stream ? jsonResponse(refusal, status) : jsonResponse(whole);
+    });
+    const item = config.providers[provider];
+    const answer = await ctx.LLMTransport.generate(item.endpointType, ctx.LLMTransport.request(item, asked));
+    assert.deepEqual(plain(answer), { text: 'Whole answer', truncated: false }, provider);
+    assert.equal(bodies.length, 2, provider);
+    assert.ok(!Object.hasOwn(bodies[1], 'stream'), provider + ': the second request does not ask for a stream');
+    assert.deepEqual({ ...bodies[1], stream: true }, bodies[0], provider + ': and is otherwise the same request');
+  }
+});
+
+test('a refusal for another reason, or of both ways of asking, is reported as it is', async () => {
+  /** [status, reason, requests made] when every request for `provider` is refused with what refuse(body) gives. */
+  const refused = async (provider, status, refuse) => {
+    let requests = 0;
+    const { ctx, config } = runtime(async (url, options) => {
+      requests++;
+      return jsonResponse({ error: { message: refuse(JSON.parse(options.body)) } }, status);
+    });
+    const item = config.providers[provider];
+    const failed = await failure(ctx.LLMTransport.generate(item.endpointType, ctx.LLMTransport.request(item, asked)));
+    return [failed.status, failed.responseJSON.error.message, requests];
+  };
+  assert.deepEqual(await refused('openai', 400, () => 'max_output_tokens is too large'), [
+    400,
+    'max_output_tokens is too large',
+    1
+  ]);
+  assert.deepEqual(
+    await refused('openai', 400, body => (body.stream ? 'Streaming is not available' : 'The model does not exist')),
+    [400, 'The model does not exist', 2],
+    'what the plain request was refused for is what the user needs to know'
+  );
+  assert.deepEqual(
+    await refused('openai', 400, () => 'No streaming here'),
+    [400, 'No streaming here', 2],
+    'a server that goes on refusing is not asked for ever'
+  );
+  assert.deepEqual(
+    await refused('openai', 500, () => 'The stream handler crashed'),
+    [500, 'The stream handler crashed', 1],
+    'a failing server is not a refusal'
+  );
+  assert.deepEqual(
+    await refused('gemini', 400, () => 'Streaming is not enabled'),
+    [400, 'Streaming is not enabled', 1],
+    'a request with no stream flag to drop has no other way of asking'
+  );
+});
+
+test('a chat gateway that sends the whole answer as its one event still yields it', async () => {
+  const { sent, seen, result } = generation('deepseek');
+  const message = { role: 'assistant', content: 'Whole answer' };
+  sent[0].send(sse({ object: 'chat.completion', choices: [{ index: 0, message, finish_reason: 'stop' }] }));
+  sent[0].send(sse('[DONE]'));
+  sent[0].end();
+  assert.deepEqual(plain(await result), { text: 'Whole answer', truncated: false });
+  assert.deepEqual(seen, ['Whole answer']);
+});
+
+test('a prompt Gemini blocks is an answer without text, not an interrupted request', async () => {
+  const sent = [];
+  const { ctx } = runtime(streamingFetch(sent));
+  const blocked = ctx.callLLMAPI('gemini', 'gemini-4-hydrogen', 'fixture-key', 'A note', 'en', '', 'summary', '');
+  const feedback = { blockReason: 'SAFETY', safetyRatings: [{ category: 'HARM_CATEGORY_HARASSMENT' }] };
+  sent[0].send(sse({ promptFeedback: feedback, usageMetadata: { promptTokenCount: 9 } }));
+  sent[0].end();
+  assert.equal((await failure(blocked)).message, 'aiEmpty');
 });

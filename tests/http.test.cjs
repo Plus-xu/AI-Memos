@@ -1,18 +1,20 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const { loadScripts, jsonResponse, plain } = require('./helpers/scripts.cjs');
+const { loadScripts, jsonResponse, plain, flush } = require('./helpers/scripts.cjs');
 const { streamingFetch } = require('./helpers/http.cjs');
 
-/** Http over a fetch the test supplies; `calls` are the [url, options] pairs it was given. */
-function loadHttp(fetcher) {
+/**
+ * Http over a fetch the test supplies; `calls` are the [url, options] pairs it was given. `timing` is the
+ * time and the timers it sees: the real ones, or those of a manualClock().
+ */
+function loadHttp(fetcher, timing = { setTimeout, clearTimeout }) {
   const calls = [];
   const context = vm.createContext({
     AbortSignal,
     AbortController,
     TextDecoder,
-    setTimeout,
-    clearTimeout,
+    ...timing,
     fetch: (url, options) => {
       calls.push([String(url), options]);
       return fetcher(String(url), options);
@@ -172,6 +174,46 @@ const eventStream = { 'Content-Type': 'text/event-stream; charset=utf-8' };
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 const untilAborted = (_, options) =>
   new Promise((resolve, reject) => options.signal.addEventListener('abort', () => reject(options.signal.reason)));
+const encoded = text => new TextEncoder().encode(text);
+
+/** Lets a request take in what the test has just done to it, however many turns of the loop that needs. */
+async function settle() {
+  for (let turn = 0; turn < 5; turn++) await flush();
+}
+
+/**
+ * Time the test moves. `globals` are the clock and timers a script is given, advance(ms) lets that much
+ * time pass and runs the timers that fall due on the way, in order, and pending() counts the timers still set.
+ */
+function manualClock() {
+  let now = 0;
+  let last = 0;
+  const timers = new Map();
+  return {
+    globals: {
+      Date: { now: () => now },
+      setTimeout(callback, delay) {
+        timers.set(++last, { at: now + delay, callback });
+        return last;
+      },
+      clearTimeout: id => timers.delete(id)
+    },
+    pending: () => timers.size,
+    advance(ms) {
+      const until = now + ms;
+      for (;;) {
+        const due = Array.from(timers)
+          .filter(([, timer]) => timer.at <= until)
+          .sort((a, b) => a[1].at - b[1].at)[0];
+        if (!due) break;
+        timers.delete(due[0]);
+        now = due[1].at;
+        due[1].callback();
+      }
+      now = until;
+    }
+  };
+}
 
 /** What stream() hands to onEvent for an answer, as [data, name] pairs, with what it resolved to. */
 async function eventsOf(fetcher, options = {}) {
@@ -298,6 +340,26 @@ test('an event stream under another content type is still read as events, as the
   }
 });
 
+test('an answer labelled as an event stream that is JSON after all is read as JSON', async () => {
+  for (const [body, data] of [
+    ['{"output_text":"whole"}', { output_text: 'whole' }],
+    [' \r\n {"a":1}', { a: 1 }],
+    ['[{"a":1}]', [{ a: 1 }]]
+  ]) {
+    const { events, result } = await eventsOf(async () => new Response(body, { headers: eventStream }));
+    assert.deepEqual(result, { streamed: false, data }, body);
+    assert.deepEqual(events, [], body);
+  }
+  // What it is shows with its first character, which may not be in the first piece.
+  const late = await eventsOf(async () => inPieces([' \n', '{"a"', ':1}'].map(encoded)));
+  assert.deepEqual(late.result, { streamed: false, data: { a: 1 } });
+  // A stream that opens with blank lines, or carries nothing at all, is still the stream it says it is.
+  const blank = await eventsOf(async () => inPieces(['\n\n', 'data: 1\n\n'].map(encoded)));
+  assert.deepEqual([blank.events, blank.result], [[['1', 'message']], { streamed: true }]);
+  const empty = await eventsOf(async () => new Response('', { headers: eventStream }));
+  assert.deepEqual([empty.events, empty.result], [[], { streamed: true }]);
+});
+
 test('a streamed request declares both answer types and carries the same cookies and JSON body as json()', async () => {
   const { calls } = await eventsOf(async () => new Response('', { headers: eventStream }), {
     headers: { Authorization: 'Bearer key' },
@@ -317,36 +379,66 @@ test('a streamed request declares both answer types and carries the same cookies
 
 test('silence longer than the idle limit is a timeout, while a slow stream that keeps sending is not', async () => {
   const events = [];
-  const onEvent = data => events.push(data);
-  // The limit is on silence, whatever the answer calls itself.
+  const request = { url: 'https://ai.example/v1', body: {}, onEvent: data => events.push(data) };
+  // The limit is on silence, whatever the answer calls itself: six pieces a minute apart outlast it.
   for (const type of ['text/event-stream', 'text/plain']) {
+    const clock = manualClock();
     const sent = [];
-    const steady = loadHttp(streamingFetch(sent, { type })).http.stream({
-      url: 'https://ai.example/v1',
-      body: {},
-      idle: 240,
-      onEvent
-    });
+    const steady = loadHttp(streamingFetch(sent, { type }), clock.globals).http.stream(request);
     for (let index = 0; index < 6; index++) {
-      await wait(70);
+      clock.advance(60000);
       sent[0].send('data: ' + index + '\n\n');
+      await settle();
     }
     sent[0].end();
     assert.deepEqual(plain(await steady), { streamed: true }, type);
-    assert.equal(events.splice(0).length, 6, type + ': the whole stream outlasted the idle limit without being cut');
+    assert.equal(events.splice(0).length, 6, type + ': the whole stream outlasted the limit without being cut');
+    assert.equal(clock.pending(), 0, type + ': no timer is left behind');
   }
 
+  // Unless told otherwise the limit is 90 seconds, counted from the last piece.
+  const clock = manualClock();
   const requests = [];
-  const { http } = loadHttp(streamingFetch(requests));
-  const silent = http.stream({ url: 'https://ai.example/v1', body: {}, idle: 60, onEvent });
+  let timeout;
+  loadHttp(streamingFetch(requests), clock.globals)
+    .http.stream(request)
+    .catch(error => (timeout = error));
+  clock.advance(50000);
   requests[0].send('data: first\n\n');
-  const error = await failure(silent);
-  assert.deepEqual([error.status, error.statusText], [0, 'timeout']);
-  assert.equal(events.at(-1), 'first', 'what arrived before the silence was delivered');
+  await settle();
+  clock.advance(89999);
+  await settle();
+  assert.equal(timeout, undefined, 'a moment short of the limit the request is still waiting');
+  clock.advance(1);
+  await settle();
+  assert.deepEqual([timeout.status, timeout.statusText], [0, 'timeout']);
+  assert.deepEqual(events, ['first'], 'what arrived before the silence was delivered');
+  assert.equal(clock.pending(), 0);
 
-  const unanswered = loadHttp(untilAborted).http;
-  const never = await failure(unanswered.stream({ url: 'https://ai.example/v1', body: {}, idle: 30, onEvent }));
-  assert.equal(never.statusText, 'timeout');
+  const unanswered = manualClock();
+  const never = failure(loadHttp(untilAborted, unanswered.globals).http.stream({ ...request, idle: 30 }));
+  unanswered.advance(30);
+  assert.equal((await never).statusText, 'timeout', 'the limit covers the wait for the answer itself');
+});
+
+test('a request that has ended leaves no listener on the signal it was given', async () => {
+  const listening = new Set();
+  const signal = {
+    aborted: false,
+    addEventListener: (type, listener) => listening.add(listener),
+    removeEventListener: (type, listener) => listening.delete(listener)
+  };
+  const requests = [];
+  const reading = loadHttp(streamingFetch(requests)).http.stream({
+    url: 'https://ai.example/v1',
+    body: {},
+    signal,
+    onEvent() {}
+  });
+  assert.equal(listening.size, 1, 'while it runs it listens for the caller stopping it');
+  requests[0].end();
+  await reading;
+  assert.equal(listening.size, 0);
 });
 
 test('stopping through the caller\'s signal fails with "abort", before the answer and in the middle of it', async () => {
@@ -389,7 +481,7 @@ test('stopping through the caller\'s signal fails with "abort", before the answe
 
 test('an error thrown by onEvent is not turned into a request failure', async () => {
   const bug = new Error('a bug in the caller');
-  const { http } = loadHttp(async () => new Response('data: 1\n\n', { headers: eventStream }));
+  const { http, calls } = loadHttp(async () => new Response('data: 1\n\n', { headers: eventStream }));
   await assert.rejects(
     http.stream({
       url: 'https://ai.example/v1',
@@ -400,4 +492,5 @@ test('an error thrown by onEvent is not turned into a request failure', async ()
     }),
     error => error === bug
   );
+  assert.equal(calls[0][1].signal.aborted, true, 'the request is given up, not left open with nobody reading');
 });

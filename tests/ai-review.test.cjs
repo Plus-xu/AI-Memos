@@ -611,17 +611,56 @@ test('the result box follows the arriving text while the reader is at its end, a
   Object.assign(box, { scrollHeight: 500, clientHeight: 100, scrollTop: 400 });
   state.context.AIReview.setBusy(true, 'organize', () => {});
   state.context.AIReview.stream('Original draft', 'Some text', 'organize');
-  assert.equal(box.scrollTop, 500);
-  box.scrollTop = 120;
+  assert.equal(box.scrollTop, 400, 'the first text is read from its start, however much of it there is');
+  box.scrollTop = 396;
   state.context.AIReview.stream('Original draft', 'Some text and more', 'organize');
-  assert.equal(box.scrollTop, 120);
+  state.frame();
+  assert.equal(box.scrollTop, 500, 'a reader at the end is kept there');
+  box.scrollTop = 120;
+  state.context.AIReview.stream('Original draft', 'Some text and more still', 'organize');
+  state.frame();
+  assert.deepEqual([box.value, box.scrollTop], ['Some text and more still', 120]);
+});
+
+test('text that arrives faster than it can be drawn is drawn once a frame, and only into the result box', () => {
+  const state = harness();
+  const box = state.node('#aiReviewResult')[0];
+  let text = '';
+  let draws = 0;
+  Object.defineProperty(box, 'value', {
+    get: () => text,
+    set(value) {
+      text = value;
+      draws++;
+    }
+  });
+  const status = state.node('#aiTaskStatus');
+  const say = status.text;
+  let said = 0;
+  status.text = function (value) {
+    if (value !== undefined) said++;
+    return say.call(this, value);
+  };
+  state.context.AIReview.setBusy(true, 'organize', () => {});
+  const before = said;
+  for (let length = 1; length <= 1000; length++)
+    state.context.AIReview.stream('Original draft', 'x'.repeat(length), 'organize');
+  assert.deepEqual([text, draws], ['x', 1], 'the first text is shown at once');
+  state.frame();
+  assert.deepEqual([text.length, draws], [1000, 2], 'and all that came since in one go');
+  assert.equal(said - before, 1, 'the status line is written when the text starts, not with every piece');
+  state.context.AIReview.stream('Original draft', 'x'.repeat(1001), 'organize');
+  state.frame();
+  assert.deepEqual([text.length, draws], [1001, 3], 'what comes after a frame is drawn in the next one');
 });
 
 test('text of a generation gives way to its result once there is one, and to what was there before when there is none', () => {
   const state = harness();
+  // Two pieces: the first is shown at once, the second waits for the next frame.
   const arriving = () => {
     state.context.AIReview.setBusy(true, 'organize', () => {});
     state.context.AIReview.stream('Original draft', 'Arriving text', 'organize');
+    state.context.AIReview.stream('Original draft', 'Arriving text, and more', 'organize');
   };
   state.context.AIReview.show('Original draft', 'Earlier result', 'summary', true);
   assert.equal(state.node('#aiReviewWarning').prop('hidden'), false);
@@ -629,7 +668,12 @@ test('text of a generation gives way to its result once there is one, and to wha
   assert.equal(state.node('#aiReviewResult').val(), 'Arriving text');
   assert.equal(state.node('#aiReviewWarning').prop('hidden'), true, 'the warning belongs to the review underneath');
   state.context.AIReview.setBusy(false);
-  assert.equal(state.node('#aiReviewResult').val(), 'Earlier result');
+  state.frame();
+  assert.equal(
+    state.node('#aiReviewResult').val(),
+    'Earlier result',
+    'a frame left over from the generation draws nothing'
+  );
   assert.match(state.node('#aiReviewWarning').text(), /aiTruncatedWarning/);
   assert.equal(state.node('#aiReviewResult').prop('readOnly'), false);
   assert.equal(state.node('#aiReviewDiscard').prop('disabled'), false);
@@ -637,6 +681,7 @@ test('text of a generation gives way to its result once there is one, and to wha
 
   arriving();
   state.context.AIReview.show('Original draft', 'Final result', 'organize');
+  state.frame();
   assert.equal(state.node('#aiReviewResult').val(), 'Final result');
   assert.equal(state.node('#aiReviewResult').prop('readOnly'), false, 'a result can be edited as soon as it is final');
   state.context.AIReview.setBusy(false);

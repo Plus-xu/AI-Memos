@@ -90,7 +90,9 @@ var LLMTransport = (function () {
         const choice = event.choices && event.choices[0];
         if (!choice) return;
         // Reasoning arrives beside the content, under a name of its own, and is not part of the answer.
-        answer.add(plainText(choice.delta && choice.delta.content));
+        // A gateway that does not really stream may send the whole message as its one event.
+        const part = choice.delta || choice.message;
+        answer.add(plainText(part && part.content));
         if (choice.finish_reason) answer.end(choice.finish_reason);
       }
     },
@@ -111,7 +113,8 @@ var LLMTransport = (function () {
       event(event, answer) {
         if (event.error) answer.fail(event.error.message);
         answer.add(geminiText(event));
-        const finish = event.candidates?.[0]?.finishReason;
+        // A prompt the service blocks is answered without candidates: that answer is over, and has no text.
+        const finish = event.candidates?.[0]?.finishReason || event.promptFeedback?.blockReason;
         if (finish) answer.end(finish);
       }
     },
@@ -159,6 +162,13 @@ var LLMTransport = (function () {
     return { status: 0, statusText: 'stream', reason: typeof reason === 'string' ? reason : '' };
   }
 
+  /** Whether the server refused the request for asking for a stream: the reason it gives then says so. */
+  function refusesStream(failure) {
+    return (
+      (failure.status === 400 || failure.status === 422) && /stream/i.test(JSON.stringify(failure.responseJSON || ''))
+    );
+  }
+
   /**
    * Sends the request and resolves with { text, truncated } once the answer is complete; `truncated` means
    * it ran into the output limit. onText(text) is called with the whole text so far each time more of a
@@ -168,10 +178,25 @@ var LLMTransport = (function () {
    * a stream closed before saying it was done) resolves with what arrived, as
    * { text, truncated: true, interrupted: 'stopped' | 'interrupted' }. With no text to keep it rejects
    * with the failure, which for the last two causes is { status: 0, statusText: 'stream', reason }.
+   *
+   * Not every model or gateway streams. One that answers in one piece is read that way, and one that
+   * refuses the request for its stream flag is asked once more without it.
    */
-  async function generate(endpointType, request, { signal, onText, idle } = {}) {
+  async function generate(endpointType, request, options = {}) {
     const protocol = protocols[endpointType];
     if (!protocol) throw new Error('未知的提供商类型');
+    try {
+      return await read(protocol, request, options);
+    } catch (failure) {
+      if (!failure || !request.body.stream || !refusesStream(failure)) throw failure;
+      const body = Object.assign({}, request.body);
+      delete body.stream;
+      return read(protocol, { url: request.url, headers: request.headers, body: body }, options);
+    }
+  }
+
+  /** One request and its answer, as generate() describes them. */
+  async function read(protocol, request, { signal, onText, idle }) {
     let text = '',
       done = false,
       truncated = false;

@@ -130,9 +130,22 @@ var Http = (function () {
   }
 
   /**
+   * Whether an answer that starts with `text` is an event stream: true, false, or null while its first
+   * characters do not tell yet. A gateway may label either kind as the other, but no event stream starts
+   * the way JSON does, and no JSON the way an event stream does.
+   */
+  function startsEvents(text, labelled) {
+    const start = text.trimStart();
+    if (start.charAt(0) === '{' || start.charAt(0) === '[') return false;
+    if (labelled) return start ? true : null;
+    return /^(?:data|event|id|retry)?:/.test(start) ? true : null;
+  }
+
+  /**
    * Sends `body` as JSON and reads the answer while it arrives. An event stream is handed to
    * onEvent(data, name) one event at a time and resolves { streamed: true }. Any other answer is read
    * to its end and resolves { streamed: false, data } as json() would, since not every gateway streams.
+   * Which of the two an answer is shows in how it starts, not in what it is labelled as.
    *
    * `idle` is the longest silence allowed, in milliseconds, before the answer and between its pieces.
    * `signal` lets the caller stop, which fails with the status text "abort". A failure in the middle of
@@ -168,20 +181,24 @@ var Http = (function () {
       heard = Date.now();
       const events = eventReader(onEvent);
       const next = pieces(response);
-      let live = response.ok && /^text\/event-stream\b/i.test(response.headers.get('Content-Type') || '');
+      const labelled = response.ok && /^text\/event-stream\b/i.test(response.headers.get('Content-Type') || '');
+      // Whether the answer is delivered as events: open until its first characters show what it is.
+      // A refusal is read whole, whatever it is labelled as or looks like.
+      let live = response.ok ? null : false;
       let text = '';
       for (;;) {
         const piece = await next().catch(lost);
         heard = Date.now();
         if (piece === null) break;
         text += piece;
-        // A gateway may label an event stream as something else, and no JSON starts the way one does.
-        live = live || (response.ok && /^\s*(?:data|event|id|retry)?:/.test(text));
+        if (live === null) live = startsEvents(text, labelled);
         if (live) {
           events.push(text);
           text = '';
         }
       }
+      // An answer that never showed what it is, such as an empty one, is what it was labelled as.
+      if (live === null) live = labelled;
       if (!live) return { streamed: false, data: answered(response, text) };
       events.end();
       return { streamed: true };

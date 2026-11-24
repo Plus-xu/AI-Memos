@@ -48,9 +48,9 @@
 ## Review Focus
 
 1. 一个多字节字符、一行、或一对 `\r\n` 被拆在两段数据里：解出的文字与一次收全时相同。（Task 1）
-2. 网关不支持流式，用整段 JSON 回答流式请求：结果照常进入审阅。网关把事件流标成了别的 `Content-Type`：正文不是 JSON 而以 `data:` / `event:` / `:` 开头时仍按事件流解读。（Task 1、Task 2）
+2. 网关不支持流式，用整段 JSON 回答流式请求：结果照常进入审阅。网关把事件流标成了别的 `Content-Type`：正文不是 JSON 而以 `data:` / `event:` / `:` 开头时仍按事件流解读。（Task 1、Task 2。评审后补上反过来的情况：标成事件流的整段 JSON 按整段读；直接拒绝流式请求的服务器改用整段请求重试一次。）
 3. 事件流中途断开、或干净地结束但没有结束信号：已收到的文字进入审阅并标明不完整，不当作完整结果。（Task 2）
-4. 生成中再点一次 AI、点「采用」「追加」「取消结果」、或直接编辑结果框：都不起作用，结果框只读；结束后恢复可编辑。（Task 3）
+4. 有生成中的文字在显示时，再点一次 AI、点「采用」「追加」「取消结果」、或直接编辑结果框：都不起作用，结果框只读；结束后恢复可编辑。（Task 3。评审后改的措辞：第一段文字到达之前，原来那条待审结果照旧可以编辑和取消，与改动前一致；这时再点 AI、「采用」「追加」同样不起作用。）
 5. 面板里本来有一条待审结果，新的生成一个字都没收到就失败或被停止：原来那条待审结果还在，内容不变。（Task 3）
 
 ---
@@ -65,7 +65,7 @@
 **Interfaces（Produces）:**
 - `Http.stream({ url, method = 'POST', headers = {}, body, idle = 90000, signal, onEvent }) → Promise<{ streamed: true } | { streamed: false, data }>`
   - 事件流：每个事件调用一次 `onEvent(data, name)`，`data` 是该事件各 `data:` 行以 `\n` 相连的文字，`name` 是 `event:` 的值，缺省为 `'message'`。注释行（以 `:` 开头）和没有 `data` 的事件不调用。流结束时缓冲里还有未以空行收尾的事件，也发出去。
-  - 其他回答：读完整段后按 `Http.json` 的规则解析并返回 `{ streamed: false, data }`；状态码不是 2xx 时抛出与 `Http.json` 相同形状的失败对象。正文以 `data:` / `event:` / `id:` / `retry:` / `:` 开头时（JSON 不会这样开头），从头就按事件流边收边发出，返回 `{ streamed: true }`（实施时改的：原计划是读完整段再解读，那样静默超时管不到这种流，用户点停止时也留不下已收到的部分）。没有正文可读的回答（如 204）返回 `{ streamed: false }`；状态码不是 2xx 的回答即使标成或长得像事件流，也按拒绝处理。
+  - 其他回答：读完整段后按 `Http.json` 的规则解析并返回 `{ streamed: false, data }`；状态码不是 2xx 时抛出与 `Http.json` 相同形状的失败对象。正文以 `data:` / `event:` / `id:` / `retry:` / `:` 开头时（JSON 不会这样开头），从头就按事件流边收边发出，返回 `{ streamed: true }`（实施时改的：原计划是读完整段再解读，那样静默超时管不到这种流，用户点停止时也留不下已收到的部分）。没有正文可读的回答（如 204）返回 `{ streamed: false }`；状态码不是 2xx 的回答即使标成或长得像事件流，也按拒绝处理。标成 `text/event-stream` 的回答，正文以 `{` 或 `[` 开头时按整段 JSON 读（评审后补上：事件流不会这样开头）。
   - 失败对象的 `statusText`：静默超时为 `'timeout'`，调用方中止为 `'abort'`，其余网络错误为 `'error'`，`status` 都是 0。读到一半失败也是这样抛出，已经发出的事件不撤回。
   - `onEvent` 里抛出的异常原样向外抛，不包成失败对象。
 - `tests/helpers/http.cjs` 的 `streamingFetch(requests)`：每个请求推入 `requests`，带 `send(text)`、`end()`、`fail(error)`，回答是一个真实的 `Response`，`Content-Type: text/event-stream`；请求的 `signal` 中止时，正文以 `AbortError` 出错。
@@ -77,7 +77,7 @@
   - `'an answer that is not an event stream is parsed as JSON, and a refusal fails as json() does'`：`application/json` 的 200 得到 `{ streamed: false, data }`；400 带 JSON 正文抛出 `status === 400` 且 `responseJSON` 在。
   - `'an event stream under another content type is still read as events, as they arrive'`：`text/plain` 和 `application/json` 各一条，事件在流结束之前就已发出。
   - `'a streamed request declares both answer types and carries the same cookies and JSON body as json()'`：`Accept`、`Content-Type`、`credentials`、`body`。
-  - `'silence longer than the idle limit is a timeout, while a slow stream that keeps sending is not'`：`idle: 240`，每 70 毫秒一段共 6 段成功，标成 `text/plain` 的流也一样；`idle: 60` 发一段后不再发，失败且 `statusText === 'timeout'`（实施时放宽了时间：Windows 的定时器粒度约 15 毫秒，原定的 40 / 15 在忙的机器上会误报）。
+  - `'silence longer than the idle limit is a timeout, while a slow stream that keeps sending is not'`：用测试自己拨动的时钟：每 60 秒一段共 6 段成功，标成 `text/plain` 的流也一样；不指定 `idle` 时，最后一段之后 89999 毫秒还在等，满 90000 毫秒失败且 `statusText === 'timeout'`（评审后改的：原来用真实定时器，CPU 超订时会误报；现在不依赖机器快慢，并钉住默认的 90 秒）。
   - `'stopping through the caller\'s signal fails with "abort", before the answer and in the middle of it'`。
   - `'an error thrown by onEvent is not turned into a request failure'`。
 - [ ] **Step 2: 运行 `node --test tests/http.test.cjs`，新用例失败（`http.stream is not a function`）**
@@ -100,6 +100,7 @@
     - `onText(text)`：每当可见文字变长时调用，参数是到目前为止的全文。
     - 正常结束：`{ text, truncated }`，`text` 可以是空串（由调用方决定怎么提示）。
     - 停止、超时、网络错误、流内错误事件、缺少结束信号：已有非空白文字时返回 `{ text, truncated: true, interrupted }`，`interrupted` 为 `'stopped'`（调用方中止）或 `'interrupted'`（其余）；没有文字时抛出失败对象。流内错误和缺少结束信号的失败对象是 `{ status: 0, statusText: 'stream', reason }`，`reason` 是服务商给的原因，可能为空串。
+    - （评审后补上）服务器以 400 或 422 拒绝请求、原因里提到 stream 时，去掉请求体里的 `stream` 再发一次，只重试一次；Gemini 的请求体没有这个标志，不重试。Chat Completions 的事件里没有 `delta` 而有 `message` 时取 `message.content`（有的网关把整段回答当成一个事件发）。Gemini 的事件只有 `promptFeedback.blockReason`、没有候选时算结束，文字为空，提示与改动前一样是"没有返回可用的文本"。
   - `callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl, task, customPrompt, { signal, onText } = {})`：结果在原来的 `{ text, truncated }` 之外，被打断时多一个 `interrupted`。`onText` 收到的是已按 `AIWorkflow.unwrapNote(text, userContent, true)` 去掉回显标记的文字，只在要显示的文字有变化时调用（实施时补上：只收到回显标记时不调用，免得面板空着打开）。整段回答不经过 `onText`。不是请求失败的错误（如 `onText` 自己抛出的）原样拒绝，不换成"请求中断"。被停止且没有文字时，拒绝的 `Error` 带 `stopped: true`，文字是 `aiStopped`。
   - `extractLLMErrorMessage(failure)`：`statusText === 'stream'` 时为 `aiInterrupted` 的文字，`reason` 非空则在后面加 `' (' + reason 的前 240 个字符 + ')'`；其余不变。
 
@@ -132,7 +133,7 @@
 - Produces:
   - `AIWorkflow.review(input, result, task, truncated)`：`truncated` 为 `'stopped'` 或 `'interrupted'` 时原样记入，其余真值记为 `true`。
   - `AIWorkflow.incompleteMessage(truncated) → 'aiStoppedWarning' | 'aiInterruptedWarning' | 'aiTruncatedWarning' | ''`。
-  - `AIReview.stream(input, text, task)`：显示生成中的文字，不写存储。面板可见，结果框只读，「取消结果」停用，不显示警告，任务一栏显示"正在执行"。
+  - `AIReview.stream(input, text, task)`：显示生成中的文字，不写存储。面板可见，结果框只读，「取消结果」停用，不显示警告，任务一栏显示"正在执行"。第一段文字立即显示、从开头看起，其后的文字每帧最多绘制一次，绘制时只改结果框（评审后改的：原来每段都同步重排整个面板，回答成批到达时页面会冻结数秒）。
   - `AIReview.setBusy(value, task, stop)`：`stop` 是函数时显示 `#aiStop`，点击后隐藏按钮并调用它一次；`value` 为假时清掉生成中的文字和 `stop`，面板回到存储里的待审结果（没有就隐藏）。不带 `stop` 的 `setBusy(true, …)`（本页自己写入任务记录后也会收到一次）不得把已有的 `stop` 清掉。`AIReview.show(…)` 也结束"生成中"的显示（实施时补上：结果一定稿就可以编辑，不必等任务记录清掉）。
   - `popup.html`：`#aiUndo` 之后加 `<button id="aiStop" class="text-button" hidden data-feature-message="aiStop"></button>`。
 
@@ -155,8 +156,8 @@
 **Files:**
 - Modify: `scripts/fixture-server.cjs`、`scripts/check-chrome.cjs`、`README.md`、`CHANGELOG.md`、`docs/superpowers/specs/2026-11-20-optimization-roadmap-design.md`（状态行）
 
-- [ ] **Step 1: `scripts/fixture-server.cjs`**：`/v1/chat/completions` 收到 `stream: true` 时以事件流回答：立即发出那句话的前 8 个字，等 `state.aiDelay` 毫秒后发其余部分（带 `finish_reason: 'stop'`）和 `[DONE]`；连接已断时不再写。不带 `stream` 的请求照旧。
-- [ ] **Step 2: `scripts/check-chrome.cjs`**：在 "AI output can be edited, appended and undone from the other editor" 之后加一条：`aiDelay` 设为 6000，侧栏点 AI，等结果框里出现前 8 个字且 `#aiStop` 可见，断言结果框只读，点 `#aiStop`，等到不再忙且存储里的待审结果 `truncated === 'stopped'`；断言草稿不变、结果框只有前 8 个字、警告可见、`#aiStop` 隐藏；最后点「取消结果」并把 `aiDelay` 复位。生成期间另断言弹窗那一侧处于"正在执行"、没有「停止」按钮、也不显示生成中的文字（实施时补上）。通过名：`Stopping a generation leaves the draft unchanged and the partial result ready for review`。
+- [ ] **Step 1: `scripts/fixture-server.cjs`**：`/v1/chat/completions` 收到 `stream: true` 时以事件流回答：立即发出那句话的前 8 个字，`state.aiDelay` 的十分之一之后再发 2 个字，等 `state.aiDelay` 毫秒后发其余部分（带 `finish_reason: 'stop'`）和 `[DONE]`（中间那一段是评审后加的，让验收能看到第一段之后的文字也画了出来；`state.refuseStream` 为真时对流式请求回 400，也是评审后加的）；连接已断时不再写。不带 `stream` 的请求照旧。
+- [ ] **Step 2: `scripts/check-chrome.cjs`**：在 "AI output can be edited, appended and undone from the other editor" 之后加一条：`aiDelay` 设为 6000，侧栏点 AI，等结果框里出现前 8 个字且 `#aiStop` 可见，断言结果框只读，点 `#aiStop`，等到不再忙且存储里的待审结果 `truncated === 'stopped'`；断言草稿不变、结果框只有前 8 个字、警告可见、`#aiStop` 隐藏；最后点「取消结果」并把 `aiDelay` 复位。生成期间另断言弹窗那一侧处于"正在执行"、没有「停止」按钮、也不显示生成中的文字（实施时补上）。通过名：`Stopping a generation leaves the draft unchanged and the partial result ready for review`。（评审后改的：停止之前先等第 9、10 个字显示出来，结果框是前 10 个字；警告改为断言含"手动停止"的那句，因为剪藏稿缺少来源链接时警告本来就会显示。另加一条 `A gateway that refuses to stream still delivers its answer, asked again in one piece`。）
 - [ ] **Step 3: 按 `e2e-environment` 的跑法运行验收脚本（先备份 `artifacts/acceptance-<版本>`，跑完还原），全部 PASS**
 - [ ] **Step 4: 文档**。`README.md` 的 AI 一段写明边生成边显示、可停止、停止或中断时保留已生成的部分；`CHANGELOG.md` "未发布"加一条；路线图状态行加上本批的提交范围和计划路径，A4 第一阶段标为已完成。
 - [ ] **Step 5: 运行 `npm run check`，提交** `git commit -m "模拟服务器按事件流回答，验收脚本覆盖生成中停止，更新说明、修改记录与路线图进度"`
