@@ -25,14 +25,14 @@
 - "界面语言"指令的三段文字从 `js/ai-optimize.js` 的 `getLanguageInstruction` 原样搬走，一个字不改；界面语言代码不是 `zh_CN` / `ja` 时用英文那段（现状如此）。
 - 提示词用英文写，与 `js/ai-workflow.js` 里现有的四条任务指令一致。本计划里给出的提示词和词条文字是定稿，照抄。
 - 审阅面板里保存的"原文"仍是用户的草稿原样，不带 `<note>` 标记；"替换时草稿已改则拒绝"的比较不受影响。
-- 本地预览（`scripts/preview-server.cjs`）靠提示词里的字样区分任务：`study questions`、`question…answer`、`key points`、`concise…summary`、`摘要`、`问答`。"整理"和自定义任务的完整系统提示词（含语言指令）不得出现这些字样。
+- 本地预览（`scripts/preview-server.cjs`）靠提示词里的字样区分任务：`study questions`、`question…answer`、`key points`、`concise…summary`、`摘要`、`问答`、`提取要点`。"整理"和自定义任务的完整系统提示词（含语言指令）不得出现这些字样。（`提取要点` 是实施后补上的：初稿这份清单是照脚本手抄的，漏了它；测试改为直接从脚本里读出这三条正则，不再另抄一份。）
 - `npm run check` 每个任务结束时通过。只做本地提交，不推送、不改版本号。
 - 不覆盖 `artifacts/` 里已有的验收记录（跑验收脚本前备份、跑完还原）。
 
 ## Review Focus
 
 1. 笔记正文里本身就有 `</note>` 或 `<note>`：正文整段原样发出，不截断、不转义。（Task 1）
-2. 模型把包裹标记原样回显：结果最外层的一对 `<note>…</note>` 在进入审阅面板前去掉；用户原文本来就以这对标记包着时不去。（Task 1）
+2. 模型把包裹标记原样回显：结果最外层的一对 `<note>…</note>` 在进入审阅面板前去掉；用户原文本来就以这对标记包着时不去。回答被截断或模型只回显了一侧时，落单的那个标记同样去掉；用户原文在同一侧也以这个标记起头或收尾时不去。（Task 1）
 3. 设置页的下拉框读到空值或不认识的值时点保存：已存的选择保持不变，不被改回"自动"。（Task 3）
 4. 同步存储里的 `llmOutputLanguage` 是旧版本或别的设备写的其他值（数字、`null`、`"zh"`）：按"自动"处理，不报错。（Task 2）
 5. 编辑器开着时在设置页改了输出语言：下一次运行就用新值，不需要重开弹窗。（Task 2）
@@ -48,7 +48,10 @@
 **Interfaces（Produces）:**
 - `AIWorkflow.buildPrompt(task, customPrompt) → string`。第三个参数取消。
 - `AIWorkflow.wrapNote(text) → string`，返回 `'<note>\n' + text + '\n</note>'`。
-- `AIWorkflow.unwrapNote(result, input) → string`：`result` 去掉首尾空白后以 `<note>` 开头且以 `</note>` 结尾，而 `input` 去掉首尾空白后不是这样时，返回去掉这一对标记及紧邻换行后的内容；否则原样返回 `result`。
+- `AIWorkflow.unwrapNote(result, input) → string`：
+  - `result` 去掉首尾空白后以 `<note>` 开头且以 `</note>` 结尾，而 `input` 去掉首尾空白后不是这样时，返回去掉这一对标记及紧邻换行后的内容。
+  - 否则看 `result` 里有没有落单的标记（实施后补上：回答被截断，或模型只回显了一侧）：`<note>` 比 `</note>` 多、`result` 不计开头空白以 `<note>` 开头而 `input` 不是时，去掉开头的空白、这个标记和紧邻的换行；`</note>` 比 `<note>` 多、`result` 不计结尾空白以 `</note>` 结尾而 `input` 不是时，去掉紧邻的换行、这个标记和结尾的空白。
+  - 其余情况原样返回 `result`。紧邻的换行指一个 `\n` 或 `\r\n`。
 
 **定稿文字：**
 
@@ -89,7 +92,7 @@ You may add one to three #tags on the last line when they help find the note lat
     - `ai.buildPrompt('organize').length <= 1400`；
     - "整理"提示词匹配 `/- \[ \]/`、`/existing #tags/`、`/fenced code blocks/`、`/one to three #tags/`；
     - 五个任务的提示词都匹配 `/between the first <note> and the last <\/note>/` 和 `/without the <note> tags/`；
-    - `ai.buildPrompt('organize')` 与 `ai.buildPrompt('custom', 'Fix the grammar.')` 都不匹配 `/study questions|question.*answer|key points|concise.*summary|摘要|问答/i`；
+    - `ai.buildPrompt('organize')` 与 `ai.buildPrompt('custom', 'Fix the grammar.')` 都不匹配本地预览用来认出摘要、要点、问答的字样：测试从 `scripts/preview-server.cjs` 读出那三条 `/…/i.test(instructions)` 正则合成一条来比，并断言读到的正好是三条；
     - `ai.wrapNote('a </note> b')` 全等于 `'<note>\na </note> b\n</note>'`；
     - `ai.unwrapNote('<note>\nA\n</note>', 'x') === 'A'`；`ai.unwrapNote('  <note>A</note>\n', 'x') === 'A'`；`ai.unwrapNote('A <note>b</note>', 'x')` 原样；`ai.unwrapNote('<note>\nA\n</note>', '<note>\nx\n</note>')` 原样。
   - `tests/ai-review.test.cjs` 的 "task-specific instructions are passed into real provider request bodies"：`body.input` 的期望值改为 `'<note>\nMaterial with https://example.org/source\n</note>'`；新增一轮：服务器回 `{ output_text: '<note>\nA reviewed result\n</note>' }` 时结果的 `text` 为 `'A reviewed result'`。
