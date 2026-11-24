@@ -1059,7 +1059,7 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
           const truncated = ['max_tokens', 'length', 'MAX_TOKENS'].includes(finish) || response.status === 'incomplete';
           const extracted = extractLLMText(providerConfig, response);
           const optimizedContent =
-            typeof extracted === 'string' ? AIWorkflow.unwrapNote(extracted, userContent) : extracted;
+            typeof extracted === 'string' ? AIWorkflow.unwrapNote(extracted, userContent, truncated) : extracted;
           if (typeof optimizedContent === 'string' && optimizedContent.trim()) {
             resolve({ text: optimizedContent, truncated: truncated });
           } else {

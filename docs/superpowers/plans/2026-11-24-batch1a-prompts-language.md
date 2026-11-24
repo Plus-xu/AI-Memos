@@ -22,7 +22,7 @@
   | `ui` | 界面语言 | 界面语言 | 界面语言（弱） |
   | `source` | 原文语言 | 原文语言 | 原文语言（弱） |
 
-- "界面语言"指令的三段文字从 `js/ai-optimize.js` 的 `getLanguageInstruction` 原样搬走，一个字不改；界面语言代码不是 `zh_CN` / `ja` 时用英文那段（现状如此）。
+- "界面语言"指令的三段文字从 `js/ai-optimize.js` 的 `getLanguageInstruction` 原样搬走，一个字不改（评审后改了标签那一行：原文是"标签使用界面语言"并带三个示例标签，与"整理"要求已有标签原样保留相抵触，现改为"已有标签原样保留、不翻译，只有新增的标签用界面语言"，示例标签删去；三种语言同步）；界面语言代码不是 `zh_CN` / `ja` 时用英文那段（现状如此）。
 - 提示词用英文写，与 `js/ai-workflow.js` 里现有的四条任务指令一致。本计划里给出的提示词和词条文字是定稿，照抄。
 - 审阅面板里保存的"原文"仍是用户的草稿原样，不带 `<note>` 标记；"替换时草稿已改则拒绝"的比较不受影响。
 - 本地预览（`scripts/preview-server.cjs`）靠提示词里的字样区分任务：`study questions`、`question…answer`、`key points`、`concise…summary`、`摘要`、`问答`、`提取要点`。"整理"和自定义任务的完整系统提示词（含语言指令）不得出现这些字样。（`提取要点` 是实施后补上的：初稿这份清单是照脚本手抄的，漏了它；测试改为直接从脚本里读出这三条正则，不再另抄一份。）
@@ -32,7 +32,7 @@
 ## Review Focus
 
 1. 笔记正文里本身就有 `</note>` 或 `<note>`：正文整段原样发出，不截断、不转义。（Task 1）
-2. 模型把包裹标记原样回显：结果最外层的一对 `<note>…</note>` 在进入审阅面板前去掉；用户原文本来就以这对标记包着时不去。回答被截断或模型只回显了一侧时，落单的那个标记同样去掉；用户原文在同一侧也以这个标记起头或收尾时不去。（Task 1）
+2. 模型把包裹标记原样回显：结果最外层的一对 `<note>…</note>` 在进入审阅面板前去掉；用户原文本来就以这对标记包着时不去；开头的 `<note>` 不是由结尾的 `</note>` 闭合时（例如两段并列的 `<note>…</note>`）也不去；两端任一标记按四个空格或 Tab 缩进（Markdown 的代码块）时也不去。回答被截断时，落单在开头的 `<note>` 同样去掉，但只在响应确认被截断、它是结果里唯一的标记、顶格且独占一行时才去；用户原文也以 `<note>` 起头时不去。正常完成的回答里落单的标记（包括只在结尾的 `</note>`）一律当作内容保留。（Task 1）
 3. 设置页的下拉框读到空值或不认识的值时点保存：已存的选择保持不变，不被改回"自动"。（Task 3）
 4. 同步存储里的 `llmOutputLanguage` 是旧版本或别的设备写的其他值（数字、`null`、`"zh"`）：按"自动"处理，不报错。（Task 2）
 5. 编辑器开着时在设置页改了输出语言：下一次运行就用新值，不需要重开弹窗。（Task 2）
@@ -48,9 +48,9 @@
 **Interfaces（Produces）:**
 - `AIWorkflow.buildPrompt(task, customPrompt) → string`。第三个参数取消。
 - `AIWorkflow.wrapNote(text) → string`，返回 `'<note>\n' + text + '\n</note>'`。
-- `AIWorkflow.unwrapNote(result, input) → string`：
-  - `result` 去掉首尾空白后以 `<note>` 开头且以 `</note>` 结尾，而 `input` 去掉首尾空白后不是这样时，返回去掉这一对标记及紧邻换行后的内容。
-  - 否则看 `result` 里有没有落单的标记（实施后补上：回答被截断，或模型只回显了一侧）：`<note>` 比 `</note>` 多、`result` 不计开头空白以 `<note>` 开头而 `input` 不是时，去掉开头的空白、这个标记和紧邻的换行；`</note>` 比 `<note>` 多、`result` 不计结尾空白以 `</note>` 结尾而 `input` 不是时，去掉紧邻的换行、这个标记和结尾的空白。
+- `AIWorkflow.unwrapNote(result, input, truncated) → string`（第三个参数是评审后加的：响应是否被截断，`callLLMAPI` 把已算出的 `truncated` 传进来）：
+  - `result` 去掉首尾空白后以 `<note>` 开头且以 `</note>` 结尾，而 `input` 去掉首尾空白后不是这样时，返回去掉这一对标记及紧邻换行后的内容。（评审后收紧：还要求开头的 `<note>` 正是由结尾的 `</note>` 闭合，按嵌套深度从头数；两段并列的 `<note>…</note>`、或中间的标记不成对时，原样返回。再次收紧：开头的 `<note>` 所在行缩进达到四个空格或含 Tab 时，或结尾的 `</note>` 在它那一行前面只有这样的缩进时，Markdown 把它读作代码，同样原样返回；三个空格以内的缩进不算。整段输出恰好是一个顶格、不带代码围栏的 `<note>…</note>` 时仍会被剥，这与模型把短答案回显成一行的形状无法区分，不处理。）
+  - 否则，只在 `truncated` 为真时处理落单在开头的 `<note>`（实施后补上，评审后两次收紧）：`result` 里总共只有这一个标记，它顶格、独占一行、前面至多有空行，而 `input` 不计开头空白不以 `<note>` 开头时，去掉前面的空行、这个标记和紧邻的换行。初版还处理"模型只回显了一侧"和落单在结尾的 `</note>`，并且不要求顶格和独占一行，结果正常完成的回答里以缩进代码中的 `<note>` 开头、或句首句尾带一个标记时会被误删；这些情况现在都原样返回——漏删的标记在审阅面板里看得见，误删的内容看不见。
   - 其余情况原样返回 `result`。紧邻的换行指一个 `\n` 或 `\r\n`。
 
 **定稿文字：**
@@ -98,7 +98,7 @@ You may add one to three #tags on the last line when they help find the note lat
   - `tests/ai-review.test.cjs` 的 "task-specific instructions are passed into real provider request bodies"：`body.input` 的期望值改为 `'<note>\nMaterial with https://example.org/source\n</note>'`；新增一轮：服务器回 `{ output_text: '<note>\nA reviewed result\n</note>' }` 时结果的 `text` 为 `'A reviewed result'`。
   - `tests/current-release.test.cjs`：新增断言 `config.systemPrompt === undefined` 且 `!Object.hasOwn(config.defaults, 'temperature')`；四种协议各自的正文位置（`input`、`messages` 里 `user` 那条、`contents[0].parts[0].text`）都是包裹后的文字。
 - [ ] **Step 2:** `node --test tests/ai-workflow.test.cjs tests/ai-review.test.cjs tests/current-release.test.cjs` — Expected: 新增断言 FAIL。
-- [ ] **Step 3: 实现。** `callLLMAPI` 里传给 `buildLLMRequest` 的正文改为 `AIWorkflow.wrapNote(userContent)`，取到的文本经 `AIWorkflow.unwrapNote(text, userContent)` 后再放进返回值。`callLLMAPI` 的参数表不变。`LLM_CONFIG.systemPrompt` 第 8 条"输出语言将由单独的语言指令指定"随整段一起删除。
+- [ ] **Step 3: 实现。** `callLLMAPI` 里传给 `buildLLMRequest` 的正文改为 `AIWorkflow.wrapNote(userContent)`，取到的文本经 `AIWorkflow.unwrapNote(text, userContent, truncated)` 后再放进返回值。`callLLMAPI` 的参数表不变。`LLM_CONFIG.systemPrompt` 第 8 条"输出语言将由单独的语言指令指定"随整段一起删除。
 - [ ] **Step 4:** `npm run check` — Expected: 全部通过。
 - [ ] **Step 5: Commit** `"整理"提示词精简到约 1 KB，正文用 <note> 标记包起来，删除未使用的 temperature`
 
@@ -140,7 +140,7 @@ Unless the task above specifies an output language, write the output in the lang
 Unless the task above specifies an output language, write the output in {language}.
 ```
 
-界面语言：现有三段，原样搬来。
+界面语言：现有三段，原样搬来（标签那一行评审后改过，见上文 Global Constraints）。
 
 - [ ] **Step 1: 写失败的测试。**
   - `tests/ai-workflow.test.cjs`：

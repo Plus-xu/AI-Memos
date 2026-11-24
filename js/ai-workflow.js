@@ -47,25 +47,55 @@ var AIWorkflow = (function () {
     return '<note>\n' + text + '\n</note>';
   }
 
-  var wrapped = /^\s*<note>\r?\n?([\s\S]*?)\r?\n?<\/note>\s*$/;
-  var opening = /^\s*<note>\r?\n?/;
-  var closing = /\r?\n?<\/note>\s*$/;
+  var wrapped = /^\s*<note>\r?\n?([\s\S]*?)(?:\r?\n[ \t]*)?<\/note>\s*$/;
+  // The marker as it was sent: unindented and alone on its line, after blank lines at most.
+  var echoedOpening = /^(?:[ \t]*\r?\n)*<note>[ \t]*(?:\r?\n|$)/;
+  var startsWithMarker = /^\s*<note>/;
 
-  function occurrences(text, marker) {
-    return text.split(marker).length - 1;
+  function markers(text) {
+    return text.match(/<\/?note>/g) || [];
+  }
+
+  /** Whether the <note> that starts the text is closed by the </note> that ends it, not by an earlier one. */
+  function endsArePaired(text) {
+    var found = markers(text);
+    var depth = 0;
+    for (var index = 0; index < found.length; index++) {
+      depth += found[index] === '<note>' ? 1 : -1;
+      if (depth <= 0 && index < found.length - 1) return false;
+    }
+    return depth === 0;
+  }
+
+  /** Whether the marker at this position is alone at the start of a line Markdown reads as indented code. */
+  function indentedAsCode(text, position) {
+    var indent = text.slice(text.lastIndexOf('\n', position - 1) + 1, position);
+    return /^[ \t]*$/.test(indent) && (indent.indexOf('\t') >= 0 || indent.length >= 4);
+  }
+
+  /** Whether the answer is an echo of the markers around the note, rather than content that happens to hold them. */
+  function isEcho(text) {
+    return (
+      endsArePaired(text) &&
+      !indentedAsCode(text, text.indexOf('<note>')) &&
+      !indentedAsCode(text, text.lastIndexOf('</note>'))
+    );
   }
 
   /**
-   * A model may echo the markers around its answer. They are removed unless the note itself came wrapped in them.
-   * A cut-off or partial echo leaves one marker without its partner; that one is removed as well,
-   * unless the note has a marker on the same side.
+   * A model may echo the markers around its answer. They are removed unless the note itself came wrapped in them,
+   * and only when the first and the last marker belong together: two blocks side by side are content.
+   * So is a marker indented by four spaces or a tab, which Markdown reads as code.
+   * A cut-off answer can leave the opening marker without its partner. That one is removed only when the response
+   * is known to be truncated, it is the sole marker in the answer, it stands unindented on a line of its own, and
+   * the note does not start with a marker. A lone marker in a complete answer is content: leaving an echo visible
+   * in the review costs less than deleting what the model meant to write.
    */
-  function unwrapNote(result, input) {
+  function unwrapNote(result, input, truncated) {
     var match = wrapped.exec(result);
-    if (match) return wrapped.test(input) ? result : match[1];
-    var unclosed = occurrences(result, '<note>') - occurrences(result, '</note>');
-    if (unclosed > 0 && opening.test(result) && !opening.test(input)) return result.replace(opening, '');
-    if (unclosed < 0 && closing.test(result) && !closing.test(input)) return result.replace(closing, '');
+    if (match) return wrapped.test(input) || !isEcho(result) ? result : match[1];
+    if (!truncated || markers(result).length !== 1) return result;
+    if (echoedOpening.test(result) && !startsWithMarker.test(input)) return result.replace(echoedOpening, '');
     return result;
   }
 
@@ -79,17 +109,17 @@ var AIWorkflow = (function () {
     zh_CN: {
       name: 'Simplified Chinese (简体中文)',
       instruction:
-        '# 输出语言要求\n\n⚠️ **重要**：你必须使用**简体中文（Simplified Chinese）**输出所有内容。\n\n- 所有文字说明、标题、列表项都使用简体中文\n- 标签使用简体中文：#工作 #学习 #生活\n- 即使用户输入是英文或其他语言，也必须翻译成简体中文输出\n- 保留原文中的专有名词、品牌名、代码、链接等无需翻译的内容'
+        '# 输出语言要求\n\n⚠️ **重要**：你必须使用**简体中文（Simplified Chinese）**输出所有内容。\n\n- 所有文字说明、标题、列表项都使用简体中文\n- 原文已有的 # 标签原样保留，不翻译也不改写；只有新增的标签才使用简体中文\n- 即使用户输入是英文或其他语言，也必须翻译成简体中文输出\n- 保留原文中的专有名词、品牌名、代码、链接等无需翻译的内容'
     },
     en: {
       name: 'English',
       instruction:
-        '# Output Language Requirement\n\n⚠️ **Important**: You MUST output ALL content in **English**.\n\n- All text descriptions, titles, and list items must be in English\n- Tags must be in English: #work #study #life\n- Even if user input is in Chinese or other languages, translate it to English\n- Preserve proper nouns, brand names, code, links, and other content that should not be translated'
+        '# Output Language Requirement\n\n⚠️ **Important**: You MUST output ALL content in **English**.\n\n- All text descriptions, titles, and list items must be in English\n- Keep every existing #tag exactly as written, untranslated; only tags you add yourself must be in English\n- Even if user input is in Chinese or other languages, translate it to English\n- Preserve proper nouns, brand names, code, links, and other content that should not be translated'
     },
     ja: {
       name: 'Japanese (日本語)',
       instruction:
-        '# 出力言語の要件\n\n⚠️ **重要**：すべてのコンテンツを**日本語（Japanese）**で出力する必要があります。\n\n- すべてのテキスト説明、タイトル、リスト項目は日本語で記述してください\n- タグは日本語で：#仕事 #勉強 #生活\n- ユーザー入力が中国語や英語であっても、日本語に翻訳して出力してください\n- 固有名詞、ブランド名、コード、リンクなど、翻訳すべきでない内容はそのまま保持してください'
+        '# 出力言語の要件\n\n⚠️ **重要**：すべてのコンテンツを**日本語（Japanese）**で出力する必要があります。\n\n- すべてのテキスト説明、タイトル、リスト項目は日本語で記述してください\n- 原文に既にある # タグはそのまま保持し、翻訳も書き換えもしないでください。新しく追加するタグだけ日本語にしてください\n- ユーザー入力が中国語や英語であっても、日本語に翻訳して出力してください\n- 固有名詞、ブランド名、コード、リンクなど、翻訳すべきでない内容はそのまま保持してください'
     }
   };
   var sourceLanguage =

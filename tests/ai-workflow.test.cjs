@@ -277,19 +277,89 @@ test('markers a model echoes around its answer are removed, unless the note itse
   assert.equal(ai.unwrapNote('<note>\r\nA\r\n</note>\r\n', 'x'), 'A');
 });
 
-test('a marker left without its partner by a cut-off or partial echo is removed too', () => {
+test('an opening marker left without its partner by a cut-off answer is removed too', () => {
   const { ai } = loadRules();
-  assert.equal(ai.unwrapNote('<note>\nPartial text', 'x'), 'Partial text');
-  assert.equal(ai.unwrapNote('<note>\r\nPartial text', 'x'), 'Partial text');
-  assert.equal(ai.unwrapNote('Result\n</note>', 'x'), 'Result');
-  assert.equal(ai.unwrapNote('Result\r\n</note>\n', 'x'), 'Result');
+  assert.equal(ai.unwrapNote('<note>\nPartial text', 'x', true), 'Partial text');
+  assert.equal(ai.unwrapNote('<note>\r\nPartial text', 'x', true), 'Partial text');
+  assert.equal(ai.unwrapNote('\n<note>\nPartial text', 'x', true), 'Partial text');
 });
 
-test('a marker the result pairs up itself, or that the note has on the same side, is left alone', () => {
+test('a lone marker in a complete answer is content and is left alone', () => {
   const { ai } = loadRules();
-  assert.equal(ai.unwrapNote('<note>a</note> tail', 'x'), '<note>a</note> tail');
-  assert.equal(ai.unwrapNote('<note>\nPartial text', '<note> draft'), '<note>\nPartial text');
-  assert.equal(ai.unwrapNote('Result\n</note>', 'draft </note>'), 'Result\n</note>');
+  for (const complete of [
+    '<note>\nPartial text',
+    'Result\n</note>',
+    '    <note>\n    <to>Tove</to>\n\nThe block above opens a note element.',
+    '<note> is the tag that opens a note element.',
+    'The element is closed with </note>',
+    'Example:\n\n    <to>Tove</to>\n    </note>'
+  ]) {
+    assert.equal(ai.unwrapNote(complete, 'x'), complete);
+    assert.equal(ai.unwrapNote(complete, 'x', false), complete);
+  }
+});
+
+test('a cut-off answer keeps a lone marker that is indented, shares its line, closes, or that the note starts with', () => {
+  const { ai } = loadRules();
+  for (const cutOff of [
+    '    <note>\n    <to>Tove</to>',
+    '\n    <note>\n    <to>Tove</to>',
+    '<note> is the tag that opens',
+    'Result\n</note>',
+    'Example:\n\n    </note>'
+  ]) {
+    assert.equal(ai.unwrapNote(cutOff, 'x', true), cutOff);
+  }
+  assert.equal(ai.unwrapNote('<note>\nPartial text', '<note> draft', true), '<note>\nPartial text');
+  assert.equal(ai.unwrapNote('<note>a</note> tail', 'x', true), '<note>a</note> tail');
+});
+
+test('markers are only removed as a pair when the first one is closed by the last one', () => {
+  const { ai } = loadRules();
+  const blocks = '<note>A</note>\n\n<note>B</note>';
+  assert.equal(ai.unwrapNote(blocks, 'intro\n' + blocks), blocks);
+  assert.equal(ai.unwrapNote('<note>\nA <note>b</note> c\n</note>', 'x'), 'A <note>b</note> c');
+  const unbalanced = '<note>\nA `<note>` b\n</note>';
+  assert.equal(ai.unwrapNote(unbalanced, 'x'), unbalanced);
+});
+
+test('a pair of markers indented as Markdown code is content and is left alone', () => {
+  const { ai } = loadRules();
+  for (const code of [
+    '    <note>\n    <to>Tove</to>\n    </note>',
+    '\t<note>\n\t<to>Tove</to>\n\t</note>',
+    '\n    <note>\n    <to>Tove</to>\n    </note>\n',
+    '<note>\nText\n\n    <to>Tove</to>\n    </note>',
+    '<note>\r\nText\r\n\r\n\t</note>\r\n'
+  ]) {
+    assert.equal(ai.unwrapNote(code, 'x'), code);
+    assert.equal(ai.unwrapNote(code, 'x', true), code);
+  }
+  assert.equal(ai.unwrapNote('   <note>\nA\n   </note>', 'x'), 'A');
+  assert.equal(ai.unwrapNote('<note>\n    code</note>', 'x'), '    code');
+});
+
+test('a marker at one end is left alone when the answer holds other markers', () => {
+  const { ai } = loadRules();
+  const opens = '<note>A</note>\n\nUse `<note>` to open.';
+  assert.equal(ai.unwrapNote(opens, 'x', true), opens);
+  const closes = 'Use `</note>` to close.\n<note>A</note>';
+  assert.equal(ai.unwrapNote(closes, 'x', true), closes);
+});
+
+test('the interface language instruction keeps existing tags and gives no example tags', () => {
+  const { ai } = loadRules();
+  const organize = ai.buildPrompt('organize');
+  assert.match(organize, /existing #tags/);
+  assert.match(
+    ai.languageInstruction('ui', 'organize', 'zh_CN'),
+    /已有的 # 标签原样保留.*只有新增的标签才使用简体中文/
+  );
+  assert.match(ai.languageInstruction('ui', 'organize', 'en'), /Keep every existing #tag exactly as written/);
+  assert.match(ai.languageInstruction('ui', 'organize', 'ja'), /既にある # タグはそのまま保持/);
+  for (const language of ['zh_CN', 'en', 'ja']) {
+    assert.doesNotMatch(ai.languageInstruction('ui', 'summary', language), /#[^\s#]+ #[^\s#]+/, language);
+  }
 });
 
 test('the output language setting and the task together choose the language instruction', () => {
