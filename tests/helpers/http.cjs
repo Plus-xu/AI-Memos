@@ -80,4 +80,39 @@ function pendingFetch(requests) {
     });
 }
 
-module.exports = { serverFetch, pendingFetch };
+/**
+ * A fetch whose answers are event streams the test writes. Each request is pushed onto `requests` with
+ * send(chunk) to deliver text or bytes, end() to finish the stream and fail(error) to break it. As with a
+ * real fetch, aborting the request's signal rejects before the answer and breaks the stream after it.
+ */
+function streamingFetch(requests, { status = 200, type = 'text/event-stream' } = {}) {
+  const encoder = new TextEncoder();
+  const aborted = () => new DOMException('The operation was aborted.', 'AbortError');
+  return async (url, init = {}) => {
+    if (init.signal?.aborted) throw aborted();
+    let controller,
+      open = true;
+    const body = new ReadableStream({
+      start(value) {
+        controller = value;
+      }
+    });
+    const settle = action => {
+      if (open) action();
+      open = false;
+    };
+    const fail = error => settle(() => controller.error(error));
+    init.signal?.addEventListener('abort', () => fail(aborted()), { once: true });
+    requests.push({
+      ...optionsOf(url, init),
+      send: chunk => {
+        if (open) controller.enqueue(typeof chunk === 'string' ? encoder.encode(chunk) : chunk);
+      },
+      end: () => settle(() => controller.close()),
+      fail
+    });
+    return new Response(body, { status, headers: { 'Content-Type': type } });
+  };
+}
+
+module.exports = { serverFetch, pendingFetch, streamingFetch };

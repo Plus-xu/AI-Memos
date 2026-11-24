@@ -3,6 +3,25 @@ const assert = require('node:assert/strict');
 const { createChrome } = require('./helpers/chrome.cjs');
 const { createDom } = require('./helpers/dom.cjs');
 const { createIndexedDB } = require('./helpers/indexeddb.cjs');
+const { streamingFetch } = require('./helpers/http.cjs');
+
+test('fetch stand-in: a streamed answer delivers what the test sends, and an abort breaks it as a real fetch would', async () => {
+  const requests = [];
+  const fetcher = streamingFetch(requests);
+  const control = new AbortController();
+  const response = await fetcher('https://ai.example/v1', { method: 'POST', body: '{}', signal: control.signal });
+  assert.equal(response.headers.get('Content-Type'), 'text/event-stream');
+  assert.deepEqual([requests[0].url, requests[0].type, requests[0].data], ['https://ai.example/v1', 'POST', '{}']);
+  const reader = response.body.getReader();
+  requests[0].send('data: 1\n\n');
+  assert.equal(new TextDecoder().decode((await reader.read()).value), 'data: 1\n\n');
+  control.abort();
+  await assert.rejects(reader.read(), { name: 'AbortError' });
+  await assert.rejects(fetcher('https://ai.example/v1', { signal: control.signal }), { name: 'AbortError' });
+  const ended = await fetcher('https://ai.example/v1');
+  requests.at(-1).end();
+  assert.equal(await ended.text(), '');
+});
 
 const read = (area, keys) => new Promise(resolve => area.get(keys, resolve));
 
