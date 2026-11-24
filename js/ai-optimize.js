@@ -767,7 +767,8 @@ function optimizeWithAI(preset, $button) {
     return;
   }
 
-  AIReview.setBusy(true, optimizationConfig.task);
+  const control = new AbortController();
+  AIReview.setBusy(true, optimizationConfig.task, () => control.abort());
   setAIButtonLoading($button, true);
   const run = () =>
     new Promise((resolve, reject) => {
@@ -785,17 +786,21 @@ function optimizeWithAI(preset, $button) {
           data.userLanguage || getFallbackUserLanguage(),
           optimizationConfig.baseUrl,
           optimizationConfig.task,
-          optimizationConfig.prompt
+          optimizationConfig.prompt,
+          { signal: control.signal, onText: text => AIReview.stream(content, text, optimizationConfig.task) }
         ).then(result => {
-          AIReview.show(content, result.text, optimizationConfig.task, result.truncated);
-          $.message({ message: getLLMMessage(result.truncated ? 'aiTruncatedWarning' : 'aiReviewReady') });
+          // Why the result is not whole, if it is not: stopped, interrupted, or cut at the output limit.
+          const incomplete = result.interrupted || result.truncated;
+          AIReview.show(content, result.text, optimizationConfig.task, incomplete);
+          $.message({ message: getLLMMessage(AIWorkflow.incompleteMessage(incomplete) || 'aiReviewReady') });
           resolve();
         }, reject);
       });
     });
   return AIReview.withJob(optimizationConfig.task, run)
     .catch(error => {
-      $.message({ message: getLLMMessage('aiOptimizeFailed') + ' · ' + error.message });
+      // Stopping before anything arrived is what the user asked for, not a failure.
+      $.message({ message: error.stopped ? error.message : getLLMMessage('aiOptimizeFailed') + ' · ' + error.message });
     })
     .finally(() => {
       AIReview.setBusy(false);

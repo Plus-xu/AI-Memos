@@ -488,6 +488,9 @@
   "aiStopped": {
     "message": "Generation stopped. Your draft is unchanged."
   },
+  "aiStop": {
+    "message": "Stop"
+  },
   "aiEmpty": {
     "message": "The model returned no usable text."
   },
@@ -535,6 +538,12 @@
   },
   "aiTruncatedWarning": {
     "message": "The result was cut off at the output limit and is incomplete. You can raise the limit in settings."
+  },
+  "aiStoppedWarning": {
+    "message": "Generation was stopped, so the result is incomplete."
+  },
+  "aiInterruptedWarning": {
+    "message": "The connection dropped during generation, so the result is incomplete. You can retry."
   },
   "aiMaxTokensLabel": {
     "message": "Output limit (tokens). Blank uses the default of 8192; New API sends no limit when blank"

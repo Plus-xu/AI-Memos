@@ -417,3 +417,20 @@ test('no language instruction makes the local preview mistake the organizer or a
     }
   }
 });
+
+test('a review records why it is incomplete, and each reason has its own warning', () => {
+  const { ai } = loadRules();
+  const recorded = reason => ai.review('Draft', 'Result', 'organize', reason).truncated;
+  assert.deepEqual(['stopped', 'interrupted', true, 'max_tokens', false, undefined].map(recorded), [
+    'stopped',
+    'interrupted',
+    true,
+    true,
+    undefined,
+    undefined
+  ]);
+  assert.deepEqual(
+    ['stopped', 'interrupted', true, false, undefined].map(reason => ai.incompleteMessage(reason)),
+    ['aiStoppedWarning', 'aiInterruptedWarning', 'aiTruncatedWarning', '', '']
+  );
+});

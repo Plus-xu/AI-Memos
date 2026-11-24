@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { plain, flush } = require('./helpers/scripts.cjs');
 const { harness } = require('./helpers/environments.cjs');
+const { streamingFetch } = require('./helpers/http.cjs');
 
 test('AI results are persisted as a pending review without replacing the draft', () => {
   const state = harness();
@@ -432,4 +433,217 @@ test('the settings page shows the stored output language', () => {
   const unknown = harness({ sync: { llmOutputLanguage: 'zh' } });
   unknown.context.initLLMConfig();
   assert.equal(unknown.node('#llmOutputLanguage').val(), 'auto');
+});
+
+/** One event of an OpenAI stream, named after its type as the service names it. */
+const streamed = event => 'event: ' + event.type + '\ndata: ' + JSON.stringify(event) + '\n\n';
+const delta = text => streamed({ type: 'response.output_text.delta', delta: text });
+const completed = streamed({ type: 'response.completed', response: { status: 'completed' } });
+/** Long enough for an answer the test has written to be read and shown. */
+const shown = () => new Promise(resolve => setTimeout(resolve, 20));
+
+/** An editor whose AI answers are streams the test writes through state.requests. */
+function streamingEditor(options) {
+  const state = harness(options);
+  state.context.fetch = streamingFetch(state.requests);
+  return state;
+}
+
+test('text appears in the review panel while it streams, read-only and unsaved, then becomes the editable review', async () => {
+  const state = streamingEditor();
+  state.context.optimizeWithAI();
+  assert.equal(state.node('#aiReviewPanel').prop('hidden'), true, 'there is nothing to show before the first text');
+  state.requests[0].send(delta('Streamed '));
+  await shown();
+  assert.equal(state.node('#aiReviewPanel').prop('hidden'), false);
+  assert.equal(state.node('#aiReviewResult').val(), 'Streamed ');
+  assert.equal(state.node('#aiReviewOriginal').val(), 'Original draft');
+  assert.equal(state.node('#aiReviewResult').prop('readOnly'), true);
+  assert.equal(state.node('#aiReviewDiscard').prop('disabled'), true);
+  assert.equal(state.node('#aiReviewReplace').prop('disabled'), true);
+  assert.equal(state.node('#aiReviewWarning').prop('hidden'), true);
+  assert.equal(state.node('#aiReviewTask').text(), 'aiRunningTask: aiTask_organize');
+  assert.equal(state.local.memosAIReview, undefined, 'text that is still arriving is not stored');
+
+  state.requests[0].send(delta('result'));
+  state.requests[0].send(completed);
+  state.requests[0].end();
+  await shown();
+  assert.equal(state.context.AIReview.isBusy(), false);
+  assert.equal(state.node('#aiReviewResult').val(), 'Streamed result');
+  assert.equal(state.node('#aiReviewResult').prop('readOnly'), false);
+  assert.equal(state.node('#aiReviewDiscard').prop('disabled'), false);
+  assert.equal(state.node('#aiReviewReplace').prop('disabled'), false);
+  assert.equal(state.node('#aiReviewTask').text(), 'aiExecutedTask: aiTask_organize');
+  assert.deepEqual(
+    [state.local.memosAIReview.result, state.local.memosAIReview.truncated],
+    ['Streamed result', undefined]
+  );
+  assert.equal(state.messages.at(-1), 'aiReviewReady');
+  assert.equal(state.node('#aiStop').prop('hidden'), true, 'nothing is left to stop');
+});
+
+test('an answer cut at the output limit reaches the review marked as truncated', async () => {
+  const state = streamingEditor();
+  state.context.optimizeWithAI();
+  state.requests[0].send(delta('As far as the limit allowed'));
+  state.requests[0].send(streamed({ type: 'response.incomplete', response: { status: 'incomplete' } }));
+  state.requests[0].end();
+  await shown();
+  assert.deepEqual(
+    [state.local.memosAIReview.result, state.local.memosAIReview.truncated],
+    ['As far as the limit allowed', true]
+  );
+  assert.match(state.node('#aiReviewWarning').text(), /aiTruncatedWarning/);
+  assert.equal(state.messages.at(-1), 'aiTruncatedWarning');
+});
+
+test('the stop button appears only while this editor generates, and stopping keeps the partial text for review', async () => {
+  const state = streamingEditor();
+  // Another editor's generation, as this one hears of it.
+  state.context.AIReview.setBusy(true, 'summary');
+  assert.notEqual(state.node('#aiStop').prop('hidden'), false, 'a generation started elsewhere cannot be stopped here');
+  state.context.AIReview.setBusy(false);
+
+  state.context.optimizeWithAI();
+  assert.equal(state.node('#aiStop').prop('hidden'), false);
+  state.requests[0].send(delta('Partial result'));
+  await shown();
+  state.node('#aiStop').click();
+  assert.equal(state.node('#aiStop').prop('hidden'), true, 'the button goes as soon as it is pressed');
+  await shown();
+  assert.equal(state.context.AIReview.isBusy(), false);
+  assert.equal(state.node('#content').val(), 'Original draft');
+  assert.deepEqual(
+    [state.local.memosAIReview.result, state.local.memosAIReview.truncated],
+    ['Partial result', 'stopped']
+  );
+  assert.equal(state.node('#aiReviewResult').val(), 'Partial result');
+  assert.equal(state.node('#aiReviewResult').prop('readOnly'), false);
+  assert.equal(state.node('#aiReviewWarning').prop('hidden'), false);
+  assert.match(state.node('#aiReviewWarning').text(), /aiStoppedWarning/);
+  assert.equal(state.messages.at(-1), 'aiStoppedWarning');
+  assert.equal(state.node('#aiStop').prop('hidden'), true);
+});
+
+test('stopping before any text leaves the draft and an earlier pending review as they were', async () => {
+  const state = streamingEditor();
+  state.context.AIReview.show('Original draft', 'Earlier result', 'summary');
+  const unchanged = () => {
+    assert.equal(state.context.AIReview.isBusy(), false);
+    assert.equal(state.node('#content').val(), 'Original draft');
+    assert.equal(state.local.memosAIReview.result, 'Earlier result');
+    assert.equal(state.node('#aiReviewPanel').prop('hidden'), false);
+    assert.equal(state.node('#aiReviewResult').val(), 'Earlier result');
+    assert.equal(state.node('#aiReviewTask').text(), 'aiExecutedTask: aiTask_summary');
+  };
+
+  state.context.optimizeWithAI();
+  state.node('#aiStop').click();
+  await shown();
+  assert.equal(state.messages.at(-1), 'aiStopped', 'a stop is reported as a stop, not as a failure');
+  unchanged();
+
+  state.context.optimizeWithAI();
+  state.requests[1].fail(new TypeError('network error'));
+  await shown();
+  assert.equal(state.messages.at(-1), 'aiOptimizeFailed · aiInterrupted');
+  unchanged();
+});
+
+test('a connection lost midway leaves the partial text marked as interrupted', async () => {
+  const state = streamingEditor();
+  state.context.optimizeWithAI();
+  state.requests[0].send(delta('Half an answer'));
+  await shown();
+  state.requests[0].fail(new TypeError('network error'));
+  await shown();
+  assert.equal(state.context.AIReview.isBusy(), false);
+  assert.equal(state.node('#content').val(), 'Original draft');
+  assert.deepEqual(
+    [state.local.memosAIReview.result, state.local.memosAIReview.truncated],
+    ['Half an answer', 'interrupted']
+  );
+  assert.match(state.node('#aiReviewWarning').text(), /aiInterruptedWarning/);
+  assert.equal(state.messages.at(-1), 'aiInterruptedWarning');
+});
+
+test('while text streams, adopting, discarding and editing the result do nothing', async () => {
+  const state = streamingEditor();
+  state.context.AIReview.show('Original draft', 'Earlier result', 'summary');
+  state.context.optimizeWithAI();
+  state.requests[0].send(delta('Streaming'));
+  await shown();
+  state.context.optimizeWithAI();
+  assert.equal(state.requests.length, 1, 'a second click starts nothing');
+  state.node('#aiReviewReplace').click();
+  state.node('#aiReviewAppend').click();
+  assert.equal(state.node('#content').val(), 'Original draft');
+  state.node('#aiReviewDiscard').click();
+  assert.equal(state.node('#aiReviewPanel').prop('hidden'), false);
+  state.node('#aiReviewResult').val('Typed over').trigger('input');
+  assert.equal(state.local.memosAIReview.result, 'Earlier result', 'the stored review is neither discarded nor edited');
+
+  state.requests[0].send(delta(' text'));
+  state.requests[0].send(completed);
+  state.requests[0].end();
+  await shown();
+  assert.equal(state.node('#aiReviewResult').val(), 'Streaming text');
+  state.node('#aiReviewResult').val('Edited afterwards').trigger('input');
+  assert.equal(state.local.memosAIReview.result, 'Edited afterwards', 'the finished review can be edited again');
+});
+
+test('a job seen through storage does not take the stop button away from the editor that started it', async () => {
+  const state = streamingEditor();
+  state.context.optimizeWithAI();
+  // An editor hears of its own job as every editor does, then waits for the lock its generation holds.
+  state.context.navigator = { locks: { request: () => new Promise(() => {}) } };
+  state.context.chrome.storage.onChanged.emit({ memosAIJob: { newValue: { id: 'job-1', task: 'organize' } } }, 'local');
+  assert.equal(state.node('#aiStop').prop('hidden'), false);
+  state.node('#aiStop').click();
+  await shown();
+  assert.equal(state.messages.at(-1), 'aiStopped');
+});
+
+test('the result box follows the arriving text while the reader is at its end, and stays put once they scroll up', () => {
+  const state = harness();
+  const box = state.node('#aiReviewResult')[0];
+  Object.assign(box, { scrollHeight: 500, clientHeight: 100, scrollTop: 400 });
+  state.context.AIReview.setBusy(true, 'organize', () => {});
+  state.context.AIReview.stream('Original draft', 'Some text', 'organize');
+  assert.equal(box.scrollTop, 500);
+  box.scrollTop = 120;
+  state.context.AIReview.stream('Original draft', 'Some text and more', 'organize');
+  assert.equal(box.scrollTop, 120);
+});
+
+test('text of a generation gives way to its result once there is one, and to what was there before when there is none', () => {
+  const state = harness();
+  const arriving = () => {
+    state.context.AIReview.setBusy(true, 'organize', () => {});
+    state.context.AIReview.stream('Original draft', 'Arriving text', 'organize');
+  };
+  state.context.AIReview.show('Original draft', 'Earlier result', 'summary', true);
+  assert.equal(state.node('#aiReviewWarning').prop('hidden'), false);
+  arriving();
+  assert.equal(state.node('#aiReviewResult').val(), 'Arriving text');
+  assert.equal(state.node('#aiReviewWarning').prop('hidden'), true, 'the warning belongs to the review underneath');
+  state.context.AIReview.setBusy(false);
+  assert.equal(state.node('#aiReviewResult').val(), 'Earlier result');
+  assert.match(state.node('#aiReviewWarning').text(), /aiTruncatedWarning/);
+  assert.equal(state.node('#aiReviewResult').prop('readOnly'), false);
+  assert.equal(state.node('#aiReviewDiscard').prop('disabled'), false);
+  assert.equal(state.node('#aiReviewTask').text(), 'aiExecutedTask: aiTask_summary');
+
+  arriving();
+  state.context.AIReview.show('Original draft', 'Final result', 'organize');
+  assert.equal(state.node('#aiReviewResult').val(), 'Final result');
+  assert.equal(state.node('#aiReviewResult').prop('readOnly'), false, 'a result can be edited as soon as it is final');
+  state.context.AIReview.setBusy(false);
+
+  state.node('#aiReviewDiscard').click();
+  arriving();
+  assert.equal(state.node('#aiReviewPanel').prop('hidden'), false);
+  state.context.AIReview.setBusy(false);
+  assert.equal(state.node('#aiReviewPanel').prop('hidden'), true, 'with no review to return to, the panel closes');
 });

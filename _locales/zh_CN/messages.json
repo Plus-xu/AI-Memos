@@ -488,6 +488,9 @@
   "aiStopped": {
     "message": "已停止生成，草稿未改动。"
   },
+  "aiStop": {
+    "message": "停止"
+  },
   "aiEmpty": {
     "message": "模型没有返回可用的文本。"
   },
@@ -535,6 +538,12 @@
   },
   "aiTruncatedWarning": {
     "message": "结果在输出上限处被截断，内容不完整。可在设置中调高输出上限。"
+  },
+  "aiStoppedWarning": {
+    "message": "生成已手动停止，结果不完整。"
+  },
+  "aiInterruptedWarning": {
+    "message": "连接在生成途中中断，结果不完整，可以重试。"
   },
   "aiMaxTokensLabel": {
     "message": "输出上限（token）。留空使用默认值 8192；New API 留空时不传上限"

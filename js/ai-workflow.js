@@ -178,8 +178,16 @@ var AIWorkflow = (function () {
   function review(input, result, task, truncated) {
     if (typeof input !== 'string' || typeof result !== 'string' || !result.trim()) throw new Error('invalid_ai_result');
     var value = { input: input, result: result, task: normalizeTask(task), createdAt: new Date().toISOString() };
-    if (truncated) value.truncated = true;
+    // Why the result is not whole: stopped by the user, interrupted on the way, or (true) cut at the output limit.
+    if (truncated) value.truncated = truncated === 'stopped' || truncated === 'interrupted' ? truncated : true;
     return value;
+  }
+
+  /** The message key of the warning for a result that is not whole, by the reason recorded with it. */
+  function incompleteMessage(truncated) {
+    if (truncated === 'stopped') return 'aiStoppedWarning';
+    if (truncated === 'interrupted') return 'aiInterruptedWarning';
+    return truncated ? 'aiTruncatedWarning' : '';
   }
 
   function missingReferences(value) {
@@ -213,6 +221,7 @@ var AIWorkflow = (function () {
     normalizeOutputLanguage: normalizeOutputLanguage,
     languageInstruction: languageInstruction,
     review: review,
+    incompleteMessage: incompleteMessage,
     missingReferences: missingReferences,
     apply: apply,
     undo: undo

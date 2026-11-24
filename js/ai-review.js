@@ -6,6 +6,10 @@ var AIReview = (function () {
   var lastTransaction = null;
   var busy = false;
   var runningTask = 'organize';
+  // The answer this editor is generating, as { input, text, task }: shown while it arrives, never stored.
+  var streaming = null;
+  // Stops the generation this editor started; only that editor has a stop button.
+  var stopGeneration = null;
 
   function message(key) {
     return getLLMMessage(key, key);
@@ -41,36 +45,57 @@ var AIReview = (function () {
       .text(message('aiRunningTask').replace('{task}', taskName(runningTask)))
       .prop('hidden', !busy);
     $('#aiReviewTask').text(
-      currentReview ? message('aiExecutedTask').replace('{task}', taskName(currentReview.task)) : ''
+      streaming
+        ? message('aiRunningTask').replace('{task}', taskName(streaming.task))
+        : currentReview
+          ? message('aiExecutedTask').replace('{task}', taskName(currentReview.task))
+          : ''
     );
   }
 
   function renderWarning() {
     var warnings = [];
-    var empty = !currentReview || !currentReview.result.trim();
-    if (currentReview && $('#content').val() !== currentReview.input) warnings.push(message('aiEditConflict'));
-    if (currentReview && currentReview.truncated) warnings.push(message('aiTruncatedWarning'));
-    if (currentReview && AIWorkflow.missingReferences(currentReview).length) warnings.push(message('aiMissingLinks'));
+    // Text that is still arriving is not a review yet: nothing is said about it and it cannot be adopted.
+    var review = streaming ? null : currentReview;
+    var empty = !review || !review.result.trim();
+    if (review && $('#content').val() !== review.input) warnings.push(message('aiEditConflict'));
+    if (review && review.truncated) warnings.push(message(AIWorkflow.incompleteMessage(review.truncated)));
+    if (review && AIWorkflow.missingReferences(review).length) warnings.push(message('aiMissingLinks'));
     $('#aiReviewWarning').text(warnings.join(' ')).prop('hidden', !warnings.length);
-    $('#aiReviewReplace').prop('disabled', busy || empty || $('#content').val() !== currentReview.input);
+    $('#aiReviewReplace').prop('disabled', busy || empty || $('#content').val() !== review.input);
     $('#aiReviewAppend').prop('disabled', busy || empty);
     $('#aiUndo').prop('disabled', !lastTransaction || busy);
   }
 
   function render() {
-    $('#aiReviewPanel').prop('hidden', !currentReview);
-    if (currentReview) {
-      $('#aiReviewOriginal').val(currentReview.input);
-      if ($('#aiReviewResult').val() !== currentReview.result) $('#aiReviewResult').val(currentReview.result);
+    var shown = streaming || currentReview;
+    $('#aiReviewPanel').prop('hidden', !shown);
+    if (shown) {
+      var result = streaming ? streaming.text : currentReview.result;
+      $('#aiReviewOriginal').val(shown.input);
+      if ($('#aiReviewResult').val() !== result) $('#aiReviewResult').val(result);
     }
+    $('#aiReviewResult').prop('readOnly', !!streaming);
+    $('#aiReviewDiscard').prop('disabled', !!streaming);
     renderWarning();
     refreshTaskHint();
   }
 
   function show(input, result, task, truncated) {
     currentReview = AIWorkflow.review(input, result, task, truncated);
+    streaming = null;
     persist();
     render();
+  }
+
+  /** Shows the text of a generation still running, in place of a pending review, until setBusy(false). */
+  function stream(input, text, task) {
+    var box = $('#aiReviewResult')[0];
+    // The box keeps up with the text only for a reader who is at its end.
+    var follow = box.scrollHeight - box.scrollTop - box.clientHeight < 8;
+    streaming = { input: input, text: text, task: AIWorkflow.normalizeTask(task) };
+    render();
+    if (follow) box.scrollTop = box.scrollHeight;
   }
 
   function adopt(mode) {
@@ -117,12 +142,21 @@ var AIReview = (function () {
   const jobKey = 'memosAIJob';
   const jobLock = 'memos-ai-generation';
 
-  function setBusy(value, task) {
+  /**
+   * `stop`, given by the editor that starts a generation, is what its stop button calls. An editor also
+   * hears of its own job through storage, without one: that leaves the button as it is.
+   */
+  function setBusy(value, task, stop) {
     busy = value;
     if (task) runningTask = AIWorkflow.normalizeTask(task);
+    if (typeof stop === 'function') stopGeneration = stop;
+    if (!busy) {
+      stopGeneration = null;
+      streaming = null;
+    }
+    $('#aiStop').prop('hidden', !stopGeneration);
     $('#ai_optimize, #ai_quick_toggle').prop('disabled', busy);
-    renderWarning();
-    refreshTaskHint();
+    render();
   }
 
   // A closed editor releases its Web Lock even if its request never finished.
@@ -190,23 +224,32 @@ var AIReview = (function () {
       adopt('append');
     });
     $('#aiReviewDiscard').click(function () {
+      if (streaming) return;
       currentReview = null;
       persist();
       render();
     });
     $('#aiReviewResult').on('input', function () {
-      if (!currentReview) return;
+      if (!currentReview || streaming) return;
       currentReview.result = this.value;
       persist();
       renderWarning();
     });
     $('#content').on('input', renderWarning);
     $('#aiUndo').click(undo);
+    $('#aiStop').click(function () {
+      var stop = stopGeneration;
+      if (!stop) return;
+      stopGeneration = null;
+      $('#aiStop').prop('hidden', true);
+      stop();
+    });
   }
 
   return {
     init: init,
     show: show,
+    stream: stream,
     refresh: renderWarning,
     refreshTaskHint: refreshTaskHint,
     refreshTexts: refreshTexts,
