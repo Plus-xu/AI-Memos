@@ -40,9 +40,11 @@ function harness(options = {}) {
     AbortController,
     AbortSignal,
     Blob,
+    TextDecoder,
     fetch: pendingFetch(requests),
     window: { addEventListener() {} },
     setTimeout() {},
+    clearTimeout() {},
     console: { log() {}, error() {}, warn() {} },
     Clipper: { init() {} },
     MemosAPI: { normalizeBaseUrl: value => value && value.replace(/\/+$/, '') + '/' }
@@ -50,7 +52,7 @@ function harness(options = {}) {
   const load = file => {
     loadScripts(context, [file]);
   };
-  loadScripts(context, ['http', 'llm-config', 'ai-workflow', 'ai-review', 'ai-optimize']);
+  loadScripts(context, ['http', 'llm-config', 'ai-workflow', 'ai-review', 'llm-transport', 'ai-optimize']);
   node('#content').val(options.content === undefined ? 'Original draft' : options.content);
   node('#aiTask').val('organize');
   node('#llmProvider').val('openai');
@@ -78,12 +80,24 @@ function runtime(fetcher) {
     URL,
     URLSearchParams,
     TextEncoder,
+    TextDecoder,
+    AbortController,
     AbortSignal,
+    setTimeout,
+    clearTimeout,
     crypto: webcrypto,
     fetch: fetcher,
     console
   });
-  loadScripts(ctx, ['http', 'llm-config', 'draft-storage', 'model-catalog', 'ai-workflow', 'ai-optimize']);
+  loadScripts(ctx, [
+    'http',
+    'llm-config',
+    'draft-storage',
+    'model-catalog',
+    'ai-workflow',
+    'llm-transport',
+    'ai-optimize'
+  ]);
   return { ctx, bucket, sync, config: vm.runInContext('LLM_CONFIG', ctx) };
 }
 

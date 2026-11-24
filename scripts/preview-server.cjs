@@ -229,7 +229,7 @@ function requestRuntime() {
   preview.request = (url, options) => {
     const method = String(options.method || 'GET').toUpperCase();
     // An AI call is known by its endpoint; any other API route is Memos, whatever address the settings hold.
-    const ai = method === 'POST' && /\\/(responses|chat\\/completions|messages)$|:generateContent$/.test(url.pathname);
+    const ai = method === 'POST' && /\\/(responses|chat\\/completions|messages)$|:(?:generateContent|streamGenerateContent)$/.test(url.pathname);
     const match = !ai && url.pathname.match(/\\/api\\/(?:v1\\/)?(.*)$/);
     if (!ai && !match) return null;
     preview.requests.push({ kind: ai ? 'ai' : 'memos', method, path: url.pathname });

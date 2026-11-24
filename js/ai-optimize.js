@@ -1,4 +1,4 @@
-/* global AIReview, AIWorkflow, Clipper, Http, LLM_CONFIG, ModelCatalog, memoSaveInProgress, uiMessage */
+/* global AIReview, AIWorkflow, Clipper, LLMTransport, LLM_CONFIG, ModelCatalog, memoSaveInProgress, uiMessage */
 /* exported persistLLMState */
 /**
  * AI优化功能实现
@@ -803,199 +803,21 @@ function optimizeWithAI(preset, $button) {
     });
 }
 
-function normalizeProviderBaseUrl(baseUrl) {
-  return ModelCatalog.gateway(baseUrl);
-}
-
-function buildOpenAIResponsesRequest(providerConfig, model, apiKey, systemPrompt, userContent) {
-  return {
-    url: providerConfig.apiUrl,
-    headers: {
-      Authorization: 'Bearer ' + apiKey
-    },
-    body: {
-      model: model,
-      instructions: systemPrompt,
-      input: userContent,
-      max_output_tokens: outputTokenLimit(providerConfig)
-    }
-  };
-}
-
-function buildChatCompletionsRequest(providerConfig, model, apiKey, systemPrompt, userContent, baseUrl) {
-  var apiUrl = providerConfig.apiUrl;
-  if (providerConfig.requiresBaseUrl) {
-    var normalizedBaseUrl = normalizeProviderBaseUrl(baseUrl);
-    if (!normalizedBaseUrl) {
-      throw new Error(chrome.i18n.getMessage('aiBaseUrlRequired') || 'Please enter Base URL');
-    }
-    apiUrl = normalizedBaseUrl + '/chat/completions';
+// The chat endpoint of a New API gateway. An address that cannot be one is refused in words.
+function gatewayChatUrl(baseUrl) {
+  try {
+    return ModelCatalog.gateway(baseUrl) + '/chat/completions';
+  } catch (error) {
+    throw new Error(getLLMMessage('modelGatewayUrl'), { cause: error });
   }
-
-  return {
-    url: apiUrl,
-    headers: {
-      Authorization: 'Bearer ' + apiKey
-    },
-    body: {
-      model: model,
-      messages: [
-        {
-          role: 'system',
-          content: systemPrompt
-        },
-        {
-          role: 'user',
-          content: userContent
-        }
-      ],
-      ...(outputTokenLimit(providerConfig) ? { max_tokens: outputTokenLimit(providerConfig) } : {})
-    }
-  };
-}
-
-function buildGeminiRequest(providerConfig, model, apiKey, systemPrompt, userContent) {
-  return {
-    url: providerConfig.apiUrl.replace('{model}', encodeURIComponent(model)),
-    headers: { 'x-goog-api-key': apiKey },
-    body: {
-      systemInstruction: {
-        parts: [
-          {
-            text: systemPrompt
-          }
-        ]
-      },
-      contents: [
-        {
-          role: 'user',
-          parts: [
-            {
-              text: userContent
-            }
-          ]
-        }
-      ],
-      generationConfig: {
-        maxOutputTokens: outputTokenLimit(providerConfig)
-      }
-    }
-  };
-}
-
-function buildAnthropicRequest(providerConfig, model, apiKey, systemPrompt, userContent) {
-  return {
-    url: providerConfig.apiUrl,
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': providerConfig.anthropicVersion,
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
-    body: {
-      model: model,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: userContent
-        }
-      ],
-      max_tokens: outputTokenLimit(providerConfig)
-    }
-  };
-}
-
-function buildLLMRequest(providerConfig, model, apiKey, systemPrompt, userContent, baseUrl) {
-  if (providerConfig.endpointType === 'openai-responses') {
-    return buildOpenAIResponsesRequest(providerConfig, model, apiKey, systemPrompt, userContent);
-  }
-  if (providerConfig.endpointType === 'chat-completions') {
-    return buildChatCompletionsRequest(providerConfig, model, apiKey, systemPrompt, userContent, baseUrl);
-  }
-  if (providerConfig.endpointType === 'gemini') {
-    return buildGeminiRequest(providerConfig, model, apiKey, systemPrompt, userContent);
-  }
-  if (providerConfig.endpointType === 'anthropic') {
-    return buildAnthropicRequest(providerConfig, model, apiKey, systemPrompt, userContent);
-  }
-
-  throw new Error('未知的提供商类型');
-}
-
-function extractOpenAIResponsesText(response) {
-  if (response.output_text) {
-    return response.output_text;
-  }
-
-  if (Array.isArray(response.output)) {
-    return response.output
-      .flatMap(function (item) {
-        return item.content || [];
-      })
-      .map(function (part) {
-        return part.type === 'output_text' ? part.text || '' : '';
-      })
-      .filter(Boolean)
-      .join('');
-  }
-
-  return '';
-}
-
-function extractChatCompletionsText(response) {
-  if (response.choices && response.choices.length > 0 && response.choices[0].message) {
-    const content = response.choices[0].message.content;
-    if (Array.isArray(content))
-      return content
-        .filter(part => part.type === 'text')
-        .map(part => part.text)
-        .join('');
-    return typeof content === 'string' ? content : '';
-  }
-  return '';
-}
-
-function extractGeminiText(response) {
-  var candidate = response.candidates && response.candidates[0];
-  var parts = candidate && candidate.content && candidate.content.parts;
-  if (!Array.isArray(parts)) {
-    return '';
-  }
-  return parts
-    .map(function (part) {
-      return part.thought ? '' : part.text || '';
-    })
-    .join('');
-}
-
-function extractAnthropicText(response) {
-  if (!Array.isArray(response.content)) {
-    return '';
-  }
-  return response.content
-    .map(function (part) {
-      return part.type === 'text' ? part.text || '' : '';
-    })
-    .join('');
-}
-
-function extractLLMText(providerConfig, response) {
-  if (providerConfig.endpointType === 'openai-responses') {
-    return extractOpenAIResponsesText(response);
-  }
-  if (providerConfig.endpointType === 'chat-completions') {
-    return extractChatCompletionsText(response);
-  }
-  if (providerConfig.endpointType === 'gemini') {
-    return extractGeminiText(response);
-  }
-  if (providerConfig.endpointType === 'anthropic') {
-    return extractAnthropicText(response);
-  }
-  return '';
 }
 
 function extractLLMErrorMessage(xhr) {
+  // An error the server reported inside its stream, or a stream that closed before saying it was done.
+  if (xhr.statusText === 'stream') {
+    const cause = typeof xhr.reason === 'string' ? xhr.reason.trim().slice(0, 240) : '';
+    return getLLMMessage('aiInterrupted') + (cause ? ' (' + cause + ')' : '');
+  }
   if (xhr.status === 401 || xhr.status === 403 || xhr.status === 404) return getLLMMessage('aiUnavailable');
   if (xhr.status === 429) return getLLMMessage('requestLimited');
   if (!xhr.status || xhr.statusText === 'timeout') return getLLMMessage('aiInterrupted');
@@ -1006,8 +828,25 @@ function extractLLMErrorMessage(xhr) {
   return getLLMMessage('apiFailed') + ' (HTTP ' + xhr.status + ')' + (detail ? ': ' + detail : '');
 }
 
-// 调用LLM API
-function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl, task, customPrompt) {
+/**
+ * 调用LLM API
+ *
+ * Resolves with { text, truncated }. A generation that was cut off after it produced visible text resolves
+ * with that text and `interrupted`: 'stopped' when the caller's `signal` stopped it, 'interrupted' otherwise.
+ * One stopped before any text rejects with an error marked `stopped`. While the answer streams,
+ * onText(text) receives what there is so far, without an echoed <note> marker.
+ */
+function callLLMAPI(
+  provider,
+  model,
+  apiKey,
+  userContent,
+  userLanguage,
+  baseUrl,
+  task,
+  customPrompt,
+  { signal, onText } = {}
+) {
   return new Promise(function (resolve, reject) {
     const providerConfig = LLM_CONFIG.providers[provider];
     if (!providerConfig) {
@@ -1029,45 +868,53 @@ function callLLMAPI(provider, model, apiKey, userContent, userLanguage, baseUrl,
 
     let llmRequest;
     try {
-      llmRequest = buildLLMRequest(
-        providerConfig,
-        model,
-        apiKey,
-        systemPrompt,
-        AIWorkflow.wrapNote(userContent),
-        baseUrl
-      );
+      llmRequest = LLMTransport.request(providerConfig, {
+        model: model,
+        apiKey: apiKey,
+        system: systemPrompt,
+        user: AIWorkflow.wrapNote(userContent),
+        maxTokens: outputTokenLimit(providerConfig),
+        apiUrl: providerConfig.requiresBaseUrl ? gatewayChatUrl(baseUrl) : undefined
+      });
     } catch (error) {
       reject(error);
       return;
     }
 
+    const stopped = () => Object.assign(new Error(getLLMMessage('aiStopped')), { stopped: true });
+    let shown = '';
     // 发送请求
-    Http.json({
-      url: llmRequest.url,
-      method: 'POST',
-      headers: llmRequest.headers,
-      body: llmRequest.body,
-      timeout: 90000
+    LLMTransport.generate(providerConfig.endpointType, llmRequest, {
+      signal: signal,
+      onText:
+        onText &&
+        function (text) {
+          // An answer still arriving is as good as cut off: a marker echoed at its start is not shown.
+          const visible = AIWorkflow.unwrapNote(text, userContent, true);
+          if (visible === shown) return;
+          shown = visible;
+          onText(visible);
+        }
     })
       .then(
         function (answer) {
           // 提取优化后的内容
-          const response = answer || {};
-          const finish =
-            response.stop_reason || response.choices?.[0]?.finish_reason || response.candidates?.[0]?.finishReason;
-          const truncated = ['max_tokens', 'length', 'MAX_TOKENS'].includes(finish) || response.status === 'incomplete';
-          const extracted = extractLLMText(providerConfig, response);
-          const optimizedContent =
-            typeof extracted === 'string' ? AIWorkflow.unwrapNote(extracted, userContent, truncated) : extracted;
-          if (typeof optimizedContent === 'string' && optimizedContent.trim()) {
-            resolve({ text: optimizedContent, truncated: truncated });
+          const text = AIWorkflow.unwrapNote(answer.text, userContent, answer.truncated);
+          if (text.trim()) {
+            const result = { text: text, truncated: answer.truncated };
+            if (answer.interrupted) result.interrupted = answer.interrupted;
+            resolve(result);
+          } else if (answer.interrupted === 'stopped') {
+            reject(stopped());
           } else {
-            reject(new Error(getLLMMessage(truncated ? 'aiTruncated' : 'aiEmpty')));
+            const reason = answer.interrupted ? 'aiInterrupted' : answer.truncated ? 'aiTruncated' : 'aiEmpty';
+            reject(new Error(getLLMMessage(reason)));
           }
         },
-        function (xhr) {
-          reject(new Error(extractLLMErrorMessage(xhr)));
+        function (failure) {
+          // Anything that is not a failed request is a defect, and is reported as what it is.
+          if (!failure || typeof failure.status !== 'number') reject(failure);
+          else reject(failure.statusText === 'abort' ? stopped() : new Error(extractLLMErrorMessage(failure)));
         }
       )
       .catch(reject);

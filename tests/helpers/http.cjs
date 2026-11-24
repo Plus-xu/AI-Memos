@@ -4,7 +4,11 @@
  * ({ status, statusText, responseJSON, getResponseHeader }). These helpers turn that into what fetch gives.
  */
 
-/** A response with just what js/http.js reads; it settles within microtasks, unlike a streamed Response. */
+/**
+ * A response with just what js/http.js reads of an answer that arrives whole: it has no body to read piece
+ * by piece, so stream() takes its text in one go as json() does. It settles within microtasks, unlike a
+ * real Response.
+ */
 function reply(status, body, headers = {}) {
   return {
     ok: status >= 200 && status < 300,

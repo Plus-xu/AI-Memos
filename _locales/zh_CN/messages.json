@@ -485,6 +485,9 @@
   "aiInterrupted": {
     "message": "AI 请求中断，草稿仍在，可以重试。"
   },
+  "aiStopped": {
+    "message": "已停止生成，草稿未改动。"
+  },
   "aiEmpty": {
     "message": "模型没有返回可用的文本。"
   },

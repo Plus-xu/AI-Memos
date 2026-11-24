@@ -30,7 +30,7 @@ const transports = [
   [
     'gemini',
     'gemini-4-hydrogen',
-    '/v1beta/models/gemini-4-hydrogen:generateContent',
+    '/v1beta/models/gemini-4-hydrogen:streamGenerateContent',
     'x-goog-api-key',
     null,
     { candidates: [{ content: { parts: [{ thought: true, text: 'omit' }, { text: 'answer' }] } }] }
@@ -76,7 +76,9 @@ for (const [provider, model, route, header, limit, response] of transports) {
     const body = JSON.parse(request.data),
       url = new URL(request.url);
     assert.equal(url.pathname, route);
-    assert.equal(url.search, '');
+    // Every protocol asks for a stream: Gemini in its address, the others in the body.
+    assert.equal(url.search, provider === 'gemini' ? '?alt=sse' : '');
+    assert.equal(body.stream, provider === 'gemini' ? undefined : true);
     assert.equal(request.headers[header], header === 'Authorization' ? 'Bearer fixture-key' : 'fixture-key');
     assert.equal(JSON.stringify(body).includes('fixture-key'), false);
     assert.equal(JSON.stringify(body).includes('temperature'), false);

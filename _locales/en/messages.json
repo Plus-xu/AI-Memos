@@ -485,6 +485,9 @@
   "aiInterrupted": {
     "message": "AI request interrupted. Your draft is available for retry."
   },
+  "aiStopped": {
+    "message": "Generation stopped. Your draft is unchanged."
+  },
   "aiEmpty": {
     "message": "The model returned no usable text."
   },
