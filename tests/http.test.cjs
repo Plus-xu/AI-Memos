@@ -494,3 +494,71 @@ test('an error thrown by onEvent is not turned into a request failure', async ()
   );
   assert.equal(calls[0][1].signal.aborted, true, 'the request is given up, not left open with nobody reading');
 });
+
+test('a stream is over once onEvent says so: nothing later is delivered, and the connection is released', async () => {
+  const requests = [];
+  const events = [];
+  const { http } = loadHttp(streamingFetch(requests));
+  const reading = http.stream({
+    url: 'https://ai.example/v1',
+    body: {},
+    onEvent(data) {
+      events.push(data);
+      return data === 'last';
+    }
+  });
+  await settle();
+  requests[0].send('data: first\n\ndata: last\n\ndata: late\n\n');
+  const result = await Promise.race([reading, wait(1000).then(() => 'still reading')]);
+  assert.deepEqual(plain(result), { streamed: true });
+  assert.deepEqual(events, ['first', 'last']);
+  // An aborted request no longer takes what the server sends.
+  requests[0].send('data: more\n\n');
+  await settle();
+  assert.deepEqual(events, ['first', 'last']);
+});
+
+test('a refusal carries its body as text, whether or not it is JSON', async () => {
+  const { http } = loadHttp(async () => new Response('No streaming here', { status: 400 }));
+  const refused = await failure(http.stream({ url: 'https://ai.example/v1', body: {}, onEvent() {} }));
+  assert.deepEqual([refused.status, refused.responseJSON, refused.responseText], [400, undefined, 'No streaming here']);
+});
+
+test('afterPiece is called once for the events that arrived together, and after the last of a stream', async () => {
+  const requests = [];
+  const log = [];
+  const { http } = loadHttp(streamingFetch(requests));
+  const reading = http.stream({
+    url: 'https://ai.example/v1',
+    body: {},
+    onEvent(data) {
+      log.push(data);
+      return data === 'last';
+    },
+    afterPiece: () => log.push('|')
+  });
+  await settle();
+  requests[0].send('data: a\n\ndata: b\n\ndata: c\n\n');
+  await settle();
+  assert.deepEqual(log, ['a', 'b', 'c', '|']);
+  requests[0].send('data: d\n\ndata: last\n\ndata: late\n\n');
+  assert.deepEqual(plain(await reading), { streamed: true });
+  assert.deepEqual(log, ['a', 'b', 'c', '|', 'd', 'last', '|']);
+
+  // An event the stream closes in the middle of is handed over at the close.
+  const closing = [];
+  const closed = loadHttp(streamingFetch(closing));
+  const tail = [];
+  const result = closed.http.stream({
+    url: 'https://ai.example/v1',
+    body: {},
+    onEvent: data => void tail.push(data),
+    afterPiece: () => tail.push('|')
+  });
+  await settle();
+  closing[0].send('data: unfinished');
+  await settle();
+  closing[0].end();
+  await result;
+  assert.deepEqual(tail.slice(-2), ['unfinished', '|']);
+});

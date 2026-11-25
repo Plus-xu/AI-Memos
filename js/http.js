@@ -1,14 +1,16 @@
 /* exported Http */
 /**
  * JSON requests over fetch. A failure is an object with the fields its callers read from the jqXHR
- * they were written for: status, statusText, responseJSON and getResponseHeader(name).
+ * they were written for: status, statusText, responseJSON and getResponseHeader(name). A refusal also
+ * carries its body as responseText, since not every server words its refusals in JSON.
  */
 var Http = (function () {
-  function failure(status, statusText, response, responseJSON) {
+  function failure(status, statusText, response, responseJSON, responseText) {
     return {
       status: status,
       statusText: statusText,
       responseJSON: responseJSON,
+      responseText: responseText,
       getResponseHeader: function (name) {
         return response ? response.headers.get(name) : null;
       }
@@ -48,7 +50,7 @@ var Http = (function () {
       /* not JSON: the status decides below */
     }
     if (!response.ok)
-      throw failure(response.status, response.statusText || 'error', response, parsed ? data : undefined);
+      throw failure(response.status, response.statusText || 'error', response, parsed ? data : undefined, text);
     if (response.status === 204) return undefined;
     // An older server answers an unknown API route with its web page.
     if (!parsed) throw failure(response.status, 'parsererror', response);
@@ -89,16 +91,22 @@ var Http = (function () {
     };
   }
 
-  /** Cuts the text of an event stream into events: onEvent(data, name) for each one that carries data. */
+  /**
+   * Cuts the text of an event stream into events: onEvent(data, name) for each one that carries data.
+   * Once onEvent returns true the stream is over: nothing after that event is delivered, and push() and
+   * end() return true.
+   */
   function eventReader(onEvent) {
     var pending = '',
       afterReturn = false,
+      over = false,
       data = [],
       name = '';
 
     function line(text) {
+      if (over) return;
       if (!text) {
-        if (data.length) onEvent(data.join('\n'), name || 'message');
+        if (data.length) over = onEvent(data.join('\n'), name || 'message') === true;
         data = [];
         name = '';
         return;
@@ -119,6 +127,7 @@ var Http = (function () {
         var lines = (pending + text).split(/\r\n|\r|\n/);
         pending = lines.pop();
         lines.forEach(line);
+        return over;
       },
       // A server may close the stream without the blank line that ends its last event.
       end: function () {
@@ -143,15 +152,31 @@ var Http = (function () {
 
   /**
    * Sends `body` as JSON and reads the answer while it arrives. An event stream is handed to
-   * onEvent(data, name) one event at a time and resolves { streamed: true }. Any other answer is read
+   * onEvent(data, name) one event at a time and resolves { streamed: true }. An onEvent that returns true
+   * has seen the event that ends the answer: the request is over then, without waiting for the server to
+   * close a connection it may keep open, or keep alive, for as long as it likes. Any other answer is read
    * to its end and resolves { streamed: false, data } as json() would, since not every gateway streams.
    * Which of the two an answer is shows in how it starts, not in what it is labelled as.
    *
    * `idle` is the longest silence allowed, in milliseconds, before the answer and between its pieces.
    * `signal` lets the caller stop, which fails with the status text "abort". A failure in the middle of
-   * a stream is thrown like any other; the events already delivered stand.
+   * a stream is thrown like any other; the events already delivered stand. `accept` is what the request
+   * says it takes when that is not both kinds of answer.
+   *
+   * A server, or a proxy that buffers, may deliver many events in one piece. afterPiece() is called each
+   * time the events of a piece that arrived have been handed over, for work that is done once for them all.
    */
-  async function stream({ url, method = 'POST', headers = {}, body, idle = 90000, signal, onEvent }) {
+  async function stream({
+    url,
+    method = 'POST',
+    headers = {},
+    body,
+    idle = 90000,
+    signal,
+    onEvent,
+    afterPiece,
+    accept
+  }) {
     const control = new AbortController();
     let timedOut = false,
       heard = Date.now(),
@@ -176,8 +201,8 @@ var Http = (function () {
     }
     timer = setTimeout(watch, idle);
     try {
-      const accept = 'text/event-stream, application/json';
-      const response = await send(accept, url, method, headers, body, control.signal).catch(lost);
+      const kinds = accept || 'text/event-stream, application/json';
+      const response = await send(kinds, url, method, headers, body, control.signal).catch(lost);
       heard = Date.now();
       const events = eventReader(onEvent);
       const next = pieces(response);
@@ -193,7 +218,9 @@ var Http = (function () {
         text += piece;
         if (live === null) live = startsEvents(text, labelled);
         if (live) {
-          events.push(text);
+          const over = events.push(text);
+          if (afterPiece) afterPiece();
+          if (over) return { streamed: true };
           text = '';
         }
       }
@@ -201,11 +228,12 @@ var Http = (function () {
       if (live === null) live = labelled;
       if (!live) return { streamed: false, data: answered(response, text) };
       events.end();
+      if (afterPiece) afterPiece();
       return { streamed: true };
     } finally {
       clearTimeout(timer);
       if (signal) signal.removeEventListener('abort', stop);
-      // Releases the connection when onEvent threw in the middle of the stream.
+      // Releases the connection when onEvent threw in the middle of the stream, or said the stream was over.
       control.abort();
     }
   }

@@ -348,6 +348,28 @@ test('a chat stream that closes with [DONE] alone is complete, and data that is 
   assert.deepEqual(plain(await result), { text: 'Hello', truncated: false });
 });
 
+test('an answer with an event that cannot be read is missing a part, though the stream says it is done', async () => {
+  for (const provider of ['openai', 'deepseek', 'gemini', 'anthropic']) {
+    const events = streams[provider](['One. ', 'Two. ', 'Three.']);
+    const middle = events.findIndex(event => event.includes('Two. '));
+    // The event arrives cut short, as a proxy that drops bytes leaves it.
+    events[middle] = events[middle].trimEnd().slice(0, -9) + '\n\n';
+    const { sent, result } = generation(provider);
+    for (const event of events) sent[0].send(event);
+    sent[0].end();
+    assert.deepEqual(
+      plain(await result),
+      { text: 'One. Three.', truncated: true, interrupted: 'interrupted' },
+      provider
+    );
+  }
+
+  const { sent, result } = generation('deepseek');
+  for (const event of [sse('{"choices":[{"delta":{"content":"Hel'), sse('[DONE]')]) sent[0].send(event);
+  sent[0].end();
+  assert.deepEqual(plain(await failure(result)), { status: 0, statusText: 'stream', reason: '' });
+});
+
 const asked = { model: 'm', apiKey: 'k', system: 's', user: 'u', maxTokens: 64 };
 
 test('a server that refuses to stream is asked once more, for the answer in one piece', async () => {
@@ -421,9 +443,91 @@ test('a refusal for another reason, or of both ways of asking, is reported as it
   );
   assert.deepEqual(
     await refused('gemini', 400, () => 'Streaming is not enabled'),
-    [400, 'Streaming is not enabled', 1],
-    'a request with no stream flag to drop has no other way of asking'
+    [400, 'Streaming is not enabled', 2],
+    'Gemini is asked twice too, and no more'
   );
+});
+
+test('Gemini refused its streaming method is asked by the one that answers in one piece', async () => {
+  const requests = [];
+  const { ctx, config } = runtime(async (url, options) => {
+    requests.push({ url: new URL(url), body: options.body, accept: options.headers.Accept });
+    return requests.length === 1
+      ? jsonResponse({ error: { code: 400, message: 'Streaming is not supported', status: 'INVALID_ARGUMENT' } }, 400)
+      : jsonResponse({ candidates: [{ content: { parts: [{ text: 'Whole answer' }] }, finishReason: 'STOP' }] });
+  });
+  const request = ctx.LLMTransport.request(config.providers.gemini, asked);
+  const answer = await ctx.LLMTransport.generate('gemini', request);
+  assert.deepEqual(plain(answer), { text: 'Whole answer', truncated: false });
+  assert.equal(requests.length, 2);
+  assert.match(requests[0].url.pathname, /\/models\/m:streamGenerateContent$/);
+  assert.match(requests[1].url.pathname, /\/models\/m:generateContent$/);
+  assert.equal(requests[1].url.search, '');
+  assert.equal(requests[1].accept, 'application/json');
+  assert.equal(requests[1].body, requests[0].body, 'the same request otherwise');
+
+  // An address of the user's own that is not the streaming method has no other method to fall back to.
+  let made = 0;
+  const custom = runtime(async () => (made++, jsonResponse({ error: { message: 'Streaming is not supported' } }, 400)));
+  const own = custom.ctx.LLMTransport.request(custom.config.providers.gemini, {
+    ...asked,
+    apiUrl: 'https://gateway.example/v1/gemini'
+  });
+  await failure(custom.ctx.LLMTransport.generate('gemini', own));
+  assert.equal(made, 1);
+});
+
+test('the text of the finished OpenAI response stands for the answer, whatever the deltas brought', async () => {
+  const finished = text => ({ type: 'response.completed', response: { status: 'completed', output_text: text } });
+  const delta = text => sse({ type: 'response.output_text.delta', delta: text }, 'response.output_text.delta');
+
+  const some = generation('openai');
+  some.sent[0].send(delta('One. '));
+  some.sent[0].send(sse(finished('One. Two. Three.'), 'response.completed'));
+  some.sent[0].end();
+  assert.deepEqual(plain(await some.result), { text: 'One. Two. Three.', truncated: false }, 'only some deltas');
+
+  const damaged = generation('openai');
+  damaged.sent[0].send(delta('One. '));
+  damaged.sent[0].send(delta('Two. ').trimEnd().slice(0, -5) + '\n\n');
+  damaged.sent[0].send(delta('Three.'));
+  damaged.sent[0].send(sse(finished('One. Two. Three.'), 'response.completed'));
+  damaged.sent[0].end();
+  assert.deepEqual(
+    plain(await damaged.result),
+    { text: 'One. Two. Three.', truncated: false },
+    'a damaged delta is made up for'
+  );
+  assert.equal(damaged.seen.at(-1), 'One. Two. Three.');
+});
+
+test('a refusal that says to turn streaming off is asked once more', async () => {
+  const repeated = [
+    'Please set stream to false',
+    'Please set stream=false for this model',
+    'This model requires stream=false',
+    'stream should be false',
+    'Set "stream": false to use this model',
+    'Please disable streaming',
+    'Please turn off streaming for this model',
+    'Streaming must be turned off',
+    'Use stream: false',
+    'Retry without streaming',
+    '请关闭流式输出',
+    '请将 stream 设置为 false',
+    '请使用非流式请求',
+    'stream 必须为 false'
+  ];
+  const single = [
+    'The stream was turned off by the upstream server',
+    'logprobs must be false for this model',
+    'Set "store": false to use this model',
+    'The stream request is missing a field: messages'
+  ];
+  for (const message of repeated) assert.equal(await requestsWhenRefused(400, { error: { message } }), 2, message);
+  for (const message of repeated)
+    assert.equal(await requestsWhenRefused(400, message), 2, 'in plain words: ' + message);
+  for (const message of single) assert.equal(await requestsWhenRefused(400, { error: { message } }), 1, message);
 });
 
 test('a chat gateway that sends the whole answer as its one event still yields it', async () => {
@@ -444,4 +548,290 @@ test('a prompt Gemini blocks is an answer without text, not an interrupted reque
   sent[0].send(sse({ promptFeedback: feedback, usageMetadata: { promptTokenCount: 9 } }));
   sent[0].end();
   assert.equal((await failure(blocked)).message, 'aiEmpty');
+});
+
+test('an answer the provider ended for another reason than being finished keeps its text, marked as ended early', async () => {
+  const cut = { text: 'Hel', truncated: true, interrupted: 'ended' };
+  const reasons = [
+    ['deepseek', 'content_filter'],
+    ['deepseek', 'insufficient_system_resource'],
+    ['deepseek', 'a_reason_added_later'],
+    ['gemini', 'SAFETY'],
+    ['gemini', 'RECITATION'],
+    ['anthropic', 'refusal'],
+    ['anthropic', 'pause_turn']
+  ];
+  for (const [provider, finish] of reasons) {
+    const { sent, result } = generation(provider);
+    for (const event of streams[provider](['Hel'], finish)) sent[0].send(event);
+    sent[0].end();
+    assert.deepEqual(plain(await result), cut, provider + ' ' + finish);
+  }
+
+  // OpenAI says what cut an incomplete response: the output limit is one reason, a filter another.
+  const incomplete = reason => {
+    const response = { status: 'incomplete', incomplete_details: { reason } };
+    return sse({ type: 'response.incomplete', response }, 'response.incomplete');
+  };
+  const delta = sse({ type: 'response.output_text.delta', delta: 'Hel' }, 'response.output_text.delta');
+  const filtered = generation('openai');
+  for (const event of [delta, incomplete('content_filter')]) filtered.sent[0].send(event);
+  assert.deepEqual(plain(await filtered.result), cut);
+  const limited = generation('openai');
+  for (const event of [delta, incomplete('max_output_tokens')]) limited.sent[0].send(event);
+  assert.deepEqual(plain(await limited.result), { text: 'Hel', truncated: true });
+
+  // The same holds for an answer that arrives in one piece.
+  const whole = { choices: [{ finish_reason: 'content_filter', message: { content: 'Hel' } }] };
+  const { ctx, config } = runtime(async () => jsonResponse(whole));
+  const request = ctx.LLMTransport.request(config.providers.deepseek, asked);
+  assert.deepEqual(plain(await ctx.LLMTransport.generate('chat-completions', request)), cut);
+});
+
+test('an answer is complete with the event that ends it, though the server keeps the connection alive', async () => {
+  for (const provider of ['openai', 'deepseek', 'gemini', 'anthropic']) {
+    const { sent, result } = generation(provider);
+    for (const event of streams[provider](['Hel', 'lo'])) sent[0].send(event);
+    const beating = setInterval(() => sent[0].send(': keep-alive\n\n'), 5);
+    try {
+      const answer = await Promise.race([result, wait(1000).then(() => 'still generating')]);
+      assert.deepEqual(plain(answer), { text: 'Hello', truncated: false }, provider);
+    } finally {
+      clearInterval(beating);
+      sent[0].end();
+    }
+  }
+});
+
+test('a refusal to stream in plain words is asked once more, and an upstream error is not taken for one', async () => {
+  const bodies = [];
+  const plainly = runtime(async (url, options) => {
+    bodies.push(JSON.parse(options.body));
+    return bodies.at(-1).stream
+      ? new Response('This model does not support streaming', { status: 400 })
+      : jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: 'Whole answer' } }] });
+  });
+  const request = plainly.ctx.LLMTransport.request(plainly.config.providers.deepseek, asked);
+  const answer = await plainly.ctx.LLMTransport.generate('chat-completions', request);
+  assert.deepEqual(plain(answer), { text: 'Whole answer', truncated: false });
+  assert.equal(bodies.length, 2);
+
+  for (const refusal of [
+    jsonResponseOf => jsonResponseOf({ error: { type: 'upstream_error', message: 'Bad gateway' } }, 400),
+    () => new Response('upstream connect error', { status: 400 })
+  ]) {
+    let requests = 0;
+    const { ctx, config } = runtime(async () => {
+      requests++;
+      return refusal(jsonResponse);
+    });
+    const failed = await failure(
+      ctx.LLMTransport.generate('chat-completions', ctx.LLMTransport.request(config.providers.deepseek, asked))
+    );
+    assert.deepEqual([failed.status, requests], [400, 1]);
+  }
+});
+
+test('an answer the provider ended early with nothing to show is an empty answer, not a lost connection', async () => {
+  const { sent, call } = calls();
+  const filtered = call();
+  for (const event of streams.anthropic(['<note>\n'], 'refusal')) sent[0].send(event);
+  assert.equal((await failure(filtered)).message, 'aiEmpty');
+});
+
+/** How many requests a chat generation makes when each is refused with `status` and `body`, text or JSON. */
+async function requestsWhenRefused(status, body) {
+  let requests = 0;
+  const { ctx, config } = runtime(async () => {
+    requests++;
+    return typeof body === 'string' ? new Response(body, { status }) : jsonResponse(body, status);
+  });
+  const request = ctx.LLMTransport.request(config.providers.deepseek, {
+    ...asked,
+    user: 'A note on stream processing'
+  });
+  await failure(ctx.LLMTransport.generate('chat-completions', request));
+  return requests;
+}
+
+test('only the reason a refusal gives decides whether the request is repeated without its stream flag', async () => {
+  const echoed = { model: 'm', stream: true, messages: [{ role: 'user', content: 'A note on stream processing' }] };
+  const repeated = [
+    ['a refusal in Chinese', { error: { message: '当前模型不支持流式输出' } }],
+    ['a refusal that names SSE', { error: { message: 'SSE is not supported' } }],
+    ['a refusal in an error that is a string', { error: 'Streaming is disabled' }],
+    ['a refusal by code alone', { error: { message: 'Unsupported value', code: 'stream_not_supported' } }],
+    ['a refusal in plain words that repeats the flag', 'Streaming is unavailable. Request: {"stream": true}']
+  ];
+  const single = [
+    ['an invalid model whose error repeats the request', { error: { message: 'Invalid model' }, request: echoed }],
+    ['the same with the request inside the error', { error: { message: 'Invalid model', request: echoed } }],
+    ['the same in plain words', 'Invalid model. Request: {"model":"m","stream":true}'],
+    ['a reason that only contains the letters', { error: { message: 'An ESSENTIAL field is missing' } }]
+  ];
+  for (const [what, body] of repeated) assert.equal(await requestsWhenRefused(400, body), 2, what);
+  for (const [what, body] of single) assert.equal(await requestsWhenRefused(400, body), 1, what);
+});
+
+test('an error that only mentions the stream request, without refusing to stream, is not asked again', async () => {
+  const tooLong =
+    "This model's maximum context length is 8192 tokens. However, your stream request resulted in 9001 tokens. " +
+    'Please reduce the length of the messages.';
+  const single = [
+    ['a context too long, in plain words', tooLong],
+    [
+      'the same as an error with its fields',
+      { error: { message: tooLong, type: 'invalid_request_error', param: 'messages', code: 'context_length_exceeded' } }
+    ],
+    [
+      'an invalid request that is called a stream request',
+      { error: { message: 'Invalid stream request: prompt is too long' } }
+    ],
+    ['the same in Chinese', { error: { message: '流式请求的上下文长度超出模型上限' } }],
+    [
+      'a refusal of something else beside a mention of the stream',
+      { error: { message: 'Failed to start the stream request. The model m is not supported.' } }
+    ]
+  ];
+  const repeated = [
+    ['a parameter that is not known', { error: { message: 'Unknown parameter: stream' } }],
+    ['a code that ends in the name', { error: { message: 'Bad request', code: 'unsupported_stream' } }],
+    ['a value the flag must have', { error: { message: 'stream must be false for this model' } }],
+    ['a refusal beside another sentence', tooLong.replace('Please', 'Streaming is not supported. Please')],
+    ['streaming had only on another tier', { error: { message: 'Streaming is supported only on the standard tier.' } }],
+    ['the same in plain words', 'Streaming is only available on the standard tier.'],
+    ['the same in Chinese', { error: { message: '流式输出仅支持标准版' } }],
+    ['a model that does not stream', { error: { message: 'The model m is not available for streaming.' } }]
+  ];
+  single.push(
+    [
+      'a model that is not to be had, in an error that calls the request a streaming request',
+      {
+        error: {
+          message: 'The model m does not exist or is not available for your streaming request.',
+          code: 'model_not_found'
+        }
+      }
+    ],
+    ['the same in plain words', 'Model m is not supported for this streaming request']
+  );
+  for (const [what, body] of single) assert.equal(await requestsWhenRefused(400, body), 1, what);
+  for (const [what, body] of repeated) assert.equal(await requestsWhenRefused(400, body), 2, what);
+});
+
+test('a gateway that answers 406 to a request that takes an event stream is asked for JSON alone', async () => {
+  const refusals = [
+    () => jsonResponse({ error: { message: 'Accept header must be application/json' } }, 406),
+    () => new Response('Not Acceptable', { status: 406 }),
+    () => new Response('', { status: 406 })
+  ];
+  for (const refusal of refusals) {
+    const accepts = [];
+    const { ctx, config } = runtime(async (url, options) => {
+      accepts.push(options.headers.Accept);
+      return /event-stream/.test(options.headers.Accept)
+        ? refusal()
+        : jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: 'Whole answer' } }] });
+    });
+    const request = ctx.LLMTransport.request(config.providers.deepseek, asked);
+    const answer = await ctx.LLMTransport.generate('chat-completions', request);
+    assert.deepEqual(plain(answer), { text: 'Whole answer', truncated: false });
+    assert.deepEqual(accepts, ['text/event-stream, application/json', 'application/json']);
+  }
+  assert.equal(await requestsWhenRefused(406, 'Not Acceptable'), 2, 'a gateway that goes on refusing is asked twice');
+});
+
+test('the request repeated without its stream flag asks for JSON alone', async () => {
+  const accepts = [];
+  const { ctx, config } = runtime(async (url, options) => {
+    accepts.push(options.headers.Accept);
+    // A gateway that decides by what the request says it takes.
+    return /event-stream/.test(options.headers.Accept)
+      ? jsonResponse({ error: { message: 'Streaming is not supported' } }, 400)
+      : jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: 'Whole answer' } }] });
+  });
+  const request = ctx.LLMTransport.request(config.providers.deepseek, asked);
+  const answer = await ctx.LLMTransport.generate('chat-completions', request);
+  assert.deepEqual(plain(answer), { text: 'Whole answer', truncated: false });
+  assert.deepEqual(accepts, ['text/event-stream, application/json', 'application/json']);
+});
+
+test('a refusal to stream is recognised wherever and however the server words it', async () => {
+  const note = '<note>\nA note on stream processing\n</note>';
+  /** How many requests are made when each is refused with what refuse(body, text of the body) gives. */
+  const requests = async (status, refuse) => {
+    let made = 0;
+    const { ctx, config } = runtime(async (url, options) => {
+      made++;
+      const body = refuse(JSON.parse(options.body), options.body);
+      return typeof body === 'string' ? new Response(body, { status }) : jsonResponse(body, status);
+    });
+    const request = ctx.LLMTransport.request(config.providers.deepseek, { ...asked, user: note });
+    await failure(ctx.LLMTransport.generate('chat-completions', request));
+    return made;
+  };
+  const extra = { type: 'extra_forbidden', loc: ['body', 'stream'], msg: 'Extra inputs are not permitted' };
+  const refusals = [
+    ['the field named in a validation error', 422, () => ({ detail: [{ ...extra, input: true }] })],
+    ['the same inside a message', 422, () => ({ object: 'error', message: { detail: [extra] } })],
+    ['the flag quoted as the reason', 400, () => ({ error: { message: 'Unsupported parameter "stream": true' } })],
+    ['the same in plain words', 400, () => 'Unsupported parameter "stream": true'],
+    [
+      'a list of errors',
+      400,
+      () => ({ success: false, errors: [{ code: 7001, message: 'Streaming is not supported' }] })
+    ],
+    ['errors keyed by field', 400, () => ({ stream: ['This field is not allowed.'] })],
+    ['an answer that is a list', 400, () => [{ error: { code: 400, message: 'Streaming is not supported' } }]],
+    [
+      'a reason passed on from upstream',
+      400,
+      () => ({ error: { message: 'Provider returned error', metadata: { raw: 'streaming is not supported' } } })
+    ],
+    [
+      'the type of the error alone',
+      400,
+      () => ({ error: { message: 'Unsupported', type: 'streaming_not_supported' } })
+    ],
+    ['a problem document', 400, () => ({ type: 'about:blank', title: 'Streaming not supported', status: 400 })],
+    ['server-sent events by name', 400, () => ({ error: { message: 'Server-sent events are not available' } })]
+  ];
+  const others = [
+    ['the request repeated in plain words', 400, (body, raw) => 'Invalid model. Request: ' + raw],
+    [
+      'the request repeated in the message',
+      400,
+      (body, raw) => ({ error: { message: 'Invalid model. Request: ' + raw } })
+    ],
+    [
+      'the note quoted in the message',
+      400,
+      body => ({ error: { message: 'Invalid model for ' + JSON.stringify(body.messages[1].content) } })
+    ],
+    ['the request beside the error', 400, body => ({ error: { message: 'Invalid model' }, request: body })],
+    [
+      'the request as the rejected input',
+      422,
+      body => ({ detail: [{ type: 'model_type', loc: ['body'], msg: 'Not a model', input: body }] })
+    ],
+    ['the request written out again', 400, body => 'Invalid model. Request: ' + JSON.stringify(body, null, 1)],
+    ['the request as a Python dict', 400, () => "Invalid model. Request: {'model': 'm', 'stream': True}"]
+  ];
+  for (const [what, status, refuse] of refusals) assert.equal(await requests(status, refuse), 2, what);
+  for (const [what, status, refuse] of others) assert.equal(await requests(status, refuse), 1, what);
+});
+
+test('events that arrive together are handed on as text once', async () => {
+  const { sent, seen, result } = generation('anthropic');
+  const events = streams.anthropic(Array.from({ length: 500 }, () => 'word '));
+  sent[0].send(through(events, 'word ').join(''));
+  await wait(20);
+  assert.deepEqual(seen, ['word '], 'a piece with one delta');
+  sent[0].send(events.slice(through(events, 'word ').length).join(''));
+  assert.equal((await result).text.length, 2500);
+  assert.deepEqual(
+    seen.map(text => text.length),
+    [5, 2500],
+    'and one with all the rest'
+  );
 });

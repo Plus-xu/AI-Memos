@@ -692,3 +692,98 @@ test('text of a generation gives way to its result once there is one, and to wha
   state.context.AIReview.setBusy(false);
   assert.equal(state.node('#aiReviewPanel').prop('hidden'), true, 'with no review to return to, the panel closes');
 });
+
+test('stopping when only part of an echoed marker has arrived keeps the earlier pending review', async () => {
+  for (const pieces of [['<'], ['<', 'note'], ['\n', '<no'], ['<note>'], ['<note>\r'], ['<note>\n'], ['\n\n']]) {
+    const state = streamingEditor();
+    state.context.AIReview.show('Original draft', 'Earlier result', 'summary');
+    state.context.optimizeWithAI();
+    for (const piece of pieces) {
+      state.requests[0].send(delta(piece));
+      await shown();
+      state.frame();
+    }
+    const arrived = JSON.stringify(pieces.join(''));
+    assert.equal(state.node('#aiReviewResult').val(), 'Earlier result', arrived + ' is not shown as text');
+    state.node('#aiStop').click();
+    await shown();
+    assert.equal(state.messages.at(-1), 'aiStopped', arrived);
+    assert.deepEqual(
+      [state.local.memosAIReview.result, state.local.memosAIReview.truncated, state.node('#aiReviewResult').val()],
+      ['Earlier result', undefined, 'Earlier result'],
+      arrived
+    );
+  }
+
+  const state = streamingEditor();
+  state.context.optimizeWithAI();
+  for (const piece of ['<note>\n', 'Text\n', '</no']) state.requests[0].send(delta(piece));
+  await shown();
+  state.node('#aiStop').click();
+  await shown();
+  assert.deepEqual([state.local.memosAIReview.result, state.local.memosAIReview.truncated], ['Text', 'stopped']);
+});
+
+test('what the reader has selected in the arriving text stays selected as more arrives', () => {
+  const state = harness();
+  const box = state.node('#aiReviewResult')[0];
+  // As on a page: assigning the value moves the selection to the end of the text.
+  let text = '';
+  Object.defineProperty(box, 'value', {
+    get: () => text,
+    set(value) {
+      text = value;
+      box.selectionStart = box.selectionEnd = value.length;
+    }
+  });
+  state.context.AIReview.setBusy(true, 'organize', () => {});
+  state.context.AIReview.stream('Original draft', 'Some text', 'organize');
+  box.setSelectionRange(5, 9);
+  state.context.AIReview.stream('Original draft', 'Some text and more', 'organize');
+  state.frame();
+  assert.deepEqual([box.value, box.selectionStart, box.selectionEnd], ['Some text and more', 5, 9]);
+  state.context.AIReview.stream('Original draft', 'Some text and more', 'organize');
+  state.frame();
+  assert.deepEqual([box.selectionStart, box.selectionEnd], [5, 9], 'the same text again changes nothing');
+
+  // Text that is not what was there with more after it, as when a marker turns out to be an echo.
+  state.context.AIReview.stream('Original draft', 'Other', 'organize');
+  state.frame();
+  assert.deepEqual([box.value, box.selectionStart, box.selectionEnd], ['Other', 5, 5]);
+});
+
+test('a selection made while text arrives is kept when the generation ends before the last text was drawn', () => {
+  const selecting = () => {
+    const state = harness();
+    const box = state.node('#aiReviewResult')[0];
+    // As on a page: assigning the value moves the selection to the end of the text.
+    let text = '';
+    Object.defineProperty(box, 'value', {
+      get: () => text,
+      set(value) {
+        text = value;
+        box.selectionStart = box.selectionEnd = value.length;
+      }
+    });
+    state.context.AIReview.setBusy(true, 'organize', () => {});
+    state.context.AIReview.stream('Original draft', 'Some text', 'organize');
+    box.setSelectionRange(5, 9);
+    // This text waits for a frame that the end of the generation comes before.
+    state.context.AIReview.stream('Original draft', 'Some text and more', 'organize');
+    return { state, box };
+  };
+
+  const finished = selecting();
+  finished.state.context.AIReview.show('Original draft', 'Some text and more', 'organize');
+  finished.state.context.AIReview.setBusy(false);
+  finished.state.frame();
+  assert.deepEqual(
+    [finished.box.value, finished.box.selectionStart, finished.box.selectionEnd],
+    ['Some text and more', 5, 9]
+  );
+
+  // A result that is not the shown text with more after it keeps as much of the selection as it has text for.
+  const changed = selecting();
+  changed.state.context.AIReview.show('Original draft', 'Some te', 'organize');
+  assert.deepEqual([changed.box.value, changed.box.selectionStart, changed.box.selectionEnd], ['Some te', 5, 7]);
+});

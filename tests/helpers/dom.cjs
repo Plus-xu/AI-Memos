@@ -79,6 +79,13 @@ function createDom() {
       setSelectionRange(start, end) {
         this.selectionStart = start;
         this.selectionEnd = end;
+      },
+      // As a page does it in the 'preserve' mode: the selection stays on the text it was on.
+      setRangeText(text, start, end) {
+        const grown = text.length - (end - start);
+        const selected = [this.selectionStart, this.selectionEnd].map(at => (at > end ? at + grown : at));
+        this.value = this.value.slice(0, start) + text + this.value.slice(end);
+        [this.selectionStart, this.selectionEnd] = selected;
       }
     };
     const wrapper = {

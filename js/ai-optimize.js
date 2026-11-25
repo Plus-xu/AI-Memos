@@ -837,7 +837,8 @@ function extractLLMErrorMessage(xhr) {
  * 调用LLM API
  *
  * Resolves with { text, truncated }. A generation that was cut off after it produced visible text resolves
- * with that text and `interrupted`: 'stopped' when the caller's `signal` stopped it, 'interrupted' otherwise.
+ * with that text and `interrupted`: 'stopped' when the caller's `signal` stopped it, 'ended' when the provider
+ * ended it early, as a content filter does, and 'interrupted' otherwise.
  * One stopped before any text rejects with an error marked `stopped`. While the answer streams,
  * onText(text) receives what there is so far, without an echoed <note> marker.
  */
@@ -896,7 +897,8 @@ function callLLMAPI(
         function (text) {
           // An answer still arriving is as good as cut off: a marker echoed at its start is not shown.
           const visible = AIWorkflow.unwrapNote(text, userContent, true);
-          if (visible === shown) return;
+          // Nor is blank space before the first of its text: there is nothing to read in it yet.
+          if (visible === shown || (!shown && !visible.trim())) return;
           shown = visible;
           onText(visible);
         }
@@ -912,7 +914,9 @@ function callLLMAPI(
           } else if (answer.interrupted === 'stopped') {
             reject(stopped());
           } else {
-            const reason = answer.interrupted ? 'aiInterrupted' : answer.truncated ? 'aiTruncated' : 'aiEmpty';
+            // An answer the provider ended before any visible text is an empty one, not a lost connection.
+            const lost = answer.interrupted && answer.interrupted !== 'ended';
+            const reason = lost ? 'aiInterrupted' : answer.truncated && !answer.interrupted ? 'aiTruncated' : 'aiEmpty';
             reject(new Error(getLLMMessage(reason)));
           }
         },

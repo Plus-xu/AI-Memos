@@ -73,9 +73,9 @@ var AIReview = (function () {
     var shown = streaming || currentReview;
     $('#aiReviewPanel').prop('hidden', !shown);
     if (shown) $('#aiReviewOriginal').val(shown.input);
-    // Text that is still arriving is put in the box by stream() and draw(), a frame at a time.
-    if (!streaming && currentReview && $('#aiReviewResult').val() !== currentReview.result)
-      $('#aiReviewResult').val(currentReview.result);
+    // Text that is still arriving is put in the box by stream() and draw(), a frame at a time. A result may
+    // come before the frame its last text waited for, with a reader still selecting in the box.
+    if (!streaming && currentReview) put($('#aiReviewResult')[0], currentReview.result);
     $('#aiReviewResult').prop('readOnly', !!streaming);
     $('#aiReviewDiscard').prop('disabled', !!streaming);
     renderWarning();
@@ -92,7 +92,8 @@ var AIReview = (function () {
   /**
    * Shows the text of a generation still running, in place of a pending review, until show() or
    * setBusy(false). The first text opens the panel at once, read from its start. Later text can arrive
-   * faster than a page lays it out, so the box takes the latest of it once a frame and nothing else changes.
+   * faster than a page lays it out, so the box takes the latest of it once a frame and nothing else changes:
+   * what the reader has selected in the box stays selected.
    */
   function stream(input, text, task) {
     var opening = !streaming;
@@ -113,8 +114,22 @@ var AIReview = (function () {
     var box = $('#aiReviewResult')[0];
     // The box keeps up with the text only for a reader who is at its end.
     var follow = box.scrollHeight - box.scrollTop - box.clientHeight < 8;
-    box.value = streaming.text;
+    put(box, streaming.text);
     if (follow) box.scrollTop = box.scrollHeight;
+  }
+
+  /** Makes `text` what the box holds, with what is selected in it still selected. */
+  function put(box, text) {
+    var had = box.value;
+    if (text === had) return;
+    // Assigning the value would drop the selection, so more text is added after what is there.
+    if (text.startsWith(had)) box.setRangeText(text.slice(had.length), had.length, had.length, 'preserve');
+    else {
+      var selected = [Math.min(box.selectionStart, text.length), Math.min(box.selectionEnd, text.length)];
+      var direction = box.selectionDirection;
+      box.value = text;
+      box.setSelectionRange(selected[0], selected[1], direction);
+    }
   }
 
   function adopt(mode) {

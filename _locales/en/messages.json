@@ -545,6 +545,9 @@
   "aiInterruptedWarning": {
     "message": "The connection dropped during generation, so the result is incomplete. You can retry."
   },
+  "aiEndedWarning": {
+    "message": "Generation ended early, so the result is incomplete."
+  },
   "aiMaxTokensLabel": {
     "message": "Output limit (tokens). Blank uses the default of 8192; New API sends no limit when blank"
   },

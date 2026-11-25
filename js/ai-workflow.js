@@ -49,7 +49,11 @@ var AIWorkflow = (function () {
 
   var wrapped = /^\s*<note>\r?\n?([\s\S]*?)(?:\r?\n[ \t]*)?<\/note>\s*$/;
   // The marker as it was sent: unindented and alone on its line, after blank lines at most.
-  var echoedOpening = /^(?:[ \t]*\r?\n)*<note>[ \t]*(?:\r?\n|$)/;
+  var echoedOpening = /^(?:[ \t]*\r?\n)*<note>[ \t]*(?:\r\n?|\n|$)/;
+  // A marker the answer was cut off in the middle of: the opening one as all there is so far, and the
+  // closing one as the last line, unless that line is indented as Markdown indents code.
+  var openingBegun = /^(?:[ \t]*\r?\n)*<(?:n(?:o(?:te?)?)?)?$/;
+  var closingBegun = /(?:\r?\n|^) {0,3}<(?:\/(?:n(?:o(?:te?)?)?)?)?$/;
   var startsWithMarker = /^\s*<note>/;
 
   function markers(text) {
@@ -90,13 +94,18 @@ var AIWorkflow = (function () {
    * is known to be truncated, it is the sole marker in the answer, it stands unindented on a line of its own, and
    * the note does not start with a marker. A lone marker in a complete answer is content: leaving an echo visible
    * in the review costs less than deleting what the model meant to write.
+   * The cut can also fall inside a marker. Under the same conditions an answer that is no more than the
+   * beginning of the opening marker is no text at all, and after an echoed opening marker a last line that
+   * is the beginning of the closing one is removed with it, unless it is indented as code.
    */
   function unwrapNote(result, input, truncated) {
     var match = wrapped.exec(result);
     if (match) return wrapped.test(input) || !isEcho(result) ? result : match[1];
-    if (!truncated || markers(result).length !== 1) return result;
-    if (echoedOpening.test(result) && !startsWithMarker.test(input)) return result.replace(echoedOpening, '');
-    return result;
+    if (!truncated || startsWithMarker.test(input)) return result;
+    var found = markers(result).length;
+    if (!found) return openingBegun.test(result) ? '' : result;
+    if (found !== 1 || !echoedOpening.test(result)) return result;
+    return result.replace(echoedOpening, '').replace(closingBegun, '');
   }
 
   var outputLanguages = ['auto', 'ui', 'source'];
@@ -178,8 +187,9 @@ var AIWorkflow = (function () {
   function review(input, result, task, truncated) {
     if (typeof input !== 'string' || typeof result !== 'string' || !result.trim()) throw new Error('invalid_ai_result');
     var value = { input: input, result: result, task: normalizeTask(task), createdAt: new Date().toISOString() };
-    // Why the result is not whole: stopped by the user, interrupted on the way, or (true) cut at the output limit.
-    if (truncated) value.truncated = truncated === 'stopped' || truncated === 'interrupted' ? truncated : true;
+    // Why the result is not whole: stopped by the user, interrupted on the way, ended early by the provider,
+    // or (true) cut at the output limit.
+    if (truncated) value.truncated = ['stopped', 'interrupted', 'ended'].includes(truncated) ? truncated : true;
     return value;
   }
 
@@ -187,6 +197,7 @@ var AIWorkflow = (function () {
   function incompleteMessage(truncated) {
     if (truncated === 'stopped') return 'aiStoppedWarning';
     if (truncated === 'interrupted') return 'aiInterruptedWarning';
+    if (truncated === 'ended') return 'aiEndedWarning';
     return truncated ? 'aiTruncatedWarning' : '';
   }
 

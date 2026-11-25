@@ -545,6 +545,9 @@
   "aiInterruptedWarning": {
     "message": "连接在生成途中中断，结果不完整，可以重试。"
   },
+  "aiEndedWarning": {
+    "message": "生成提前结束，结果不完整。"
+  },
   "aiMaxTokensLabel": {
     "message": "输出上限（token）。留空使用默认值 8192；New API 留空时不传上限"
   },

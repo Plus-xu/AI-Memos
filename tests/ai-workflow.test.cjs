@@ -421,16 +421,49 @@ test('no language instruction makes the local preview mistake the organizer or a
 test('a review records why it is incomplete, and each reason has its own warning', () => {
   const { ai } = loadRules();
   const recorded = reason => ai.review('Draft', 'Result', 'organize', reason).truncated;
-  assert.deepEqual(['stopped', 'interrupted', true, 'max_tokens', false, undefined].map(recorded), [
+  assert.deepEqual(['stopped', 'interrupted', 'ended', true, 'max_tokens', false, undefined].map(recorded), [
     'stopped',
     'interrupted',
+    'ended',
     true,
     true,
     undefined,
     undefined
   ]);
   assert.deepEqual(
-    ['stopped', 'interrupted', true, false, undefined].map(reason => ai.incompleteMessage(reason)),
-    ['aiStoppedWarning', 'aiInterruptedWarning', 'aiTruncatedWarning', '', '']
+    ['stopped', 'interrupted', 'ended', true, false, undefined].map(reason => ai.incompleteMessage(reason)),
+    ['aiStoppedWarning', 'aiInterruptedWarning', 'aiEndedWarning', 'aiTruncatedWarning', '', '']
   );
+});
+
+test('an answer cut off in the middle of a marker loses the part of the marker it has', () => {
+  const { ai } = loadRules();
+  for (const begun of ['<', '<n', '<no', '<not', '<note', '\n<no', ' \n\n<note'])
+    assert.equal(ai.unwrapNote(begun, 'x', true), '', JSON.stringify(begun) + ' is no text yet');
+  assert.equal(ai.unwrapNote('<note>\r', 'x', true), '', 'half of the line end after the marker');
+  for (const ending of ['<', '</', '</n', '</no', '</not', '</note', '  </no'])
+    assert.equal(ai.unwrapNote('<note>\nText\n' + ending, 'x', true), 'Text', JSON.stringify(ending));
+  assert.equal(ai.unwrapNote('<note>\n</no', 'x', true), '');
+  // Only a last line that is nothing else: text before it on the line makes it content.
+  assert.equal(ai.unwrapNote('<note>\nText </no', 'x', true), 'Text </no');
+  assert.equal(ai.unwrapNote('<note>\nif a <', 'x', true), 'if a <');
+  // Nor a last line indented as code: that is what the note ends with, cut off where it was.
+  for (const code of ['    <', '    </no', '\t<', '     </note'])
+    assert.equal(
+      ai.unwrapNote('<note>\nExample:\n\n    <to>Tove</to>\n' + code, 'x', true),
+      'Example:\n\n    <to>Tove</to>\n' + code,
+      JSON.stringify(code)
+    );
+
+  // What only looks like it stays: text on the marker's line, a comparison, a complete answer, a note in markers.
+  for (const [result, input, truncated] of [
+    ['a < b and <no', 'x', true],
+    ['Text\n</no', 'x', true],
+    ['<nothing', 'x', true],
+    ['<no', 'x', false],
+    ['<note>\nText\n</no', 'x', false],
+    ['<no', '<note>\nquoted\n</note>', true],
+    ['<note>\nText\n</no', '<note>\nquoted\n</note>', true]
+  ])
+    assert.equal(ai.unwrapNote(result, input, truncated), result, JSON.stringify(result));
 });
