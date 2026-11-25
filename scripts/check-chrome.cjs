@@ -237,8 +237,9 @@ async function main() {
       answer.slice(0, 8)
     );
     assert.equal(await panel.evaluate(() => document.getElementById('aiReviewResult').readOnly), true);
-    // What the reader selects in the text so far stays selected when more of it is drawn.
-    await panel.evaluate(() => document.getElementById('aiReviewResult').setSelectionRange(2, 6));
+    // What the reader selects in the text so far stays selected when more of it is drawn, and a selection
+    // made backwards stays one.
+    await panel.evaluate(() => document.getElementById('aiReviewResult').setSelectionRange(2, 6, 'backward'));
     // The other editor knows a generation is running, and has neither its text nor a way to stop it.
     await waitFor(page, () => AIReview.isBusy());
     assert.deepEqual(
@@ -254,9 +255,9 @@ async function main() {
     assert.deepEqual(
       await panel.evaluate(() => {
         const box = document.getElementById('aiReviewResult');
-        return [box.selectionStart, box.selectionEnd];
+        return [box.selectionStart, box.selectionEnd, box.selectionDirection];
       }),
-      [2, 6]
+      [2, 6, 'backward']
     );
     await panel.click('#aiStop');
     await waitFor(

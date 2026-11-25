@@ -82,8 +82,31 @@ var AIReview = (function () {
     refreshTaskHint();
   }
 
+  /** Text as a text box holds it: every line ending is a line feed, whatever the answer was written with. */
+  function held(text) {
+    return text.replace(/\r\n?/g, '\n');
+  }
+
+  /**
+   * A review, and the record of an adoption, as storage holds them: null for anything else. An earlier
+   * version stored a result with the line endings its answer came with, and the record of adopting it with
+   * them too. Both are read as a text box holds them, which is how they are stored now: an adoption can be
+   * undone while the draft is what it wrote, and the draft holds that with line feeds only.
+   */
+  function storedReview(value) {
+    if (!value || typeof value.input !== 'string' || typeof value.result !== 'string') return null;
+    return Object.assign({}, value, { result: held(value.result) });
+  }
+
+  function storedTransaction(value) {
+    if (!value || typeof value.before !== 'string' || typeof value.after !== 'string') return null;
+    return Object.assign({}, value, { after: held(value.after) });
+  }
+
   function show(input, result, task, truncated) {
     currentReview = AIWorkflow.review(input, result, task, truncated);
+    // Kept as the draft will hold it: an adoption can be undone while the draft is still what it wrote.
+    currentReview.result = held(currentReview.result);
     streaming = null;
     persist();
     render();
@@ -118,17 +141,37 @@ var AIReview = (function () {
     if (follow) box.scrollTop = box.scrollHeight;
   }
 
-  /** Makes `text` what the box holds, with what is selected in it still selected. */
+  /** Makes `text` what the box holds, with what is selected in it still selected, in the direction it was. */
   function put(box, text) {
+    // The text is compared with what the box holds, and added to it, in the form the box holds it in.
+    text = held(text);
     var had = box.value;
     if (text === had) return;
-    // Assigning the value would drop the selection, so more text is added after what is there.
-    if (text.startsWith(had)) box.setRangeText(text.slice(had.length), had.length, had.length, 'preserve');
-    else {
-      var selected = [Math.min(box.selectionStart, text.length), Math.min(box.selectionEnd, text.length)];
-      var direction = box.selectionDirection;
+    var direction = box.selectionDirection;
+    if (text.startsWith(had)) {
+      // Assigning the value would drop the selection, so more text is added after what is there.
+      box.setRangeText(text.slice(had.length), had.length, had.length, 'preserve');
+      // That keeps what is selected and forgets which end of it moves: a selection made backwards, as with
+      // Shift and the left arrow key, would shrink from its far end at the next key instead of growing.
+      if (direction === 'backward') box.setSelectionRange(box.selectionStart, box.selectionEnd, direction);
+    } else {
+      // The text changed somewhere before its end, as when the finished answer brings a part that was lost
+      // on the way. What is the same before and after the change stays selected: a selection behind the
+      // change moves with its text, and one that reached into it ends where the change does.
+      var most = Math.min(had.length, text.length);
+      var head = 0;
+      while (head < most && had[head] === text[head]) head++;
+      var tail = 0;
+      while (tail < most - head && had[had.length - 1 - tail] === text[text.length - 1 - tail]) tail++;
+      var moved = text.length - had.length;
+      var from = box.selectionStart;
+      var to = box.selectionEnd;
+      var start = from < head ? from : from >= had.length - tail ? from + moved : head;
+      // A caret selects nothing, and stays a caret. Its two ends are one place: taken apart, as those of a
+      // selection are, a caret inside the change would come to span all of it.
+      var end = to === from ? start : to <= head ? to : to >= had.length - tail ? to + moved : text.length - tail;
       box.value = text;
-      box.setSelectionRange(selected[0], selected[1], direction);
+      box.setSelectionRange(start, end, direction);
     }
   }
 
@@ -228,11 +271,10 @@ var AIReview = (function () {
     chrome.storage.local.get(
       { memosAIReview: null, memosAIUndo: null, memosAITask: 'organize', memosAIJob: null },
       function (data) {
-        var value = data.memosAIReview;
-        if (value && typeof value.input === 'string' && typeof value.result === 'string') currentReview = value;
-        var transaction = data.memosAIUndo;
-        if (transaction && typeof transaction.before === 'string' && typeof transaction.after === 'string')
-          lastTransaction = transaction;
+        var review = storedReview(data.memosAIReview);
+        if (review) currentReview = review;
+        var transaction = storedTransaction(data.memosAIUndo);
+        if (transaction) lastTransaction = transaction;
         $('#aiTask').val(AIWorkflow.normalizeTask(data.memosAITask));
         render();
         refreshTexts();
@@ -242,8 +284,8 @@ var AIReview = (function () {
     chrome.storage.onChanged?.addListener((changes, area) => {
       if (area !== 'local') return;
       if (changes.memosAIJob?.newValue) observeJob(changes.memosAIJob.newValue);
-      if (changes.memosAIReview) currentReview = changes.memosAIReview.newValue || null;
-      if (changes.memosAIUndo) lastTransaction = changes.memosAIUndo.newValue || null;
+      if (changes.memosAIReview) currentReview = storedReview(changes.memosAIReview.newValue);
+      if (changes.memosAIUndo) lastTransaction = storedTransaction(changes.memosAIUndo.newValue);
       if (changes.memosAITask) $('#aiTask').val(AIWorkflow.normalizeTask(changes.memosAITask.newValue));
       if (changes.memosAIReview || changes.memosAIUndo || changes.memosAITask) render();
     });

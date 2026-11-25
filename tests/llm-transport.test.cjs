@@ -225,7 +225,11 @@ test("each protocol's error event fails the generation with the reason it gives"
     ],
     ['deepseek', sse({ error: { message: 'Upstream is busy', type: 'server_error' } })],
     ['gemini', sse({ error: { code: 503, message: 'The model is overloaded', status: 'UNAVAILABLE' } })],
-    ['anthropic', sse({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }, 'error')]
+    ['anthropic', sse({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }, 'error')],
+    // An error may be its reason in words, with nothing else to it.
+    ['deepseek', sse({ error: 'The server is out of memory', error_type: 'overloaded' })],
+    ['gemini', sse({ error: 'Quota used up' })],
+    ['anthropic', sse({ type: 'error', error: 'Gateway timed out' }, 'error')]
   ];
   const reasons = [];
   for (const [provider, event] of errors) {
@@ -240,8 +244,45 @@ test("each protocol's error event fails the generation with the reason it gives"
     'Crashed',
     'Upstream is busy',
     'The model is overloaded',
-    'Overloaded'
+    'Overloaded',
+    'The server is out of memory',
+    'Quota used up',
+    'Gateway timed out'
   ]);
+});
+
+test('an event named an error fails the generation, though its data reads as the end of the answer', async () => {
+  // What each protocol ends an answer with, here under the name of an error and beside what went wrong.
+  const endings = {
+    openai: { type: 'response.completed', response: { id: 'resp_1', status: 'completed' } },
+    deepseek: { choices: [{ index: 0, delta: { content: '' }, finish_reason: 'stop' }] },
+    gemini: { candidates: [{ index: 0, content: { role: 'model', parts: [{ text: '' }] }, finishReason: 'STOP' }] },
+    anthropic: { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null } }
+  };
+  for (const provider of Object.keys(endings)) {
+    const failed = sse({ ...endings[provider], message: 'Upstream failed' }, 'error');
+
+    const begun = generation(provider);
+    for (const event of through(streams[provider](['Hel', 'lo']), 'Hel')) begun.sent[0].send(event);
+    begun.sent[0].send(failed);
+    assert.deepEqual(
+      plain(await begun.result),
+      { text: 'Hel', truncated: true, interrupted: 'interrupted' },
+      provider + ': the text so far is not a whole answer'
+    );
+
+    const empty = generation(provider);
+    empty.sent[0].send(failed);
+    const lost = await failure(empty.result);
+    assert.deepEqual([lost.status, lost.statusText, lost.reason], [0, 'stream', 'Upstream failed'], provider);
+    assert.equal(empty.sent.length, 1, provider + ': and nothing is asked again');
+  }
+
+  // The line that closes a chat stream is no end either, under that name.
+  const closed = generation('deepseek');
+  closed.sent[0].send(sse({ choices: [{ index: 0, delta: { content: 'Hel' }, finish_reason: null }] }));
+  closed.sent[0].send(sse('[DONE]', 'error'));
+  assert.deepEqual(plain(await closed.result), { text: 'Hel', truncated: true, interrupted: 'interrupted' });
 });
 
 test("the same failures before any text reject, with the provider's reason when it gave one", async () => {
@@ -654,6 +695,31 @@ async function requestsWhenRefused(status, body) {
   return requests;
 }
 
+/**
+ * How many requests a chat generation makes when the stream it asks for opens and says `event`, an error, and
+ * a request for the answer in one piece gets it.
+ */
+async function requestsWhenStreamSays(event) {
+  let requests = 0;
+  const { ctx, config } = runtime(async (url, options) => {
+    requests++;
+    return JSON.parse(options.body).stream
+      ? new Response(sse(event), { headers: { 'Content-Type': 'text/event-stream' } })
+      : jsonResponse({ choices: [{ finish_reason: 'stop', message: { content: 'Whole answer' } }] });
+  });
+  const request = ctx.LLMTransport.request(config.providers.deepseek, {
+    ...asked,
+    user: 'A note on stream processing'
+  });
+  const outcome = await ctx.LLMTransport.generate('chat-completions', request).then(
+    answer => answer.text,
+    failed => failed.statusText
+  );
+  // The error the stream reported, or the answer to the second request: anything else is a defect.
+  assert.equal(outcome, requests === 1 ? 'stream' : 'Whole answer', JSON.stringify(event));
+  return requests;
+}
+
 test('only the reason a refusal gives decides whether the request is repeated without its stream flag', async () => {
   const echoed = { model: 'm', stream: true, messages: [{ role: 'user', content: 'A note on stream processing' }] };
   const repeated = [
@@ -703,18 +769,15 @@ test('an error that only mentions the stream request, without refusing to stream
     ['the same in Chinese', { error: { message: '流式输出仅支持标准版' } }],
     ['a model that does not stream', { error: { message: 'The model m is not available for streaming.' } }]
   ];
-  single.push(
-    [
-      'a model that is not to be had, in an error that calls the request a streaming request',
-      {
-        error: {
-          message: 'The model m does not exist or is not available for your streaming request.',
-          code: 'model_not_found'
-        }
+  single.push([
+    'a model that is not to be had, in an error that calls the request a streaming request',
+    {
+      error: {
+        message: 'The model m does not exist or is not available for your streaming request.',
+        code: 'model_not_found'
       }
-    ],
-    ['the same in plain words', 'Model m is not supported for this streaming request']
-  );
+    }
+  ]);
   for (const [what, body] of single) assert.equal(await requestsWhenRefused(400, body), 1, what);
   for (const [what, body] of repeated) assert.equal(await requestsWhenRefused(400, body), 2, what);
 });
@@ -819,6 +882,314 @@ test('a refusal to stream is recognised wherever and however the server words it
   ];
   for (const [what, status, refuse] of refusals) assert.equal(await requests(status, refuse), 2, what);
   for (const [what, status, refuse] of others) assert.equal(await requests(status, refuse), 1, what);
+});
+
+test('a refusal to stream that arrives as an event of the stream is asked once more too', async () => {
+  const wholes = {
+    openai: { status: 'completed', output_text: 'Whole answer' },
+    deepseek: { choices: [{ finish_reason: 'stop', message: { content: 'Whole answer' } }] },
+    gemini: { candidates: [{ content: { parts: [{ text: 'Whole answer' }] }, finishReason: 'STOP' }] },
+    anthropic: { content: [{ type: 'text', text: 'Whole answer' }], stop_reason: 'end_turn' }
+  };
+  /**
+   * The requests made, and the answer, when each request of `provider` for a stream is answered with `events`.
+   * `input` is what the generation is asked for.
+   */
+  const answered = (provider, events, input = asked) => {
+    const requests = [];
+    const { ctx, config } = runtime(async (url, options) => {
+      const streaming = !!JSON.parse(options.body).stream || /:streamGenerateContent/.test(url);
+      requests.push({ streaming, accept: options.headers.Accept });
+      return streaming
+        ? new Response(events.join(''), { headers: { 'Content-Type': 'text/event-stream' } })
+        : jsonResponse(wholes[provider]);
+    });
+    const item = config.providers[provider];
+    return { requests, result: ctx.LLMTransport.generate(item.endpointType, ctx.LLMTransport.request(item, input)) };
+  };
+  const unverified = {
+    type: 'error',
+    code: 'unsupported_value',
+    message: 'Your organization must be verified to stream this model.',
+    param: 'stream'
+  };
+  const failed = { status: 'failed', error: { code: 'stream_not_supported', message: 'Unsupported value' } };
+  const refusals = [
+    ['openai', 'by the parameter it names', sse(unverified, 'error')],
+    [
+      'openai',
+      'by the code of a failed response',
+      sse({ type: 'response.failed', response: failed }, 'response.failed')
+    ],
+    ['deepseek', 'in words', sse({ error: { message: 'Streaming is not supported for this model' } })],
+    ['deepseek', 'in an error that is a string', sse({ error: 'Streaming is disabled' })],
+    // The name of the event alone says it is an error: its data has no shape the protocol knows.
+    ['deepseek', 'in an event named error', sse({ message: 'Streaming is not supported for this model' }, 'error')],
+    ['deepseek', 'in an event named error that is plain text', sse('Streaming is not supported', 'error')],
+    ['gemini', 'in an event named error', sse({ detail: 'Streaming is not supported' }, 'error')],
+    [
+      'gemini',
+      'in words',
+      sse({ error: { code: 400, message: 'Streaming is not supported', status: 'INVALID_ARGUMENT' } })
+    ],
+    [
+      'anthropic',
+      'in words',
+      sse({ type: 'error', error: { type: 'invalid_request_error', message: 'Streaming is not supported' } }, 'error')
+    ],
+    // What refuses may stand beside the error in the event, not inside it.
+    [
+      'openai',
+      'by a parameter beside the error of a failed response',
+      sse({ type: 'response.failed', response: { status: 'failed', error: 'Unsupported value' }, param: 'stream' })
+    ],
+    ['deepseek', 'by a parameter beside the error', sse({ error: { message: 'Unsupported value' }, param: 'stream' })],
+    ['deepseek', 'by a code beside an error in words', sse({ error: 'Bad request', code: 'stream_not_supported' })],
+    [
+      'gemini',
+      'in words beside the error',
+      sse({ error: { code: 400, status: 'INVALID_ARGUMENT' }, message: 'Streaming is not supported' })
+    ],
+    [
+      'anthropic',
+      'by a parameter beside the error',
+      sse({ type: 'error', error: { type: 'invalid_request_error', message: 'Unsupported value' }, param: 'stream' })
+    ]
+  ];
+  for (const [provider, how, event] of refusals) {
+    const { requests, result } = answered(provider, [event]);
+    const answer = await result.catch(error => error);
+    assert.deepEqual(plain(answer), { text: 'Whole answer', truncated: false }, provider + ' ' + how);
+    assert.deepEqual(
+      requests,
+      [
+        { streaming: true, accept: 'text/event-stream, application/json' },
+        { streaming: false, accept: 'application/json' }
+      ],
+      provider + ' ' + how
+    );
+  }
+
+  // An error for another reason is the failure it was, and is not asked about again.
+  const busy = answered('deepseek', [sse({ error: { message: 'Upstream is busy', type: 'server_error' } })]);
+  const lost = await failure(busy.result);
+  assert.deepEqual([lost.status, lost.statusText, lost.reason], [0, 'stream', 'Upstream is busy']);
+  assert.equal(busy.requests.length, 1);
+
+  // So is one that an event says by its name alone.
+  const named = answered('deepseek', [sse({ message: 'Upstream is busy' }, 'error')]);
+  const unnamed = await failure(named.result);
+  assert.deepEqual([unnamed.status, unnamed.statusText, unnamed.reason], [0, 'stream', 'Upstream is busy']);
+  assert.equal(named.requests.length, 1);
+
+  // Nor is one that arrives in a chunk of the answer: what else the chunk carries refuses nothing.
+  const chunk = {
+    id: 'gen-1',
+    object: 'chat.completion.chunk',
+    model: 'm',
+    choices: [{ index: 0, delta: { role: 'assistant', content: '' }, finish_reason: 'error' }],
+    error: { code: 'server_error', message: 'Provider disconnected' }
+  };
+  const midway = answered('deepseek', [sse(chunk)]);
+  assert.equal((await failure(midway.result)).reason, 'Provider disconnected');
+  assert.equal(midway.requests.length, 1);
+
+  // A response that failed repeats what it was asked: words of the request refuse nothing, here either.
+  const system = 'Summarise. Streaming is not supported by the reader of this note.';
+  const response = {
+    id: 'resp_1',
+    object: 'response',
+    status: 'failed',
+    error: { code: 'server_error', message: 'The model failed to generate a response.' },
+    instructions: system,
+    model: 'm',
+    output: [],
+    truncation: 'disabled'
+  };
+  const crashed = answered('openai', [sse({ type: 'response.failed', response }, 'response.failed')], {
+    ...asked,
+    system
+  });
+  assert.equal((await failure(crashed.result)).reason, 'The model failed to generate a response.');
+  assert.equal(crashed.requests.length, 1);
+
+  // A stream that timed out on the server was a stream: its code names it without refusing it.
+  const timeouts = [
+    { error: { message: 'Stream timed out', code: 'stream_timeout' } },
+    { error: { message: 'The upstream went silent', type: 'stream_idle_timeout' } },
+    { error: { message: 'Connection lost', code: 'stream_error' } }
+  ];
+  for (const timeout of timeouts) {
+    const slow = answered('deepseek', [sse(timeout)]);
+    assert.equal((await failure(slow.result)).statusText, 'stream', timeout.error.message);
+    assert.equal(slow.requests.length, 1, timeout.error.message);
+  }
+
+  // A server that has sent text does stream: what it sent is kept, whatever it says afterwards.
+  const begun = answered('deepseek', [
+    sse({ choices: [{ index: 0, delta: { content: 'Hel' }, finish_reason: null }] }),
+    sse({ error: { message: 'Streaming is not supported for this model' } })
+  ]);
+  assert.deepEqual(plain(await begun.result), { text: 'Hel', truncated: true, interrupted: 'interrupted' });
+  assert.equal(begun.requests.length, 1);
+});
+
+test('the stream flag named as the rejected parameter in text passed on from upstream is a refusal to stream', async () => {
+  const unverified = {
+    message: 'Your organization must be verified to stream this model.',
+    type: 'invalid_request_error',
+    param: 'stream',
+    code: 'unsupported_value'
+  };
+  const dict =
+    "{'error': {'message': 'Your organization must be verified to stream this model.', " +
+    "'type': 'invalid_request_error', 'param': 'stream', 'code': 'unsupported_value'}}";
+  const upstream = raw => ({ error: { message: 'Provider returned error', code: 400, metadata: { raw } } });
+  const repeated = [
+    ['the upstream error as JSON in a field', upstream(JSON.stringify({ error: unverified }))],
+    ['the same as JSON in the message', { error: { message: JSON.stringify({ error: unverified }) } }],
+    [
+      'the upstream error written out as a Python dict',
+      { error: { message: 'BadRequestError: OpenAIException - Error code: 400 - ' + dict, code: '400' } }
+    ],
+    ['a refusal framed as an event', 'data: ' + JSON.stringify({ error: unverified }) + '\n\n']
+  ];
+  const echoed = { model: 'm', stream: true, messages: [{ role: 'user', content: 'A note on stream processing' }] };
+  const wrongModel = { message: 'Invalid model', type: 'invalid_request_error', param: 'model' };
+  const single = [
+    ['another parameter named the same way', upstream(JSON.stringify({ error: wrongModel }))],
+    [
+      'the request repeated inside the upstream error',
+      upstream(JSON.stringify({ error: wrongModel, request: echoed }))
+    ],
+    [
+      'another parameter in a Python dict',
+      { error: { message: "Error code: 400 - {'error': {'message': 'Invalid model', 'param': 'model'}}" } }
+    ]
+  ];
+  for (const [what, body] of repeated) assert.equal(await requestsWhenRefused(400, body), 2, what);
+  for (const [what, body] of single) assert.equal(await requestsWhenRefused(400, body), 1, what);
+});
+
+test('a model refused for "your streaming request" is refused to stream, unless the error names the model as what it rejects', async () => {
+  const sentence = 'The model m is not available for your streaming request.';
+  const repeated = [
+    ['in plain words', 'Model m is not supported for this streaming request'],
+    ['the request first', 'Your streaming request is not supported by this model'],
+    ['as a message', { error: { message: 'This model does not support the streaming request.' } }],
+    ['with a code that names neither', { error: { message: sentence, code: 'unsupported_value' } }],
+    ['with the flag as the parameter', { error: { message: sentence, param: 'stream' } }],
+    // A sentence that refuses the request itself refuses to stream, whatever the error names.
+    [
+      'the request refused, with the model in the code',
+      { error: { message: 'This model does not support the streaming request.', code: 'model_not_supported' } }
+    ],
+    [
+      'the request refused first, with the model as the parameter',
+      { error: { message: 'Your streaming request is not supported by this model', param: 'model' } }
+    ],
+    [
+      'the same in the path of the field',
+      { detail: [{ loc: ['body', 'model'], msg: 'The stream call is not allowed for model m' }] }
+    ],
+    [
+      'any streaming request refused, with the model in the code',
+      { error: { message: 'Model m is not supported for a streaming request', code: 'model_not_supported' } }
+    ]
+  ];
+  const single = [
+    ['the model as the parameter', { error: { message: sentence, param: 'model' } }],
+    ['the model in the code', { error: { message: sentence, code: 'model_not_found' } }],
+    ['the model in the path of the field', { detail: [{ loc: ['body', 'model'], msg: sentence }] }],
+    [
+      'the request named as where the model was asked for',
+      { error: { message: 'The model named in this stream call is not available', code: 'model_not_found' } }
+    ]
+  ];
+  for (const [what, body] of repeated) assert.equal(await requestsWhenRefused(400, body), 2, what);
+  for (const [what, body] of single) assert.equal(await requestsWhenRefused(400, body), 1, what);
+});
+
+test('what became of a stream, or of the upstream, is no refusal to stream, in words a refusal has too', async () => {
+  const said = message => ({ error: { message } });
+  const coded = (code, field = 'code') => ({ error: { message: 'Upstream connection closed', [field]: code } });
+  const lost = [
+    ['an end that was not expected', said('unexpected end of stream on Connection{upstream:443}')],
+    ['the same of what was read from the stream', said('failed to read stream: unexpected EOF')],
+    ['an error that is not known', said('An unknown error occurred while streaming')],
+    ['an upstream that is unavailable', said('Upstream unavailable: stream disconnected')],
+    ['an upstream that is not available', said('Stream closed: upstream is not available')],
+    ['the same without a mark between', said('stream failed because upstream is unavailable')],
+    [
+      'a request that failed with a service unavailable',
+      said('The streaming request failed with 503 Service Unavailable')
+    ],
+    ['a service unavailable while it streamed', said('Service unavailable while streaming the response')],
+    ['the stream from upstream as what is not available', said('The upstream stream is not available')],
+    ['a connection that is unavailable', said('The streaming connection to the backend is unavailable')],
+    ['a stream that brought nothing', said('No stream data received from upstream')],
+    ['a stream that was not returned', said('No stream was returned by the upstream')],
+    [
+      'a stream that timed out beside a service that is unavailable',
+      said('The stream timed out and the service is unavailable')
+    ],
+    ['a code for an end that was not expected', coded('unexpected_end_of_stream')],
+    ['a code for how the stream ended', coded('stream_ended_unexpectedly')],
+    ['a code for a stream that is gone', coded('ERR_HTTP2_INVALID_STREAM')],
+    ['a code for a stream without an answer', coded('stream_no_response', 'type')],
+    ['an upstream that is unavailable, in Chinese', said('上游服务不可用，流式请求失败')],
+    ['the same the other way round, with a space between', said('流式请求失败 上游服务不可用')],
+    ['a service that is unavailable for now, in Chinese', said('服务暂不可用，流式连接已断开')],
+    ['the stream from upstream as what is unavailable, in Chinese', said('上游流式服务不可用')],
+    ['a connection the upstream closed, in Chinese', said('上游已关闭流式连接')]
+  ];
+  for (const [what, event] of lost) {
+    assert.equal(await requestsWhenStreamSays(event), 1, what);
+    assert.equal(await requestsWhenRefused(400, event), 1, 'as a refused request: ' + what);
+  }
+});
+
+test('words a server also has for a failure refuse streaming where they are said of it, or of its flag', async () => {
+  const said = message => ({ error: { message } });
+  const coded = code => ({ error: { message: 'Bad request', code } });
+  const refusals = [
+    ['streaming as what is unavailable', said('Streaming is currently unavailable for this model')],
+    ['the same with the model named first', said('Streaming for the o1 model is currently unavailable')],
+    [
+      'the same with more said of the models',
+      said('Streaming responses for models in the o-series are not yet available')
+    ],
+    ['the same with the verb shortened', said("Streaming isn't available on your plan")],
+    ['streaming as what is no longer available', said('Streaming is no longer available for this model')],
+    ['streaming named in brackets', said('The requested feature (streaming) is not available for your account')],
+    ['the flag written out as what is not available', said('"stream": true is not available for this model')],
+    ['streaming as what a model is not available in', said('Model m is not available in streaming mode')],
+    ['streaming as the way a model is not available', said('The model m is not available via the streaming API')],
+    ['the flag as what a feature is not available with', said('This feature is not available with "stream": true')],
+    ['the flag as when a model is not available', said('This model is not available when stream=true')],
+    ['the flag as an argument not expected', said("create() got an unexpected keyword argument 'stream'")],
+    ['the flag as a field that is not known', said('json: unknown field "stream"')],
+    ['the flag as an argument not recognised', said('Unrecognized request argument supplied: stream')],
+    [
+      'the flag as a name that is not known',
+      said('Invalid JSON payload received. Unknown name "stream": Cannot find field.')
+    ],
+    ['the flag as a key not recognised', said("Unrecognized key(s) in object: 'stream'")],
+    ['a code that says it of streaming', coded('streaming_unavailable')],
+    ['a code written as one word', coded('StreamingNotSupported')],
+    ['a code for streaming as what is not implemented', coded('stream_unimplemented')],
+    ['a code for the flag as a parameter that is not valid', coded('invalid_stream_parameter')],
+    ['a code for an answer to be asked for in one piece', coded('non_streaming_only')],
+    ['streaming as what is unavailable, in Chinese', said('流式输出暂不可用')],
+    ['the same with the model named between', said('流式输出功能在当前所选的模型上暂时不可用')],
+    ['streaming as what cannot be used, in Chinese', said('该模型无法使用流式输出')],
+    ['streaming as what a model cannot be used for, in Chinese', said('该模型不可用于流式调用')],
+    ['streaming as what is not offered yet, in Chinese', said('流式输出暂不对外开放')]
+  ];
+  for (const [what, event] of refusals) {
+    assert.equal(await requestsWhenStreamSays(event), 2, what);
+    assert.equal(await requestsWhenRefused(400, event), 2, 'as a refused request: ' + what);
+  }
 });
 
 test('events that arrive together are handed on as text once', async () => {

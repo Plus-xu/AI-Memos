@@ -746,10 +746,47 @@ test('what the reader has selected in the arriving text stays selected as more a
   state.frame();
   assert.deepEqual([box.selectionStart, box.selectionEnd], [5, 9], 'the same text again changes nothing');
 
-  // Text that is not what was there with more after it, as when a marker turns out to be an echo.
+  // Text that is not what was there with more after it, as when a marker turns out to be an echo: none of
+  // what was selected is left, and the selection is what took its place.
   state.context.AIReview.stream('Original draft', 'Other', 'organize');
   state.frame();
-  assert.deepEqual([box.value, box.selectionStart, box.selectionEnd], ['Other', 5, 5]);
+  assert.deepEqual([box.value, box.selectionStart, box.selectionEnd], ['Other', 0, 5]);
+});
+
+test('a selection stays on its text when the finished answer brings back a part lost before it', () => {
+  const state = harness();
+  const box = state.node('#aiReviewResult')[0];
+  state.context.AIReview.setBusy(true, 'organize', () => {});
+  state.context.AIReview.stream('Original draft', 'Some and more', 'organize');
+  box.setSelectionRange(9, 13, 'backward');
+  // The whole text, with the part a damaged event had carried.
+  state.context.AIReview.stream('Original draft', 'Some text and more', 'organize');
+  state.frame();
+  assert.deepEqual(
+    [box.value.slice(box.selectionStart, box.selectionEnd), box.selectionStart, box.selectionDirection],
+    ['more', 14, 'backward']
+  );
+
+  // A selection before the part that came back stays where it was, and one that ends there does not grow.
+  box.setSelectionRange(0, 4);
+  state.context.AIReview.stream('Original draft', 'Some new text and more', 'organize');
+  state.frame();
+  assert.deepEqual([box.selectionStart, box.selectionEnd], [0, 4]);
+});
+
+test('a selection made backwards in the arriving text still grows from its start as more arrives', () => {
+  const state = harness();
+  const box = state.node('#aiReviewResult')[0];
+  state.context.AIReview.setBusy(true, 'organize', () => {});
+  state.context.AIReview.stream('Original draft', 'Some text', 'organize');
+  // As with Shift and the left arrow key, or dragging towards the start: the end that moves is the first.
+  box.setSelectionRange(5, 9, 'backward');
+  state.context.AIReview.stream('Original draft', 'Some text and more', 'organize');
+  state.frame();
+  assert.deepEqual(
+    [box.value, box.selectionStart, box.selectionEnd, box.selectionDirection],
+    ['Some text and more', 5, 9, 'backward']
+  );
 });
 
 test('a selection made while text arrives is kept when the generation ends before the last text was drawn', () => {
@@ -786,4 +823,120 @@ test('a selection made while text arrives is kept when the generation ends befor
   const changed = selecting();
   changed.state.context.AIReview.show('Original draft', 'Some te', 'organize');
   assert.deepEqual([changed.box.value, changed.box.selectionStart, changed.box.selectionEnd], ['Some te', 5, 7]);
+});
+
+/**
+ * Makes the element hold its text as a text box on a page does: every line ending becomes a line feed, and
+ * assigning the value moves the selection to the end of the text.
+ */
+function asTextBox(box) {
+  let text = '';
+  Object.defineProperty(box, 'value', {
+    get: () => text,
+    set(value) {
+      text = value.replace(/\r\n?/g, '\n');
+      box.selectionStart = box.selectionEnd = text.length;
+    }
+  });
+}
+
+test('a selection in text that arrives with carriage returns stays as it is while more arrives and when it ends', () => {
+  const state = harness();
+  const box = state.node('#aiReviewResult')[0];
+  asTextBox(box);
+  state.context.AIReview.setBusy(true, 'organize', () => {});
+  state.context.AIReview.stream('Original draft', 'One\r\nTwo', 'organize');
+  assert.equal(box.value, 'One\nTwo');
+  box.setSelectionRange(4, 7);
+  // The two characters of a line ending may arrive apart.
+  for (const text of ['One\r\nTwo\r', 'One\r\nTwo\r\nThree']) {
+    state.context.AIReview.stream('Original draft', text, 'organize');
+    state.frame();
+  }
+  assert.deepEqual([box.value, box.selectionStart, box.selectionEnd], ['One\nTwo\nThree', 4, 7]);
+
+  // A caret in the text is a selection of nothing, and stays one.
+  box.setSelectionRange(5, 5);
+  state.context.AIReview.stream('Original draft', 'One\r\nTwo\r\nThree\r\nFour', 'organize');
+  state.frame();
+  assert.deepEqual([box.value, box.selectionStart, box.selectionEnd], ['One\nTwo\nThree\nFour', 5, 5]);
+
+  box.setSelectionRange(4, 7);
+  state.context.AIReview.show('Original draft', 'One\r\nTwo\r\nThree\r\nFour', 'organize');
+  state.context.AIReview.setBusy(false);
+  assert.deepEqual([box.value, box.selectionStart, box.selectionEnd], ['One\nTwo\nThree\nFour', 4, 7]);
+});
+
+test('a result with carriage returns is kept as the draft will hold it, so adopting it can be undone', () => {
+  const state = harness();
+  asTextBox(state.node('#content')[0]);
+  state.node('#content').val('Original draft');
+  state.context.AIReview.show('Original draft', 'First\r\nSecond', 'organize');
+  assert.equal(state.local.memosAIReview.result, 'First\nSecond');
+  state.node('#aiReviewReplace').click();
+  assert.equal(state.node('#content').val(), 'First\nSecond');
+  state.node('#aiUndo').click();
+  assert.equal(state.node('#content').val(), 'Original draft');
+  assert.notEqual(state.messages.at(-1), 'aiUndoConflict');
+});
+
+test('a result an earlier version stored with carriage returns can be adopted and the adoption undone', () => {
+  const review = { input: 'Original draft', result: 'First\r\nSecond', task: 'organize' };
+  const adopting = editor => {
+    asTextBox(editor.node('#content')[0]);
+    editor.node('#content').val('Original draft');
+    editor.node('#aiReviewReplace').click();
+    assert.equal(editor.node('#content').val(), 'First\nSecond');
+    editor.node('#aiUndo').click();
+    assert.equal(editor.node('#content').val(), 'Original draft');
+  };
+  // Stored before a result was kept as a text box holds it, and found when the editor opens.
+  adopting(harness({ local: { memosAIReview: review } }));
+
+  // The same review, heard of from storage while the editor is open.
+  const open = harness();
+  open.context.chrome.storage.onChanged.emit({ memosAIReview: { newValue: review } }, 'local');
+  adopting(open);
+});
+
+test('an adoption an earlier version stored with carriage returns can be undone, and is done with when its draft is saved', () => {
+  // The draft holds what the adoption wrote as a text box holds it; the record of it has the answer's line endings.
+  const adoption = { before: 'Original draft', after: 'First\r\nSecond' };
+  const adopted = () => {
+    const state = harness({ local: { memosAIUndo: adoption } });
+    asTextBox(state.node('#content')[0]);
+    state.node('#content').val('First\nSecond');
+    return state;
+  };
+  const undone = adopted();
+  undone.node('#aiUndo').click();
+  assert.equal(undone.node('#content').val(), 'Original draft');
+
+  const saved = adopted();
+  saved.context.AIReview.onMemoSaved('First\nSecond');
+  assert.equal(saved.local.memosAIUndo, null);
+
+  const heard = harness();
+  asTextBox(heard.node('#content')[0]);
+  heard.node('#content').val('First\nSecond');
+  heard.context.chrome.storage.onChanged.emit({ memosAIUndo: { newValue: adoption } }, 'local');
+  heard.node('#aiUndo').click();
+  assert.equal(heard.node('#content').val(), 'Original draft');
+});
+
+test('a caret in a part of the text that the finished answer changes stays a caret', () => {
+  const state = harness();
+  const box = state.node('#aiReviewResult')[0];
+  state.context.AIReview.setBusy(true, 'organize', () => {});
+  // Two parts were lost on the way. All from the first of them to the last counts as changed: both texts
+  // begin with "One. T", and the caret is behind that, inside "Three".
+  state.context.AIReview.stream('Original draft', 'One. Three. Five.', 'organize');
+  box.setSelectionRange(8, 8);
+  state.context.AIReview.stream('Original draft', 'One. Two. Three. Four. Five.', 'organize');
+  state.frame();
+  assert.deepEqual(
+    [box.value, box.selectionStart, box.selectionEnd],
+    ['One. Two. Three. Four. Five.', 6, 6],
+    'where the change begins'
+  );
 });
