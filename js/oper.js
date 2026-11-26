@@ -656,7 +656,14 @@ async function submitMemo(info, snapshot, destination) {
     } catch (error) {
       if (!MemosAPI.isMissingRoute(error)) throw error;
     }
-    if (memo && (memo.name !== 'memos/' + memoId || memo.content !== body.content)) throw new Error('unconfirmedSave');
+    // An earlier extension could have saved the same linked image with an absolute URL.
+    if (
+      memo &&
+      (memo.name !== 'memos/' + memoId ||
+        typeof memo.content !== 'string' ||
+        MemosAPI.normalizeMemoImages(info, memo.content) !== body.content)
+    )
+      throw new Error('unconfirmedSave');
   }
   if (!memo) memo = await MemosAPI.createMemo(info, body, memoId);
   if (!memo?.name || !/^memos\/[^/]+$/.test(memo.name)) throw new Error('unconfirmedSave');

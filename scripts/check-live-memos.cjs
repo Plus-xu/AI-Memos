@@ -8,7 +8,7 @@ const { spawn } = require('node:child_process');
 const { once } = require('node:events');
 const { randomUUID } = require('node:crypto');
 
-async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
+async function checkLiveMemos({ context, ext, fixture, waitFor, pass }) {
   const expected = process.env.MEMOS_VERSION || '26.11.1';
   const probe = net.createServer();
   probe.listen(0, '127.0.0.1');
@@ -31,8 +31,7 @@ async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
       data,
       '--config-apply',
       'off',
-      '--instance-url',
-      base,
+      '--instance-url=',
       '--log-level',
       'error'
     ],
@@ -63,6 +62,7 @@ async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
       }
     }
     assert.equal(profile?.version, expected);
+    assert.ok(!profile.instanceUrl);
     const credentials = { username: 'clipper-test', password: 'qa-' + randomUUID() };
     const user = await call('users', credentials);
     const login = await call('auth/signin', { passwordCredentials: credentials });
@@ -99,8 +99,12 @@ async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
     await page.selectOption('#memoSpace', space.name);
     await page.selectOption('#visibility', 'SPACE');
     await page.fill('#content', '阅读室开放时间 #阅读\n');
-    await page.locator('#inFile').setInputFiles(path.join(extension, 'assets', 'logo_24x24.png'));
-    await waitFor(page, () => document.getElementById('content').value.includes('memos-local://'));
+    const article = await context.newPage();
+    await article.goto(fixture.base + '/article');
+    await article.bringToFront();
+    await page.evaluate(() => document.getElementById('capturePage').click());
+    await waitFor(page, () => document.getElementById('content').value.includes('[![阅读室照片](memos-local://'));
+    await article.close();
     assert.equal((await call('memos', null, token)).memos.length, 0);
     const before = await call('attachments', null, token);
     assert.equal(before.attachments.length, 0);
@@ -115,13 +119,17 @@ async function checkLiveMemos({ context, ext, extension, waitFor, pass }) {
     assert.equal(memo.space, space.name);
     assert.equal(memo.visibility, 'SPACE');
     assert.equal(memo.attachments.length, 1);
-    assert.equal(memo.attachments[0].memo, memo.name);
-    assert.match(memo.content, /\/file\/attachments\/[^)]+/);
-    pass('The real server stores one SPACE memo and binds its staged image only on explicit save');
-    const fileUrl = new URL(memo.content.match(/\/file\/attachments\/[^)]+/)[0], base);
+    const [attachment] = memo.attachments;
+    assert.equal(attachment.memo, memo.name);
+    assert.equal(attachment.filename, 'image (1).png');
+    const imagePath = '/file/' + attachment.name;
+    assert.ok(memo.content.includes('[![阅读室照片](' + imagePath + ')](' + fixture.base + '/notes)'));
+    assert.ok(!memo.content.includes('memos-local://'));
+    pass('The real server without an instance URL binds the clipped linked image on explicit save');
+    const fileUrl = new URL(imagePath, base);
     const authenticated = await fetch(fileUrl, { headers: { Authorization: 'Bearer ' + token }, redirect: 'error' });
     assert.equal(authenticated.status, 200);
-    const original = await fs.readFile(path.join(extension, 'assets', 'logo_24x24.png'));
+    const original = Buffer.from(await (await fetch(fixture.base + fixture.imagePath)).arrayBuffer());
     assert.ok(original.equals(Buffer.from(await authenticated.arrayBuffer())));
     const anonymous = await fetch(fileUrl, { redirect: 'manual' });
     assert.ok([401, 403, 404].includes(anonymous.status), 'Private attachment must require authorization');

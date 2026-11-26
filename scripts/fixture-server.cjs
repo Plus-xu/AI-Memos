@@ -7,8 +7,9 @@ async function startFixture() {
     'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==',
     'base64'
   );
+  const imagePath = '/image%20%281%29.png';
   const article =
-    '<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>社区阅读室的开放记录</title></head><body><nav>Fixture navigation</nav><article><h1>社区阅读室的开放记录</h1><section id="selection"><h2>读者反馈</h2><ul><li>延长周末开放时间</li><li>增加儿童图书</li></ul><table><thead><tr><th>时段</th><th>人数</th></tr></thead><tbody><tr><td>上午</td><td>23</td></tr></tbody></table><img src="/image.png" alt="阅读室照片"><a href="/notes">来源说明</a></section><p>' +
+    `<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>社区阅读室的开放记录</title></head><body><nav>Fixture navigation</nav><article><h1>社区阅读室的开放记录</h1><section id="selection"><h2>读者反馈</h2><ul><li>延长周末开放时间</li><li>增加儿童图书</li></ul><table><thead><tr><th>时段</th><th>人数</th></tr></thead><tbody><tr><td>上午</td><td>23</td></tr></tbody></table><a href="/notes"><img src="${imagePath}" alt="阅读室照片"></a><a href="/notes">来源说明</a></section><p>` +
     '社区阅读室从今年春季起试行周末延时开放，工作人员记录了读者到访时段和借阅需求。'.repeat(8) +
     '</p><pre><code>open_at = 9</code></pre></article><footer>Fixture footer</footer></body></html>';
   const memos = new Map(),
@@ -58,7 +59,7 @@ async function startFixture() {
         }
       };
       if (route === '/article') return reply(200, article, 'text/html; charset=utf-8');
-      if (route === '/image.png') return reply(200, image, 'image/png');
+      if (route === imagePath) return reply(200, image, 'image/png');
       if (route === '/short')
         return reply(
           200,
@@ -180,6 +181,7 @@ async function startFixture() {
   await once(server, 'listening');
   return {
     base: 'http://127.0.0.1:' + server.address().port,
+    imagePath,
     memos,
     attachments,
     calls,

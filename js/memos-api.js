@@ -339,12 +339,13 @@ const MemosAPI = (function () {
       var prefix = base.pathname + 'file/attachments/';
       if (url.origin !== base.origin || !url.pathname.startsWith(prefix) || url.search || url.hash) return null;
       var segments = url.pathname.slice(prefix.length).split('/');
-      if (segments.length !== 2 || !/^[a-zA-Z0-9_-]+$/.test(segments[0]) || !segments[1]) return null;
+      var [id, filename] = segments;
+      if (segments.length > 2 || !/^[a-zA-Z0-9_-]+$/.test(id) || filename === '') return null;
       return {
-        name: 'attachments/' + segments[0],
-        filename: decodeURIComponent(segments[1]),
+        name: 'attachments/' + id,
+        filename: filename ? decodeURIComponent(filename) : '',
         url: url.href,
-        path: '/file/attachments/' + segments[0] + '/' + segments[1]
+        path: '/file/attachments/' + segments.join('/')
       };
     } catch (_) {
       return null;
@@ -369,8 +370,9 @@ const MemosAPI = (function () {
           return line;
         }
         if (/^( {4}|\t)/.test(line)) return line;
+        // Match the image opener inside a link label such as [![alt](image)](target).
         return line.replace(
-          /(`+)[\s\S]*?\1|(!?\[(?:\\.|[^\]\\])*\]\()(<[^>\n]+>|[^\s)]+)(\s+(?:"[^"]*"|'[^']*'))?\)/g,
+          /(`+)[\s\S]*?\1|(!?\[(?:\\.|[^\\[\]])*\]\()(<[^>\n]+>|[^\s)]+)(\s+(?:"[^"]*"|'[^']*'))?\)/g,
           function (match, code, opening, destination, title) {
             if (code) return match;
             var angle = destination[0] === '<';
@@ -381,6 +383,16 @@ const MemosAPI = (function () {
         );
       })
       .join('\n');
+  }
+
+  function normalizeMemoImages(info, content) {
+    var canOmitFilename = apiPrefixes.get(normalizeBaseUrl(info.apiUrl)) === 'api/';
+    return mapMarkdownLinks(content, function (url, image) {
+      var file = image && managedFile(info.apiUrl, url);
+      if (!file) return url;
+      // Current Memos rejects encoded filenames in Markdown images and serves the attachment by ID.
+      return canOmitFilename && file.path.includes('%') ? '/file/' + file.name : file.path;
+    });
   }
 
   function prepareMemo(info, body) {
@@ -409,10 +421,7 @@ const MemosAPI = (function () {
       var attachments = resolved.filter(function (reference) {
         return reference.bind;
       });
-      prepared.content = mapMarkdownLinks(body.content, function (url, image) {
-        var file = managedFile(info.apiUrl, url);
-        return image && file ? file.path : url;
-      });
+      prepared.content = normalizeMemoImages(info, body.content);
       if (attachments.length) {
         prepared.attachments = attachments.map(function (reference) {
           return { name: reference.file.name };
@@ -448,6 +457,7 @@ const MemosAPI = (function () {
     isMissingRoute,
     buildContentFilter: buildContentFilter,
     getMemo: getMemo,
+    normalizeMemoImages,
     prepareMemo: prepareMemo,
     createMemo: createMemo,
     archiveMemo: archiveMemo,

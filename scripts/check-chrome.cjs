@@ -187,6 +187,7 @@ async function main() {
     assert.match(clipped, /\| 时段 \| 人数 \|/);
     assert.match(clipped, /- +延长周末开放时间/);
     assert.match(clipped, /\[来源说明\]\(http:\/\/127\.0\.0\.1:/);
+    assert.match(clipped, /\[!\[阅读室照片\]\(memos-local:\/\/[a-f0-9-]{36}\)\]\(http:\/\/127\.0\.0\.1:\d+\/notes\)/);
     assert.equal(fixture.attachments.size + fixture.memos.size, 0);
     pass('Rich selection retains headings, lists, a table, links and a staged image without a server write');
     await waitFor(page, original => document.getElementById('content').value === original, clipped);
@@ -383,7 +384,7 @@ async function main() {
     assert.equal(memo.visibility, 'SPACE');
     assert.equal(memo.space, 'spaces/reading');
     assert.doesNotMatch(memo.content, /memos-local:\/\//);
-    assert.match(memo.content, /\/file\/attachments\/file-1\//);
+    assert.ok(memo.content.includes('[![阅读室照片](/file/attachments/file-1)](' + fixture.base + '/notes)'));
     assert.deepEqual(memo.attachments, [{ name: 'attachments/file-1' }]);
     assert.equal(fixture.calls.filter(r => r.route === '/api/memos' && r.method === 'POST').length, 1);
     assert.equal(fixture.calls.filter(r => r.route === '/api/attachments' && r.method === 'POST').length, 2);
@@ -541,10 +542,10 @@ async function main() {
     pass('Conflicting edits survive reopening and both versions can be kept');
     await article.goto(fixture.base + '/article');
     await article.bringToFront();
-    const contextResult = await worker.evaluate(async base => {
+    const contextResult = await worker.evaluate(async imageUrl => {
       const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-      return capture(tab, 'image', { menuItemId: 'Memos-send-image', srcUrl: base + '/image.png', pageUrl: tab.url });
-    }, fixture.base);
+      return capture(tab, 'image', { menuItemId: 'Memos-send-image', srcUrl: imageUrl, pageUrl: tab.url });
+    }, fixture.base + fixture.imagePath);
     assert.equal(contextResult.source.url, fixture.base + '/article');
     await waitFor(shell, () => document.getElementById('content').value.includes('memos-local://'));
     assert.equal(fixture.memos.size, 1);
@@ -618,7 +619,7 @@ async function main() {
     }
     if (process.env.MEMOS_BINARY) {
       const { checkLiveMemos } = require('./check-live-memos.cjs');
-      await checkLiveMemos({ context, ext, extension, waitFor, pass });
+      await checkLiveMemos({ context, ext, fixture, waitFor, pass });
     }
     assert.deepEqual(errors, []);
     pass('Extension pages emitted zero JavaScript errors');

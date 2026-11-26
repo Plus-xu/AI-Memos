@@ -264,6 +264,34 @@ test('draft attachment binding is derived from references and survives reopening
   assert.ok(!Object.hasOwn(noFiles, 'attachments'));
 });
 
+test('linked images keep their click target and filenames with escapes use the ID-only image path', async () => {
+  const { api, calls } = loadApi(options => ({ name: new URL(options.url).pathname.slice(5) }));
+  const photo = api.buildFileUrl(info.apiUrl, { name: 'attachments/photo', filename: 'photo.png' });
+  const diagram = api.buildFileUrl(info.apiUrl, { name: 'attachments/diagram', filename: '图 (1).png' });
+  const content = `> [![photo](${photo})](https://example.org/gallery)\n> ![diagram](${diagram})\n[Download](${diagram})`;
+  const prepared = await api.prepareMemo(info, { content });
+  assert.equal(
+    prepared.content,
+    `> [![photo](/file/attachments/photo/photo.png)](https://example.org/gallery)\n> ![diagram](/file/attachments/diagram)\n[Download](${diagram})`
+  );
+  assert.deepEqual(plain(prepared.attachments), [{ name: 'attachments/photo' }, { name: 'attachments/diagram' }]);
+  assert.deepEqual(paths(calls), ['/api/attachments/photo', '/api/attachments/diagram']);
+  assert.equal(
+    api.managedFile('https://memos.example/sub/', '/file/attachments/diagram').url,
+    'https://memos.example/sub/file/attachments/diagram'
+  );
+});
+
+test('legacy servers retain the filename segment in a managed image URL', async () => {
+  const { api } = loadApi(options => {
+    if (!options.url.includes('/api/v1/')) throw refused(404);
+    return { name: 'attachments/photo' };
+  });
+  const url = api.buildFileUrl(info.apiUrl, { name: 'attachments/photo', filename: 'a (1).png' });
+  const prepared = await api.prepareMemo(info, { content: `![photo](${url})` });
+  assert.equal(prepared.content, '![photo](/file/attachments/photo/a%20%281%29.png)');
+});
+
 test('attachment reads authenticate only exact instance file routes and refuse redirects', async () => {
   const fileCalls = [];
   const { api } = loadApi(undefined, async (url, options) => {
@@ -316,6 +344,31 @@ test('failed memo saves preserve text and permit retry with the same draft', asy
   assert.equal(popup.context.memoSaveInProgress, false);
   await popup.context.sendText();
   assert.equal(attempts, 2);
+  assert.equal(popup.storage.memosDraft.open_content, '');
+});
+
+test('a retry confirms a memo saved by an older extension with an absolute linked-image URL', async () => {
+  const older = `> [![photo](${info.apiUrl}file/attachments/photo/photo.png)](https://example.org/gallery)`;
+  const prepared = '> [![photo](/file/attachments/photo/photo.png)](https://example.org/gallery)';
+  let posts = 0;
+  let name;
+  const popup = await loadPopup(
+    {
+      prepareMemo: async (_, body) => ({ ...body, content: prepared }),
+      createMemo: async (_, body, id) => {
+        posts++;
+        assert.equal(body.content, prepared);
+        name = 'memos/' + id;
+        throw refused(503);
+      },
+      getMemo: async () => ({ name, content: older })
+    },
+    { open_content: older, memosVersion: '26.11.2' }
+  );
+  await popup.context.sendText();
+  assert.equal(popup.storage.memosDraft.open_content, older);
+  await popup.context.sendText();
+  assert.equal(posts, 1);
   assert.equal(popup.storage.memosDraft.open_content, '');
 });
 
