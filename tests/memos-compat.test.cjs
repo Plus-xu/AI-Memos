@@ -313,6 +313,46 @@ test('attachment links inside quoted code fences stay literal', async () => {
   assert.deepEqual(paths(calls), ['/api/attachments/photo']);
 });
 
+test('indented code inside a quote never looks up the example attachment', async () => {
+  const { api, calls } = loadApi(options => {
+    if (new URL(options.url).pathname !== '/api/attachments/photo') throw refused(404);
+    return { name: 'attachments/photo' };
+  });
+  const example = '![example](/file/attachments/demo)';
+  const photo = '![photo](' + info.apiUrl + 'file/attachments/photo/pic.png)';
+  const content = ['>     ' + example, '> > \t' + example, '', '> ' + photo].join('\r\n');
+  const saved = await api.prepareMemo(info, { content });
+  assert.equal(saved.content, content.replace(photo, '![photo](/file/attachments/photo/pic.png)'));
+  assert.deepEqual(paths(calls), ['/api/attachments/photo']);
+});
+
+test('the indentation of a clipped list item still allows a real image beside a literal code example', async () => {
+  const { api, calls } = loadApi(options => {
+    if (new URL(options.url).pathname !== '/api/attachments/photo') throw refused(404);
+    return { name: 'attachments/photo' };
+  });
+  const image = '![photo](' + info.apiUrl + 'file/attachments/photo/a.png)';
+  const example = '![example](/file/attachments/demo)';
+  const content = [
+    '> -   Album',
+    '>     -   ' + image,
+    '>     -   Another picture',
+    '>         ',
+    '>         ' + image,
+    '>         ',
+    '>             ' + example,
+    '> ',
+    '> 1.  Code inside an item',
+    '>     ~~~',
+    '>     ' + example,
+    '>     ~~~',
+    '>     ' + image
+  ].join('\n');
+  const saved = await api.prepareMemo(info, { content });
+  assert.equal(saved.content, content.replaceAll(image, '![photo](/file/attachments/photo/a.png)'));
+  assert.deepEqual(paths(calls), ['/api/attachments/photo']);
+});
+
 test('legacy servers retain the filename segment in a managed image URL', async () => {
   const { api } = loadApi(options => {
     if (!options.url.includes('/api/v1/')) throw refused(404);
@@ -507,8 +547,21 @@ test('preview labels show escaped brackets and backslashes literally', async () 
   assert.ok(html.includes('>a[1]\\b</a>'), html);
 });
 
-test('private image previews authenticate once, share a Blob URL and release it on clearing', async () => {
+test('a clickable image keeps its protected thumbnail and its separate link target in the preview', async () => {
+  const { context } = await loadPopup();
+  const image = '![Photo \\[1\\] & friends](/file/attachments/photo)';
+  const html = context.renderMarkdownPreview('[See ' + image + ' here](https://example.org/gallery "Gallery")', info);
+  assert.match(html, /<a href="https:\/\/example\.org\/gallery"[^>]*>See <img [^>]*> here<\/a>/);
+  assert.ok(html.includes('alt="Photo [1] &amp; friends"'));
+  assert.ok(html.includes('data-memos-file="https://memos.example/file/attachments/photo"'));
+  const unsafe = context.renderMarkdownPreview('[' + image + '](javascript:invalid)', info);
+  assert.ok(!unsafe.includes('<a '));
+  assert.ok(unsafe.includes('<img '));
+});
+
+test('private image previews share one download per account and release their Blob URLs on clearing', async () => {
   let reads = 0;
+  let blobs = 0;
   const revoked = [];
   const popup = await loadPopup({
     fetchAttachmentBlob: async () => {
@@ -516,20 +569,25 @@ test('private image previews authenticate once, share a Blob URL and release it 
       return new Blob(['image'], { type: 'image/png' });
     }
   });
-  const images = Array.from({ length: 2 }, () => ({
-    getAttribute: () => '/file/attachments/photo/a.png',
+  const images = ['/file/attachments/photo', '/file/attachments/photo/a%20b.png'].map(url => ({
+    getAttribute: () => url,
     removeAttribute() {}
   }));
-  popup.context.URL.createObjectURL = () => 'blob:test-preview';
+  popup.context.URL.createObjectURL = () => 'blob:test-preview-' + ++blobs;
   popup.context.URL.revokeObjectURL = url => revoked.push(url);
   popup.document.querySelectorAll = () => images;
   popup.context.hydrateMemoImages(info);
   await flush();
   assert.equal(reads, 1);
-  assert.equal(images[0].src, 'blob:test-preview');
-  assert.equal(images[1].src, 'blob:test-preview');
+  assert.equal(images[0].src, 'blob:test-preview-1');
+  assert.equal(images[1].src, images[0].src);
+  popup.context.hydrateMemoImages({ ...info, userName: 'users/another' });
+  await flush();
+  assert.equal(reads, 2);
+  assert.equal(images[0].src, 'blob:test-preview-2');
+  assert.equal(images[1].src, images[0].src);
   popup.context.clearMemoList();
-  assert.deepEqual(revoked, ['blob:test-preview']);
+  assert.deepEqual(revoked, ['blob:test-preview-1', 'blob:test-preview-2']);
 });
 
 test('quota and permission errors are distinct from invalid-token errors', async () => {
@@ -968,6 +1026,63 @@ async function popupAwaitingSpaces(saved = {}, overrides = {}) {
   const popup = await loadPopup({ listSpaces: () => pending, ...overrides }, saved);
   return { popup, answer };
 }
+
+test('a save clicked as private cannot follow another editor to public while the space list loads', async () => {
+  const posts = [];
+  const { popup, answer } = await popupAwaitingSpaces(
+    {},
+    {
+      createMemo: async (_, body) => {
+        posts.push(body.visibility);
+        return { name: 'memos/saved', ...body };
+      }
+    }
+  );
+  assert.equal(popup.node('#visibility').val(), 'PRIVATE');
+  const save = popup.context.sendText();
+  await flush();
+  popup.context.chrome.storage.onChanged.emit(
+    {
+      ['memosDestination:' + scope]: { newValue: { space: '', visibility: 'PUBLIC' } }
+    },
+    'local'
+  );
+  answer.resolve([]);
+  await save;
+  assert.deepEqual(posts, []);
+  assert.equal(popup.node('#content').val(), 'draft text');
+  assert.equal(popup.messages.at(-1), 'destinationChanged');
+  await popup.context.sendText();
+  assert.deepEqual(posts, ['PUBLIC']);
+});
+
+test('a destination change during attachment preparation stops the memo write and keeps the draft', async () => {
+  const started = Promise.withResolvers();
+  const ready = Promise.withResolvers();
+  let posts = 0;
+  const popup = await loadPopup({
+    prepareMemo: async (_, body) => {
+      started.resolve();
+      await ready.promise;
+      return body;
+    },
+    createMemo: async () => {
+      posts++;
+      return { name: 'memos/saved' };
+    }
+  });
+  const save = popup.context.sendText();
+  await started.promise;
+  popup.node('#visibility').val('PROTECTED');
+  await popup.node('#visibility')[0].onchange();
+  popup.node('#visibility').val('PRIVATE');
+  await popup.node('#visibility')[0].onchange();
+  ready.resolve();
+  await save;
+  assert.equal(posts, 0);
+  assert.equal(popup.messages.at(-1), 'destinationChanged');
+  assert.equal(popup.storage.memosDraft.open_content, 'draft text');
+});
 
 test('the destination is drawn from the remembered spaces before the server answers, then follows the answer', async () => {
   const { popup, answer } = await popupAwaitingSpaces({

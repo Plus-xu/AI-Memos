@@ -332,6 +332,44 @@ async function main() {
     await panel.click('#aiReviewDiscard');
     fixture.state.refuseStream = false;
     pass('A gateway that refuses to stream still delivers its answer, asked again in one piece');
+    await page.selectOption('#visibility', 'PRIVATE');
+    await waitFor(panel, () => document.getElementById('visibility').value === 'PRIVATE');
+    const releaseSpaces = Promise.withResolvers();
+    await panel.route(
+      fixture.base + '/api/spaces*',
+      async route => {
+        await releaseSpaces.promise;
+        await route.continue();
+      },
+      { times: 1 }
+    );
+    try {
+      await panel.reload();
+      await waitFor(
+        panel,
+        () =>
+          !document.getElementById('content_submit_text').disabled &&
+          !document.getElementById('content').readOnly &&
+          document.getElementById('visibility').value === 'PRIVATE'
+      );
+      await panel.click('#content_submit_text');
+      await page.selectOption('#visibility', 'PUBLIC');
+      await waitFor(panel, () => document.getElementById('visibility').value === 'PUBLIC');
+    } finally {
+      releaseSpaces.resolve();
+    }
+    await waitFor(panel, () => document.querySelector('.tip')?.textContent === uiMessage('destinationChanged'));
+    assert.equal(await panel.inputValue('#content'), clipped);
+    assert.equal(
+      fixture.calls.filter(call => call.method === 'POST' && ['/api/attachments', '/api/memos'].includes(call.route))
+        .length,
+      0
+    );
+    await page.selectOption('#visibility', 'SPACE');
+    await waitFor(panel, () => document.getElementById('visibility').value === 'SPACE');
+    pass(
+      'A private save interrupted by a visibility change in the other editor keeps the draft and sends no uploads or memo'
+    );
     await panel.bringToFront();
     fixture.state.spaces = [];
     await panel.click('#content_submit_text');

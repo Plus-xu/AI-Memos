@@ -1058,7 +1058,7 @@ test('only the latest settings and destination reads can enable adoption', async
   await flush();
   assert.equal(node('#aiReviewReplace').prop('disabled'), false);
   assert.equal(node('#content_submit_text').prop('disabled'), false);
-  await assert.rejects(context.Workspace.destination(info), /draftChanged/);
+  await assert.rejects(context.Workspace.destination(info), /destinationChanged/);
   node('#aiReviewReplace').click();
   assert.equal(node('#content').val(), draft);
   assert.equal(node('#aiVisibilityChange').text(), 'lockPrivate → lockPublic');

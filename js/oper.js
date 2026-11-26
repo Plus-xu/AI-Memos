@@ -25,7 +25,7 @@ function relativeTime(value, lang, now) {
 
 var memoSaveInProgress = false;
 var pendingUploads = 0;
-// Private images downloaded for the results on screen, by file URL. They last until the list is cleared.
+// Private images downloaded for the results on screen, by account and attachment name.
 var previewGeneration = 0;
 var previewFiles = new Map();
 var previewObjectUrls = new Set();
@@ -172,9 +172,9 @@ function previewImage(info, value, label) {
   return '<img class="random-image" alt="' + escapeHtml(label || '') + '"' + source + ' referrerpolicy="no-referrer"/>';
 }
 
-function previewLink(info, value, label) {
+function wrapPreviewLink(info, value, labelHtml) {
   var url = previewUrl(info, value);
-  if (!url) return escapeHtml(label || '');
+  if (!url) return labelHtml;
   var file = MemosAPI.managedFile(info.apiUrl, url);
   var attributes = file ? ' class="memos-file-link" data-url="' + escapeHtml(url) + '"' : '';
   return (
@@ -183,22 +183,19 @@ function previewLink(info, value, label) {
     '"' +
     attributes +
     ' target="_blank" rel="noreferrer noopener">' +
-    escapeHtml(label) +
+    labelHtml +
     '</a>'
   );
 }
 
 function renderMarkdownPreview(content, info) {
-  var html = '';
-  var last = 0;
-  String(content).replace(/(!?)\[((?:\\.|[^\]\\\n])*)\]\(([^\s)]+)\)/g, function (match, image, label, url, offset) {
-    html += escapeHtml(content.slice(last, offset));
-    label = label.replace(/\\([\\[\]])/g, '$1');
-    html += image ? previewImage(info, url, label) : previewLink(info, url, label);
-    last = offset + match.length;
-    return match;
-  });
-  return html + escapeHtml(content.slice(last));
+  const unescapeLabel = text => text.replace(/\\([\\[\]])/g, '$1');
+  return MemosAPI.formatMarkdownLinks(
+    content,
+    ({ image, url, label }) =>
+      image ? previewImage(info, url, unescapeLabel(label)) : wrapPreviewLink(info, url, label),
+    (text, inLabel) => escapeHtml(inLabel ? unescapeLabel(text) : text)
+  );
 }
 
 function releaseMemoPreviews() {
@@ -220,12 +217,16 @@ function clearMemoList() {
 // Fills the images that have not been asked for yet; an image keeps data-memos-file until then.
 function hydrateMemoImages(info) {
   var generation = previewGeneration;
+  const scope = DraftStorage.scope(info);
   if (!previewController) previewController = new AbortController();
   var signal = previewController.signal;
   document.querySelectorAll('#randomlist img[data-memos-file]').forEach(function (element) {
     var url = element.getAttribute('data-memos-file');
     element.removeAttribute('data-memos-file');
-    if (!previewFiles.has(url)) {
+    const file = MemosAPI.managedFile(info.apiUrl, url);
+    if (!file) return;
+    const key = scope + '/' + file.name;
+    if (!previewFiles.has(key)) {
       var download = MemosAPI.fetchAttachmentBlob(info, url, signal).then(function (blob) {
         if (generation !== previewGeneration) return '';
         if (!blob.type.startsWith('image/')) throw new Error('invalid_image_response');
@@ -233,14 +234,14 @@ function hydrateMemoImages(info) {
         previewObjectUrls.add(objectUrl);
         return objectUrl;
       });
-      previewFiles.set(url, download);
+      previewFiles.set(key, download);
       // A failed download is forgotten, so the next redraw asks again.
       download.catch(function () {
-        if (previewFiles.get(url) === download) previewFiles.delete(url);
+        if (previewFiles.get(key) === download) previewFiles.delete(key);
       });
     }
     previewFiles
-      .get(url)
+      .get(key)
       .then(function (objectUrl) {
         if (!objectUrl || generation !== previewGeneration) return;
         element.src = objectUrl;
@@ -272,7 +273,7 @@ function buildMemoAttachmentHtml(info, memo) {
     if (type.slice(0, 5) === 'image') {
       html += previewImage(info, fileUrl, filename);
     } else {
-      html += previewLink(info, fileUrl, filename);
+      html += wrapPreviewLink(info, fileUrl, escapeHtml(filename));
     }
   }
 
@@ -322,14 +323,14 @@ function renderMemoList(info, memos) {
     .html(memoListHtml(info, memos))
     .toggle(memos.length > 0);
   hydrateMemoImages(info);
-  window.ViewImage && ViewImage.init('.random-image');
+  window.ViewImage && ViewImage.init('.random-image:not(a img)');
 }
 
 // Adds a page of results below the ones on screen, which stay as they are.
 function appendMemoList(info, memos) {
   $('#randomlist').append(memoListHtml(info, memos)).show();
   hydrateMemoImages(info);
-  window.ViewImage && ViewImage.init('.random-image');
+  window.ViewImage && ViewImage.init('.random-image:not(a img)');
 }
 
 DraftStorage.load(function (draft) {
@@ -622,8 +623,9 @@ $(document).on('click', '.memos-file-link', function (event) {
 $('#content_submit_text').click(sendText);
 $('#makePrivate').click(makeSavedMemoPrivate);
 
-async function submitMemo(info, snapshot, destination) {
+async function submitMemo(info, snapshot, selection) {
   const scope = DraftStorage.scope(info);
+  const destination = await Workspace.destination(info, selection);
   const current = await DraftStorage.current();
   if (snapshot.open_content !== current.open_content || snapshot.revision !== current.revision)
     throw new Error('draftChanged');
@@ -643,11 +645,14 @@ async function submitMemo(info, snapshot, destination) {
   ).join('');
   const key = 'memosSaveAttempt:' + scope;
   const prior = (await DraftStorage.get('local', { [key]: null }))[key];
+  selection.assertCurrent(info);
   const retry = prior?.signature === signature;
   const attemptId = retry ? prior.id : crypto.randomUUID();
   if (!retry) await DraftStorage.put('local', { [key]: { signature, id: attemptId } });
   const memoId = acceptsId ? attemptId : undefined;
-  const content = await StagedFiles.resolve(info, original, attemptId);
+  selection.assertCurrent(info);
+  const content = await StagedFiles.resolve(info, original, attemptId, selection.assertCurrent);
+  selection.assertCurrent(info);
   const body = await MemosAPI.prepareMemo(info, { content, ...destination });
   let memo;
   if (memoId && retry) {
@@ -665,7 +670,10 @@ async function submitMemo(info, snapshot, destination) {
     )
       throw new Error('unconfirmedSave');
   }
-  if (!memo) memo = await MemosAPI.createMemo(info, body, memoId);
+  if (!memo) {
+    selection.assertCurrent(info);
+    memo = await MemosAPI.createMemo(info, body, memoId);
+  }
   if (!memo?.name || !/^memos\/[^/]+$/.test(memo.name)) throw new Error('unconfirmedSave');
   if (memoId && memo.name !== 'memos/' + memoId) throw new Error('unconfirmedSave');
   const sources = snapshot.sources.filter(source => original.includes(source.url));
@@ -707,6 +715,7 @@ async function sendText() {
   $('#content').prop('readOnly', true);
   refreshSaveButton();
   try {
+    const selection = Workspace.captureDestination(requested);
     if (!(await DraftEditor.flush())) return;
     const snapshot = DraftEditor.snapshot();
     if (snapshot.open_content !== requested) throw new Error('draftChanged');
@@ -716,10 +725,13 @@ async function sendText() {
       return;
     }
     $.message({ message: uiMessage('memoUploading') });
-    const target = await Workspace.destination(info);
-    await DraftStorage.locked('memos-submit', () => submitMemo(info, snapshot, target));
+    await DraftStorage.locked('memos-submit', () => submitMemo(info, snapshot, selection));
   } catch (error) {
-    if (['draftChanged', 'spaceUnavailable', 'stagedFileMissing', 'unconfirmedSave'].includes(error.message))
+    if (
+      ['draftChanged', 'destinationChanged', 'spaceUnavailable', 'stagedFileMissing', 'unconfirmedSave'].includes(
+        error.message
+      )
+    )
       $.message({ message: uiMessage(error.message) });
     else showApiError('Save memo', error, uiMessage('memoFailed'));
     // The server took less than the remembered limit allows.

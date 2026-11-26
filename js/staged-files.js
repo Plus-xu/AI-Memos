@@ -105,7 +105,7 @@ var StagedFiles = (function () {
     return Array.from(new Set(Array.from(content.matchAll(/memos-local:\/\/([a-f0-9-]{36})/gi), hit => hit[1])));
   }
 
-  async function resolve(info, content, attemptId) {
+  async function resolve(info, content, attemptId, checkDestination) {
     const refs = ids(content);
     if (!refs.length) return content;
     const account = DraftStorage.scope(info);
@@ -115,10 +115,12 @@ var StagedFiles = (function () {
         if (!entry) throw new Error('stagedFileMissing');
         const cached = entry.uploads[account];
         if (cached?.attemptId === attemptId && cached.url) return cached.url;
+        const bytes = await base64(entry.blob);
+        checkDestination?.(info);
         const file = await MemosAPI.uploadAttachment(info, {
           filename: entry.name,
           type: entry.blob.type || 'application/octet-stream',
-          content: await base64(entry.blob)
+          content: bytes
         });
         const uploaded = MemosAPI.buildFileUrl(info.apiUrl, file);
         if (!file.name || !MemosAPI.managedFile(info.apiUrl, uploaded)) throw new Error('stagedFileMissing');

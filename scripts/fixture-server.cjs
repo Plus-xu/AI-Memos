@@ -59,6 +59,7 @@ async function startFixture() {
         }
       };
       if (route === '/article') return reply(200, article, 'text/html; charset=utf-8');
+      if (route === '/notes') return reply(200, '<title>来源说明</title>', 'text/html; charset=utf-8');
       if (route === imagePath) return reply(200, image, 'image/png');
       if (route === '/short')
         return reply(

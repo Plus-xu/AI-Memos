@@ -1206,6 +1206,23 @@ test('structured HTTP and RPC timeouts take precedence over a stream refusal phr
   }
 });
 
+test('a gateway describing a timeout or disconnect without output is never asked to generate again', async () => {
+  const message = 'The upstream request timed out without streaming a single token.';
+  for (const report of [
+    { error: { message } },
+    { detail: message },
+    { error: { message, param: 'stream' } },
+    { error: { message: 'The connection closed without streaming.' } }
+  ]) {
+    assert.equal(await requestsWhenRefused(200, report), 1);
+    assert.equal(await requestsWhenRefused(400, report), 1);
+    assert.equal(await requestsWhenStreamSays(report), 1);
+  }
+  for (const message of ['Retry without streaming', 'Please send the request again without streaming.']) {
+    assert.equal(await requestsWhenRefused(200, { error: { message } }), 2);
+  }
+});
+
 test('a timeout log in the echoed note cannot suppress a real stream refusal', async () => {
   const note = 'The app logged {"code":"ETIMEDOUT"} during sync.';
   const refusal = { message: 'Unsupported parameter: stream', param: 'stream' };

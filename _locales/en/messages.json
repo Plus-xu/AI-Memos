@@ -512,6 +512,9 @@
   "draftChanged": {
     "message": "The draft changed. Review it before saving."
   },
+  "destinationChanged": {
+    "message": "The save destination or visibility changed. Check it and save again."
+  },
   "unconfirmedSave": {
     "message": "Save was not confirmed. Check Memos before retrying."
   },

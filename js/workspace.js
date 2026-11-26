@@ -151,13 +151,19 @@ var Workspace = (function () {
     if (list) await showSpaces(info, list);
   }
 
+  function selectDestination(target, selected) {
+    // A selection made while loading supersedes the stored value even if it equals the temporary default.
+    // Once ready, our own storage notification echoes the selection already made in this editor.
+    if (!visibilityReady || target !== space || selected !== visibility) selectionRevision++;
+    space = target;
+    visibility = selected;
+  }
+
   async function saveDestination() {
-    selectionRevision++;
-    const selected = el('memoSpace').value;
-    space = selected;
+    const target = el('memoSpace').value;
+    const selected = el('visibility').value;
+    selectDestination(target, selected === 'SPACE' && !target ? 'PRIVATE' : selected);
     missing = !!space && !spaces.some(entry => entry.name === space);
-    visibility = el('visibility').value;
-    if (visibility === 'SPACE' && !space) visibility = 'PRIVATE';
     el('visibility').value = visibility;
     refreshVisibility();
     if (account?.status)
@@ -166,30 +172,38 @@ var Workspace = (function () {
       });
   }
 
-  async function destination(info) {
+  function captureDestination(content) {
     const run = destinationGeneration;
+    const revision = selectionRevision;
+    const scope = resolveVisibility({ ...account, memo_lock: visibility }, content);
+    return {
+      body: space ? { visibility: scope, space } : { visibility: scope },
+      assertCurrent(info) {
+        if (
+          !visibilityReady ||
+          run !== destinationGeneration ||
+          revision !== selectionRevision ||
+          DraftStorage.scope(info) !== DraftStorage.scope(account) ||
+          ['apiTokens', 'memo_lock', 'hidetag', 'showtag'].some(key => info[key] !== account[key])
+        )
+          throw new Error('destinationChanged');
+      }
+    };
+  }
+
+  async function destination(info, selection = captureDestination()) {
     await configuring;
-    if (
-      run !== destinationGeneration ||
-      !account ||
-      DraftStorage.scope(info) !== DraftStorage.scope(account) ||
-      info.hidetag !== account.hidetag ||
-      info.showtag !== account.showtag
-    )
-      throw new Error('draftChanged');
-    const target = space,
-      selectedVisibility = visibility,
-      scope = resolveVisibility({ ...info, memo_lock: visibility });
+    selection.assertCurrent(info);
+    const { space: target, visibility: scope } = selection.body;
     if (missing || (scope === 'SPACE' && !target)) throw new Error('spaceUnavailable');
     if (target) {
       const list = spaceList(await MemosAPI.listSpaces(info));
-      if (run !== destinationGeneration || target !== space) throw new Error('draftChanged');
+      selection.assertCurrent(info);
       await showSpaces(info, list);
-      if (run !== destinationGeneration || target !== space || selectedVisibility !== visibility)
-        throw new Error('draftChanged');
+      selection.assertCurrent(info);
       if (!list.some(entry => entry.name === target)) throw new Error('spaceUnavailable');
     }
-    return target ? { visibility: scope, space: target } : { visibility: scope };
+    return selection.body;
   }
 
   function resetSearch() {
@@ -399,10 +413,7 @@ var Workspace = (function () {
       if (area === 'local' && account && changes['memosDestination:' + DraftStorage.scope(account)]) {
         const saved = changes['memosDestination:' + DraftStorage.scope(account)].newValue;
         if (saved) {
-          selectionRevision++;
-          space = saved.space;
-          visibility = saved.visibility;
-          missing = false;
+          selectDestination(saved.space, saved.visibility);
           renderSpaces();
         } else configure();
       }
@@ -424,6 +435,7 @@ var Workspace = (function () {
   });
   return {
     configure,
+    captureDestination,
     destination,
     widerVisibility,
     isVisibilityReady: () => visibilityReady,

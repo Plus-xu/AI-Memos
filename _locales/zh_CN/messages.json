@@ -512,6 +512,9 @@
   "draftChanged": {
     "message": "草稿已更新，请核对后再次保存。"
   },
+  "destinationChanged": {
+    "message": "保存目标或可见范围已变化，请核对后重新保存。"
+  },
   "unconfirmedSave": {
     "message": "未收到保存回执，请先在 Memos 检查再重试。"
   },

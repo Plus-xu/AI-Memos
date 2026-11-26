@@ -278,8 +278,9 @@ var LLMTransport = (function () {
       '\\b(?:must|should|needs?\\s+to|ha(?:s|ve)\\s+to)\\s+be\\s+(?:set\\s+to\\s+)?(?:false|off|disabled|turned\\s+off)\\b',
       'stream["\'`]?\\s*(?:[:=]+|\\bto\\b)\\s*["\'`]?(?:false|off)\\b',
       '\\b(?:disable|turn(?:ing)?\\s+off|switch(?:ing)?\\s+off)\\s+(?:the\\s+)?(?:stream|SSE)',
-      // "Retry without streaming" asks for a different request. "Closed without streaming any output" reports a loss.
-      '\\bwithout\\s+(?:the\\s+)?(?:stream(?:ing|ed)?|SSE)\\b(?!\\s+(?:any\\s+|an?\\s+)?' + streamOutput + ')',
+      // "Without streaming" describes a lost response too. Look for a request instruction or limitation.
+      /\b(?:retry|try|resend|send|submit|make|use|call|run|works? only|only works?|only accepts?|only supports?|(?:supported|available) only|must be (?:sent|used|called))\s+(?:(?:the|a|your|this|same|request|requests|call|model|endpoint|api|it|again)\s+)*without\s+(?:the\s+)?(?:stream(?:ing|ed)?|SSE)\b/
+        .source,
       '\\binvalid\\s+(?:stream(?:ing)?\\s+)?(?:value|parameter|argument|field)\\b',
       // Streaming as what is not available: "Streaming is unavailable", "streaming for this model isn't
       // available yet", "stream=true is not available". Between the two stands nothing that parts clauses
@@ -330,7 +331,11 @@ var LLMTransport = (function () {
   const namesModel = /(?<![a-z])model/i;
 
   const interruptionCode =
-    /^(?:408|504|(?:(?:provider|upstream|stream(?: idle)?|network|request|connection) )?(?:disconnect(?:ed|ion)?|timeout|timed out|deadline exceeded|connection (?:closed|reset|lost)|econnreset|etimedout)(?: error)?)$/i;
+    /^(?:408|504|(?:(?:provider|upstream|gateway|stream(?: idle)?|network|request|connection) )?(?:disconnect(?:ed|ion)?|timeout|timed out|deadline exceeded|connection (?:closed|reset|lost)|econnreset|etimedout)(?: error)?)$/i;
+
+  // A gateway may name the stream parameter beside a failure it reports only in words.
+  const interruptionMessage =
+    /\b(?:request|connection|stream|gateway|provider|upstream)\s+(?:was\s+|has (?:been )?)?(?:timed out|closed|reset|lost|aborted|disconnected|interrupted)\b/i;
 
   function isInterruptionCode(value) {
     return (
@@ -350,7 +355,9 @@ var LLMTransport = (function () {
       const diagnostic = withoutEcho(report);
       if (!diagnostic) return false;
       const nested = embedded(report);
-      return nested === undefined ? hasWrittenInterruption(diagnostic) : reportsInterruption(nested, withoutEcho);
+      return nested === undefined
+        ? interruptionMessage.test(diagnostic) || hasWrittenInterruption(diagnostic)
+        : reportsInterruption(nested, withoutEcho);
     }
     if (!report || typeof report !== 'object') return false;
     const interruptedReport = item => reportsInterruption(item, withoutEcho);
@@ -439,7 +446,7 @@ var LLMTransport = (function () {
     const own = new Set();
     strings(body, text => {
       // As it was sent, and as it reads inside JSON that is quoted as text.
-      if (namesStream.test(text) || hasWrittenInterruption(text)) {
+      if (namesStream.test(text) || interruptionMessage.test(text) || hasWrittenInterruption(text)) {
         own.add(text);
         own.add(JSON.stringify(text).slice(1, -1));
       }

@@ -512,6 +512,9 @@
   "draftChanged": {
     "message": "下書きが変更されました。内容を確認して保存してください。"
   },
+  "destinationChanged": {
+    "message": "保存先または公開範囲が変更されました。確認してから、もう一度保存してください。"
+  },
   "unconfirmedSave": {
     "message": "保存確認を受信できませんでした。再試行の前に Memos を確認してください。"
   },

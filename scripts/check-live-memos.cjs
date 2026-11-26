@@ -133,6 +133,12 @@ async function checkLiveMemos({ context, ext, fixture, waitFor, pass }) {
     assert.ok(original.equals(Buffer.from(await authenticated.arrayBuffer())));
     const anonymous = await fetch(fileUrl, { redirect: 'manual' });
     assert.ok([401, 403, 404].includes(anonymous.status), 'Private attachment must require authorization');
+    const previewReads = [];
+    page.on('request', request => {
+      const url = new URL(request.url());
+      if (url.origin === base && (url.pathname === imagePath || url.pathname.startsWith(imagePath + '/')))
+        previewReads.push(url.pathname);
+    });
     await page.click('[data-tab="search"]');
     await page.fill('#searchQuery', '阅读室');
     await page.fill('#searchTag', '#阅读');
@@ -141,9 +147,20 @@ async function checkLiveMemos({ context, ext, fixture, waitFor, pass }) {
       page,
       () =>
         document.querySelectorAll('#randomlist .random-item').length === 1 &&
-        document.querySelector('#randomlist img[src^="blob:"]')?.naturalWidth > 0
+        document.querySelector('#randomlist .random-content a img[src^="blob:"]')?.naturalWidth > 0 &&
+        document.querySelector('#randomlist .random-item > img[src^="blob:"]')?.naturalWidth > 0
     );
     pass('Real keyword/tag search finds the members-only memo and the private image matches its original bytes');
+    const linkedImage = page.locator('#randomlist .random-content a img');
+    assert.equal(
+      await linkedImage.getAttribute('src'),
+      await page.locator('#randomlist .random-item > img').getAttribute('src')
+    );
+    assert.equal(previewReads.length, 1, 'The thumbnail and attachment share one authenticated download');
+    const [gallery] = await Promise.all([context.waitForEvent('page', { timeout: 8000 }), linkedImage.click()]);
+    await gallery.waitForURL(fixture.base + '/notes');
+    await gallery.close();
+    pass('Clicking the inline image opens its original link, and the attachment list reuses its Blob');
     await page.click('[data-tab="write"]');
     await page.click('#tags');
     await waitFor(page, () =>

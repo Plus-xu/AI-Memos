@@ -355,43 +355,100 @@ const MemosAPI = (function () {
   // Only generated inline links are rewritten. Leave Markdown code examples,
   // external images, and links to already-bound files unchanged.
   function mapMarkdownLinks(content, transform) {
-    var fence = null;
+    return formatMarkdownLinks(content, ({ image, label, url, angle, title }) => {
+      const replacement = transform(url, image);
+      return (image ? '!' : '') + '[' + label + '](' + (angle ? '<' + replacement + '>' : replacement) + title + ')';
+    });
+  }
+
+  const labelChar = /(?:\\.|[^\\[\]\r\n])/.source;
+  const destination = /(?:<[^>\r\n]+>|[^\s)<][^\s)]*)/.source;
+  const optionalTitle = /(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'))?/.source;
+  const imageInLabel = `!\\[${labelChar}*\\]\\(${destination}${optionalTitle}\\)`;
+  const inlineMarkup = new RegExp(
+    [
+      /\\./.source,
+      /(`+).*?\1/.source,
+      `(!?)\\[((?:${imageInLabel}|${labelChar})*)\\]\\((${destination})(${optionalTitle})\\)`
+    ].join('|'),
+    'g'
+  );
+
+  // The save and preview paths read the same links. A link label may contain text and images.
+  // An image receives its raw alt text. A link receives its label with the images already formatted.
+  function formatMarkdownLinks(content, formatLink, formatText = text => text) {
+    function inline(text, inLabel = false) {
+      let result = '',
+        end = 0;
+      for (const match of text.matchAll(inlineMarkup)) {
+        const [, , marker, rawLabel, destination, title] = match;
+        if (marker === undefined) continue; // Escapes and code spans stay in the surrounding text.
+        const image = marker === '!';
+        const angle = destination.startsWith('<');
+        result += formatText(text.slice(end, match.index), inLabel);
+        result += formatLink({
+          image,
+          label: image ? rawLabel : inline(rawLabel, true),
+          url: angle ? destination.slice(1, -1) : destination,
+          angle,
+          title
+        });
+        end = match.index + match[0].length;
+      }
+      return result + formatText(text.slice(end), inLabel);
+    }
+
+    let fence = null;
+    const listsByQuote = [];
+    const fenceMarker = /^ {0,3}(`{3,}|~{3,})([^\r\n]*)\r?$/;
+    const listMarker = /^ {0,3}(?:[-+*]|\d{1,9}[.)])( +|$)/;
     return String(content)
       .split('\n')
       .map(function (line) {
-        var quote = line.match(/^(?: {0,3}>[ \t]?)+/);
-        var depth = quote ? quote[0].match(/>/g).length : 0;
-        var body = quote ? line.slice(quote[0].length) : line;
-        var marker = body.match(/^ {0,3}(`{3,}|~{3,})([^\r\n]*)\r?$/);
-        // A fence belongs to its block quote. Deeper quote markers inside it are literal code.
+        // Measure Markdown columns on a copy so literal tabs survive in the saved text.
+        let extra = 0;
+        const columns = line.replace(/\t/g, (_, index) => {
+          const width = 4 - ((index + extra) % 4);
+          extra += width - 1;
+          return ' '.repeat(width);
+        });
+        const quote = columns.match(/^(?: {0,3}> ?)+/)?.[0] || '';
+        const markers = quote.match(/ {0,3}> ?/g) || [];
+        const depth = markers.length;
+        let body = columns.slice(quote.length);
         if (fence && depth >= fence.depth) {
-          if (
-            depth === fence.depth &&
-            marker &&
-            marker[1][0] === fence.mark[0] &&
-            marker[1].length >= fence.mark.length &&
-            !marker[2].trim()
-          )
-            fence = null;
-          return line;
+          // Deeper quote markers are literal text while still inside the opening fence's list item.
+          const inside = markers.slice(fence.depth).join('') + body;
+          if (!inside.trim() || inside.startsWith(fence.padding)) {
+            const close = inside.slice(fence.padding.length).match(fenceMarker);
+            if (close && close[1][0] === fence.mark[0] && close[1].length >= fence.mark.length && !close[2].trim())
+              fence = null;
+            return formatText(line);
+          }
         }
         fence = null;
-        if (marker && !(marker[1][0] === '`' && marker[2].includes('`'))) {
-          fence = { depth, mark: marker[1] };
-          return line;
+        listsByQuote.length = depth + 1;
+        if (!body.trim()) return formatText(line);
+        const indents = (listsByQuote[depth] ??= []);
+        const indent = body.match(/^ */)[0].length;
+        while (indents.length && indents.at(-1) > indent) indents.pop();
+        let offset = indents.at(-1) || 0;
+        body = body.slice(offset);
+        // Turndown indents nested list items and their continuation paragraphs, including real images.
+        for (let item = body.match(listMarker); item; item = body.match(listMarker)) {
+          const gap = item[1].length;
+          const width = item[0].length - gap + (gap >= 1 && gap <= 4 ? gap : 1);
+          offset += width;
+          indents.push(offset);
+          body = body.slice(width);
         }
-        if (/^( {4}|\t)/.test(line)) return line;
-        // Match the image opener inside a link label such as [![alt](image)](target).
-        return line.replace(
-          /(`+)[\s\S]*?\1|(!?\[(?:\\.|[^\\[\]])*\]\()(<[^>\n]+>|[^\s)]+)(\s+(?:"[^"]*"|'[^']*'))?\)/g,
-          function (match, code, opening, destination, title) {
-            if (code) return match;
-            var angle = destination[0] === '<';
-            var url = angle ? destination.slice(1, -1) : destination;
-            var replacement = transform(url, opening[0] === '!');
-            return opening + (angle ? '<' + replacement + '>' : replacement) + (title || '') + ')';
-          }
-        );
+        if (body.startsWith('    ')) return formatText(line);
+        const marker = body.match(fenceMarker);
+        if (marker && !(marker[1][0] === '`' && marker[2].includes('`'))) {
+          fence = { depth, padding: ' '.repeat(offset), mark: marker[1] };
+          return formatText(line);
+        }
+        return inline(line);
       })
       .join('\n');
   }
@@ -468,6 +525,7 @@ const MemosAPI = (function () {
     isMissingRoute,
     buildContentFilter: buildContentFilter,
     getMemo: getMemo,
+    formatMarkdownLinks,
     normalizeMemoImages,
     prepareMemo: prepareMemo,
     createMemo: createMemo,
