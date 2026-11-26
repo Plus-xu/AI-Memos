@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
 const { plain, flush, loadScripts } = require('./helpers/scripts.cjs');
-const { harness, loadPopup } = require('./helpers/environments.cjs');
+const { harness, loadPopup, info: fixtureAccount } = require('./helpers/environments.cjs');
 const { streamingFetch } = require('./helpers/http.cjs');
 
 test('AI results are persisted as a pending review without replacing the draft', () => {
@@ -1045,6 +1045,10 @@ test('only the latest settings and destination reads can enable adoption', async
   await flush();
   assert.equal(context.Workspace.isVisibilityReady(), false);
   assert.equal(node('#aiReviewReplace').prop('disabled'), true);
+  assert.equal(node('#content_submit_text').prop('disabled'), true);
+  const prematureSave = context.sendText();
+  assert.equal(context.memoSaveInProgress, false);
+  await prematureSave;
 
   changed('new');
   const [obsolete, latest] = settings;
@@ -1053,10 +1057,44 @@ test('only the latest settings and destination reads can enable adoption', async
   obsolete({ ...info, hidetag: 'second' });
   await flush();
   assert.equal(node('#aiReviewReplace').prop('disabled'), false);
+  assert.equal(node('#content_submit_text').prop('disabled'), false);
   await assert.rejects(context.Workspace.destination(info), /draftChanged/);
   node('#aiReviewReplace').click();
   assert.equal(node('#content').val(), draft);
   assert.equal(node('#aiVisibilityChange').text(), 'lockPrivate → lockPublic');
+});
+
+test('the saved visibility is displayed before adoption and save while spaces load', async () => {
+  const draft = 'Original draft';
+  const scope = JSON.stringify([fixtureAccount.apiUrl, fixtureAccount.userName]);
+  const posts = [];
+  let answerSpaces;
+  const pending = new Promise(resolve => {
+    answerSpaces = resolve;
+  });
+  const { context, node } = await popupWithAI(
+    draft,
+    { memo_lock: 'PRIVATE', ['memosDestination:' + scope]: { space: '', visibility: 'PUBLIC' } },
+    {
+      listSpaces: () => pending,
+      createMemo: async (_, body) => {
+        posts.push(body);
+        return { name: 'memos/saved', ...body };
+      }
+    }
+  );
+
+  context.AIReview.show(draft, 'Edited draft', 'organize');
+  assert.equal(node('#visibility').val(), 'PUBLIC');
+  assert.equal(node('#aiReviewReplace').prop('disabled'), false);
+  assert.equal(node('#content_submit_text').prop('disabled'), false);
+  node('#visibility').val('PRIVATE');
+  await node('#visibility')[0].onchange();
+  node('#aiReviewReplace').click();
+  const saving = context.sendText();
+  answerSpaces([]);
+  await saving;
+  assert.deepEqual(plain(posts), [{ content: 'Edited draft', visibility: 'PRIVATE' }]);
 });
 
 test('a destination selected in another editor survives an older local read', async () => {

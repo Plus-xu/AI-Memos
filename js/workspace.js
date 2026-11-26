@@ -1,4 +1,4 @@
-/* global AIReview, DraftEditor, DraftStorage, MemoIndex, MemosAPI, StagedFiles, appendMemoList, clearMemoList, closeTagList, dismissArchiveNotice, get_info, renderMemoList, resolveVisibility, showApiError, uiMessage */
+/* global AIReview, DraftEditor, DraftStorage, MemoIndex, MemosAPI, StagedFiles, appendMemoList, clearMemoList, closeTagList, dismissArchiveNotice, get_info, refreshSaveButton, renderMemoList, resolveVisibility, showApiError, uiMessage */
 /* exported Workspace */
 /** Shared editor navigation, destinations, server search and local clip history. */
 var Workspace = (function () {
@@ -67,10 +67,15 @@ var Workspace = (function () {
     refreshVisibility();
   }
 
+  function setVisibilityReady(ready) {
+    visibilityReady = ready;
+    refreshSaveButton();
+    AIReview.refresh();
+  }
+
   function configure(info, tokenChanged = false) {
     const run = ++destinationGeneration;
-    visibilityReady = false;
-    AIReview.refresh();
+    setVisibilityReady(false);
     configuring = loadDestination(info, run, tokenChanged);
     return configuring;
   }
@@ -103,7 +108,6 @@ var Workspace = (function () {
     if (tokenChanged && info.status) MemoIndex.clear(info);
     if (run !== destinationGeneration) return;
     account = info;
-    visibilityReady = !info.status;
     spaces = [];
     space = '';
     missing = false;
@@ -112,8 +116,10 @@ var Workspace = (function () {
     el('duplicateNotice').hidden = true;
     el('saveStatus').hidden = true;
     renderSpaces();
-    AIReview.refresh();
-    if (!info.status) return;
+    if (!info.status) {
+      setVisibilityReady(true);
+      return;
+    }
     // Runs again when the account changes; it never rejects.
     StagedFiles.refreshLimit(info);
     const key = 'memosDestination:' + DraftStorage.scope(info),
@@ -128,12 +134,9 @@ var Workspace = (function () {
       space = saved.space || '';
       visibility = labels[saved.visibility] ? saved.visibility : 'PRIVATE';
     }
-    if (remembered) {
-      spaces = remembered;
-      renderSpaces();
-    }
-    visibilityReady = true;
-    AIReview.refresh();
+    if (remembered) spaces = remembered;
+    renderSpaces();
+    setVisibilityReady(true);
     await refreshHistory();
     if (run !== destinationGeneration) return;
     let list = null;
@@ -145,9 +148,7 @@ var Workspace = (function () {
       else $.message({ message: uiMessage('spaceCheckFailed') });
     }
     if (run !== destinationGeneration) return;
-    const drawn = spaces;
     if (list) await showSpaces(info, list);
-    if (!remembered && spaces === drawn) renderSpaces();
   }
 
   async function saveDestination() {

@@ -282,6 +282,37 @@ test('linked images keep their click target and filenames with escapes use the I
   );
 });
 
+test('attachment links inside quoted code fences stay literal', async () => {
+  const { api, calls } = loadApi(options => {
+    const name = new URL(options.url).pathname.slice(5);
+    return { name, ...(name === 'attachments/example' ? { memo: 'memos/older' } : {}) };
+  });
+  const example = `[![example](${info.apiUrl}file/attachments/example/image%20example.png)](https://example.org)`;
+  const image = `![image](${info.apiUrl}file/attachments/photo/photo%20one.png)`;
+  const content = [
+    '> ```markdown',
+    '> ' + example,
+    '> ```',
+    '> ' + image,
+    '',
+    '> > ~~~~markdown',
+    '> > > ~~~~',
+    '> > ~~~',
+    '> > ' + example,
+    '> > ~~~~',
+    '> > ' + image,
+    '',
+    '> ```markdown',
+    '> ' + example,
+    '',
+    image
+  ].join('\r\n');
+  const prepared = await api.prepareMemo(info, { content });
+  assert.equal(prepared.content, content.replaceAll(image, '![image](/file/attachments/photo)'));
+  assert.deepEqual(plain(prepared.attachments), [{ name: 'attachments/photo' }]);
+  assert.deepEqual(paths(calls), ['/api/attachments/photo']);
+});
+
 test('legacy servers retain the filename segment in a managed image URL', async () => {
   const { api } = loadApi(options => {
     if (!options.url.includes('/api/v1/')) throw refused(404);

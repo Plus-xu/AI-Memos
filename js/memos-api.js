@@ -359,14 +359,25 @@ const MemosAPI = (function () {
     return String(content)
       .split('\n')
       .map(function (line) {
-        var marker = line.match(/^ {0,3}(`{3,}|~{3,})(.*)$/);
-        if (fence) {
-          if (marker && marker[1][0] === fence[0] && marker[1].length >= fence.length && !marker[2].trim())
+        var quote = line.match(/^(?: {0,3}>[ \t]?)+/);
+        var depth = quote ? quote[0].match(/>/g).length : 0;
+        var body = quote ? line.slice(quote[0].length) : line;
+        var marker = body.match(/^ {0,3}(`{3,}|~{3,})([^\r\n]*)\r?$/);
+        // A fence belongs to its block quote. Deeper quote markers inside it are literal code.
+        if (fence && depth >= fence.depth) {
+          if (
+            depth === fence.depth &&
+            marker &&
+            marker[1][0] === fence.mark[0] &&
+            marker[1].length >= fence.mark.length &&
+            !marker[2].trim()
+          )
             fence = null;
           return line;
         }
-        if (marker) {
-          fence = marker[1];
+        fence = null;
+        if (marker && !(marker[1][0] === '`' && marker[2].includes('`'))) {
+          fence = { depth, mark: marker[1] };
           return line;
         }
         if (/^( {4}|\t)/.test(line)) return line;

@@ -1191,6 +1191,21 @@ test('a forwarded upstream disconnect takes precedence over the stream parameter
   }
 });
 
+test('structured HTTP and RPC timeouts take precedence over a stream refusal phrase', async () => {
+  const message = 'The upstream request timed out without streaming a single token.';
+  const errors = [
+    { code: 504, status: 'DEADLINE_EXCEEDED', message },
+    { status: 'DEADLINE_EXCEEDED', message },
+    { code: 504, message },
+    { code: '408', message },
+    { message: 'Provider returned error', metadata: { raw: `{'error': {'code': 504, 'message': '${message}'}}` } }
+  ];
+  for (const error of errors) {
+    assert.equal(await requestsWhenRefused(200, { error }), 1, JSON.stringify(error));
+    assert.equal(await requestsWhenStreamSays({ error }), 1, JSON.stringify(error));
+  }
+});
+
 test('a timeout log in the echoed note cannot suppress a real stream refusal', async () => {
   const note = 'The app logged {"code":"ETIMEDOUT"} during sync.';
   const refusal = { message: 'Unsupported parameter: stream', param: 'stream' };

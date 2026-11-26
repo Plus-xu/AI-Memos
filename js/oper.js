@@ -1,5 +1,5 @@
 /* global AIReview, DraftEditor, DraftStorage, MemoIndex, MemoTags, MemosAPI, StagedFiles, Workspace, uiMessage */
-/* exported resolveVisibility, clearMemoList, renderMemoList, appendMemoList, closeTagList */
+/* exported resolveVisibility, clearMemoList, renderMemoList, appendMemoList, closeTagList, refreshSaveButton */
 function relativeTime(value, lang, now) {
   var time = value === '' || value == null ? NaN : new Date(value).getTime();
   if (Number.isNaN(time)) return '';
@@ -688,8 +688,12 @@ async function submitMemo(info, snapshot, destination) {
   MemoIndex.saved(info, memo).then(() => refreshTagList(info));
 }
 
+function refreshSaveButton() {
+  $('#content_submit_text').prop('disabled', memoSaveInProgress || !Workspace.isVisibilityReady());
+}
+
 async function sendText() {
-  if (memoSaveInProgress) return;
+  if (memoSaveInProgress || !Workspace.isVisibilityReady()) return;
   const requested = $('#content').val();
   if (!requested.trim()) {
     $.message({ message: uiMessage('placeContent') });
@@ -701,7 +705,7 @@ async function sendText() {
   }
   memoSaveInProgress = true;
   $('#content').prop('readOnly', true);
-  $('#content_submit_text').prop('disabled', true);
+  refreshSaveButton();
   try {
     if (!(await DraftEditor.flush())) return;
     const snapshot = DraftEditor.snapshot();
@@ -723,6 +727,6 @@ async function sendText() {
   } finally {
     memoSaveInProgress = false;
     $('#content').prop('readOnly', false);
-    $('#content_submit_text').prop('disabled', false);
+    refreshSaveButton();
   }
 }

@@ -320,7 +320,8 @@ var LLMTransport = (function () {
   const writtenParameter = /(["']?)\b(?:param(?:eter)?|field)\1\s*[:=]\s*(["'])([\w.$[\]/-]+)\2/gi;
   const parameterField = /^(?:param(?:eter)?|field|loc)$/i;
   /** Structured error codes in a gateway's textual representation of an upstream error. */
-  const writtenInterruption = /[{,]\s*(["'])(?:code|type|status|error_type)\1\s*:\s*(["'])([\w .-]+)\2/gi;
+  const writtenInterruption =
+    /[{,]\s*(["'])(?:code|type|status|error_type)\1\s*:\s*(?:(["'])([\w .-]+)\2|(\d+)(?=\s*[,}]))/gi;
   /** A name alone that is the stream flag itself, as the last part of a path: "stream", "body.stream". */
   const flagAlone = /(?:^|[.$[\]/])stream(?:ing)?\]?$/i;
   /** A name alone as the words it is made of: "stream_not_supported", "StreamingNotSupported". */
@@ -329,11 +330,17 @@ var LLMTransport = (function () {
   const namesModel = /(?<![a-z])model/i;
 
   const interruptionCode =
-    /^(?:(?:provider|upstream|stream(?: idle)?|network|request|connection) )?(?:disconnect(?:ed|ion)?|timeout|timed out|connection (?:closed|reset|lost)|econnreset|etimedout)(?: error)?$/i;
+    /^(?:408|504|(?:(?:provider|upstream|stream(?: idle)?|network|request|connection) )?(?:disconnect(?:ed|ion)?|timeout|timed out|deadline exceeded|connection (?:closed|reset|lost)|econnreset|etimedout)(?: error)?)$/i;
+
+  function isInterruptionCode(value) {
+    return (
+      (typeof value === 'string' || typeof value === 'number') && interruptionCode.test(inWords(String(value)).trim())
+    );
+  }
 
   function hasWrittenInterruption(text) {
-    for (const [, , , code] of text.matchAll(writtenInterruption)) {
-      if (interruptionCode.test(inWords(code).trim())) return true;
+    for (const [, , , quoted, numeric] of text.matchAll(writtenInterruption)) {
+      if (isInterruptionCode(quoted ?? numeric)) return true;
     }
     return false;
   }
@@ -349,9 +356,7 @@ var LLMTransport = (function () {
     const interruptedReport = item => reportsInterruption(item, withoutEcho);
     if (Array.isArray(report)) return report.some(interruptedReport);
     const { code, type, status, error_type, metadata } = report;
-    const interrupted = [code, type, status, error_type, metadata?.error_type].some(
-      name => typeof name === 'string' && interruptionCode.test(inWords(name).trim())
-    );
+    const interrupted = [code, type, status, error_type, metadata?.error_type].some(isInterruptionCode);
     // Only the error and forwarded diagnostics describe the interruption. A validation report can echo
     // the entire request, including a note about a different connection failure.
     return (
