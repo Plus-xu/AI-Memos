@@ -47,13 +47,14 @@ var AIWorkflow = (function () {
     return '<note>\n' + text + '\n</note>';
   }
 
-  var wrapped = /^\s*<note>\r?\n?([\s\S]*?)(?:\r?\n[ \t]*)?<\/note>\s*$/;
+  var wrapped = /^\s*<note>(?:\r\n?|\n)?([\s\S]*?)(?:(?:\r\n?|\n)[ \t]*)?<\/note>\s*$/;
   // The marker as it was sent: unindented and alone on its line, after blank lines at most.
-  var echoedOpening = /^(?:[ \t]*\r?\n)*<note>[ \t]*(?:\r\n?|\n|$)/;
+  // In the blank prefix each CR or LF is a boundary. A CRLF pair has only one way to match.
+  var echoedOpening = /^(?:[ \t]*[\r\n])*<note>[ \t]*(?:\r\n?|\n|$)/;
   // A marker the answer was cut off in the middle of: the opening one as all there is so far, and the
   // closing one as the last line, unless that line is indented as Markdown indents code.
-  var openingBegun = /^(?:[ \t]*\r?\n)*<(?:n(?:o(?:te?)?)?)?$/;
-  var closingBegun = /(?:\r?\n|^) {0,3}<(?:\/(?:n(?:o(?:te?)?)?)?)?$/;
+  var openingBegun = /^(?:[ \t]*[\r\n])*<(?:n(?:o(?:te?)?)?)?$/;
+  var closingBegun = /(?:\r\n?|\n|^) {0,3}<(?:\/(?:n(?:o(?:te?)?)?)?)?$/;
   var startsWithMarker = /^\s*<note>/;
 
   function markers(text) {
@@ -73,7 +74,8 @@ var AIWorkflow = (function () {
 
   /** Whether the marker at this position is alone at the start of a line Markdown reads as indented code. */
   function indentedAsCode(text, position) {
-    var indent = text.slice(text.lastIndexOf('\n', position - 1) + 1, position);
+    var lineStart = Math.max(text.lastIndexOf('\n', position - 1), text.lastIndexOf('\r', position - 1)) + 1;
+    var indent = text.slice(lineStart, position);
     return /^[ \t]*$/.test(indent) && (indent.indexOf('\t') >= 0 || indent.length >= 4);
   }
 

@@ -251,13 +251,13 @@ test("each protocol's error event fails the generation with the reason it gives"
   ]);
 });
 
-test('an event named an error fails the generation, though its data reads as the end of the answer', async () => {
-  // What each protocol ends an answer with, here under the name of an error and beside what went wrong.
+test('an event named an error fails the generation without using the text it carries', async () => {
+  const errorText = 'Text carried by the error event';
   const endings = {
-    openai: { type: 'response.completed', response: { id: 'resp_1', status: 'completed' } },
-    deepseek: { choices: [{ index: 0, delta: { content: '' }, finish_reason: 'stop' }] },
-    gemini: { candidates: [{ index: 0, content: { role: 'model', parts: [{ text: '' }] }, finishReason: 'STOP' }] },
-    anthropic: { type: 'message_delta', delta: { stop_reason: 'end_turn', stop_sequence: null } }
+    openai: { type: 'response.completed', response: { id: 'resp_1', status: 'completed', output_text: errorText } },
+    deepseek: { choices: [{ index: 0, delta: { content: errorText }, finish_reason: 'stop' }] },
+    gemini: { candidates: [{ index: 0, content: { parts: [{ text: errorText }] }, finishReason: 'STOP' }] },
+    anthropic: { type: 'content_block_delta', delta: { type: 'text_delta', text: errorText } }
   };
   for (const provider of Object.keys(endings)) {
     const failed = sse({ ...endings[provider], message: 'Upstream failed' }, 'error');
@@ -448,6 +448,100 @@ test('a server that refuses to stream is asked once more, for the answer in one 
     assert.ok(!Object.hasOwn(bodies[1], 'stream'), provider + ': the second request does not ask for a stream');
     assert.deepEqual({ ...bodies[1], stream: true }, bodies[0], provider + ': and is otherwise the same request');
   }
+});
+
+test('an HTTP 200 JSON error can trigger fallback and the retry reports its own error', async () => {
+  const requests = [];
+  let whole = {
+    choices: [{ finish_reason: 'stop', message: { content: 'Whole answer' } }],
+    error: null,
+    detail: 'Gateway diagnostic'
+  };
+  let report = { error: { message: 'Unknown parameter: stream', param: 'stream' } };
+  const { ctx } = runtime(async (_url, options) => {
+    const streaming = JSON.parse(options.body).stream === true;
+    requests.push([streaming, options.headers.Accept]);
+    return jsonResponse(streaming ? report : whole);
+  });
+  const call = () => ctx.callLLMAPI('deepseek', 'm', 'k', 'A note', 'en', '', 'summary', '');
+  const expected = [
+    [true, 'text/event-stream, application/json'],
+    [false, 'application/json']
+  ];
+
+  assert.deepEqual(plain(await call()), { text: 'Whole answer', truncated: false });
+  assert.deepEqual(requests.splice(0), expected);
+
+  report = { detail: 'Streaming is not supported on this endpoint.' };
+  assert.deepEqual(plain(await call()), { text: 'Whole answer', truncated: false });
+  assert.deepEqual(requests.splice(0), expected);
+
+  whole = { error: { message: 'Upstream overloaded', code: 503 } };
+  assert.equal((await failure(call())).message, 'apiFailed (Upstream overloaded)');
+  assert.deepEqual(requests, expected);
+});
+
+test('a validation error in an HTTP 200 response still names the rejected field', async () => {
+  const validation = field => ({
+    detail: [{ loc: ['body', field], type: 'extra_forbidden', msg: 'Extra inputs are not permitted' }]
+  });
+  const refusals = [
+    validation('stream'),
+    { object: 'error', type: 'BadRequestError', message: 'Unknown parameter: stream', param: 'stream' }
+  ];
+  let report;
+  const requests = [];
+  const { ctx } = runtime(async (_url, options) => {
+    const streaming = JSON.parse(options.body).stream === true;
+    requests.push([streaming, options.headers.Accept]);
+    return streaming
+      ? jsonResponse(report)
+      : jsonResponse({ choices: [{ message: { content: 'Whole answer' }, finish_reason: 'stop' }] });
+  });
+  const call = () => ctx.callLLMAPI('deepseek', 'm', 'k', 'A note', 'en', '', 'summary', '');
+
+  for (report of refusals) {
+    assert.deepEqual(plain(await call()), { text: 'Whole answer', truncated: false });
+    assert.deepEqual(requests.splice(0), [
+      [true, 'text/event-stream, application/json'],
+      [false, 'application/json']
+    ]);
+  }
+
+  report = validation('model');
+  assert.equal((await failure(call())).message, 'apiFailed (Extra inputs are not permitted)');
+  assert.deepEqual(requests, [[true, 'text/event-stream, application/json']]);
+});
+
+test('unnamed gateway errors before DONE preserve partial text and mark it interrupted', async () => {
+  for (const report of [
+    { detail: 'Upstream generation was interrupted.' },
+    { choices: [], detail: 'Upstream generation was interrupted.' },
+    { success: false, errors: [{ message: 'Upstream generation was interrupted.' }] }
+  ]) {
+    const { sent, result } = generation('deepseek');
+    // A diagnostic beside actual delta text belongs to that event.
+    const chunk = { choices: [{ delta: { content: 'First paragraph.' } }], detail: 'Diagnostic' };
+    sent[0].send(sse(chunk) + sse(report) + sse('[DONE]'));
+    assert.deepEqual(plain(await result), { text: 'First paragraph.', truncated: true, interrupted: 'interrupted' });
+    assert.equal(sent.length, 1);
+  }
+  assert.equal(await requestsWhenStreamSays({ detail: 'Streaming is not supported.' }), 2);
+});
+
+test('an explicit HTTP 200 failure retries a stream refusal and surfaces the next gateway error', async () => {
+  const flags = [];
+  const { ctx } = runtime(async (_url, options) => {
+    const streaming = !!JSON.parse(options.body).stream;
+    flags.push(streaming);
+    return jsonResponse({
+      success: false,
+      errors: streaming ? [{ message: 'Unsupported parameter: stream' }] : ['No capacity']
+    });
+  });
+  const error = await failure(ctx.callLLMAPI('deepseek', 'm', 'fixture', 'Draft', 'en', '', 'summary', ''));
+  assert.equal(error.message, 'apiFailed (No capacity)');
+  assert.deepEqual(flags, [true, false]);
 });
 
 test('a refusal for another reason, or of both ways of asking, is reported as it is', async () => {
@@ -1071,6 +1165,68 @@ test('the stream flag named as the rejected parameter in text passed on from ups
   for (const [what, body] of single) assert.equal(await requestsWhenRefused(400, body), 1, what);
 });
 
+test('a forwarded upstream disconnect takes precedence over the stream parameter it names', async () => {
+  const disconnected = {
+    error: {
+      code: 502,
+      message: 'The upstream connection closed without streaming any output',
+      metadata: { error_type: 'provider_disconnected' }
+    },
+    param: 'stream'
+  };
+  const dict =
+    "{'error': {'code': 502, 'message': 'The upstream connection closed without streaming any output', " +
+    "'metadata': {'error_type': 'provider_disconnected'}}, 'param': 'stream'}";
+  for (const raw of [
+    disconnected,
+    [disconnected],
+    JSON.stringify(disconnected),
+    JSON.stringify([disconnected]),
+    dict
+  ]) {
+    const forwarded = { error: { message: 'Provider returned error', metadata: { raw } } };
+    assert.equal(await requestsWhenStreamSays(forwarded), 1, 'in an event');
+    assert.equal(await requestsWhenRefused(200, forwarded), 1, 'in an HTTP 200 JSON response');
+    assert.equal(await requestsWhenRefused(400, forwarded), 1, 'in an HTTP error response');
+  }
+});
+
+test('a timeout log in the echoed note cannot suppress a real stream refusal', async () => {
+  const note = 'The app logged {"code":"ETIMEDOUT"} during sync.';
+  const refusal = { message: 'Unsupported parameter: stream', param: 'stream' };
+  for (const report of [
+    body => ({ error: refusal, request: body }),
+    body => ({ detail: [{ loc: ['body', 'stream'], msg: 'Extra inputs are not permitted', input: body }] }),
+    body => ({ error: { message: 'Unsupported parameter: stream. Request: ' + JSON.stringify(body) } }),
+    body => ({ error: { metadata: { raw: JSON.stringify({ error: refusal, request: body }) } } })
+  ]) {
+    const flags = [];
+    const { ctx } = runtime(async (_url, options) => {
+      const body = JSON.parse(options.body);
+      flags.push(!!body.stream);
+      return body.stream
+        ? jsonResponse(report(body), 400)
+        : jsonResponse({ choices: [{ message: { content: 'Recovered' }, finish_reason: 'stop' }] });
+    });
+    assert.equal((await ctx.callLLMAPI('deepseek', 'm', 'fixture', note, 'en', '', 'summary', '')).text, 'Recovered');
+    assert.deepEqual(flags, [true, false]);
+  }
+});
+
+test('a streaming request mentioned in a validation error does not make its parameter the stream flag', async () => {
+  const message = 'Unknown parameter: max_tokens in this streaming request';
+  const reports = [
+    { error: { param: 'max_tokens', message } },
+    { detail: [{ loc: ['body', 'max_tokens'], msg: message }] },
+    { error: { message: "Bad request: {'message': '" + message + "', 'param': 'max_tokens'}" } }
+  ];
+  for (const report of reports) {
+    assert.equal(await requestsWhenRefused(400, report), 1);
+    assert.equal(await requestsWhenRefused(200, report), 1);
+    assert.equal(await requestsWhenStreamSays(report), 1);
+  }
+});
+
 test('a model refused for "your streaming request" is refused to stream, unless the error names the model as what it rejects', async () => {
   const sentence = 'The model m is not available for your streaming request.';
   const repeated = [
@@ -1129,6 +1285,19 @@ test('what became of a stream, or of the upstream, is no refusal to stream, in w
     ['a connection that is unavailable', said('The streaming connection to the backend is unavailable')],
     ['a stream that brought nothing', said('No stream data received from upstream')],
     ['a stream that was not returned', said('No stream was returned by the upstream')],
+    ['a stream that has not been received', said('No stream has been received from the upstream provider')],
+    ['a connection closed before output', said('The upstream connection closed without streaming any output')],
+    [
+      'a provider disconnect identified as such, even when the error names the stream parameter',
+      {
+        error: {
+          code: 502,
+          message: 'The upstream connection closed without streaming any output',
+          metadata: { error_type: 'provider_disconnected' }
+        },
+        param: 'stream'
+      }
+    ],
     [
       'a stream that timed out beside a service that is unavailable',
       said('The stream timed out and the service is unavailable')
@@ -1160,6 +1329,8 @@ test('words a server also has for a failure refuse streaming where they are said
       said('Streaming responses for models in the o-series are not yet available')
     ],
     ['the same with the verb shortened', said("Streaming isn't available on your plan")],
+    ['streaming cannot be used', said('Streaming cannot be used with this model')],
+    ['the same with the verb shortened', said("Streaming can't be used with this model")],
     ['streaming as what is no longer available', said('Streaming is no longer available for this model')],
     ['streaming named in brackets', said('The requested feature (streaming) is not available for your account')],
     ['the flag written out as what is not available', said('"stream": true is not available for this model')],

@@ -441,6 +441,11 @@ test('an answer cut off in the middle of a marker loses the part of the marker i
   for (const begun of ['<', '<n', '<no', '<not', '<note', '\n<no', ' \n\n<note'])
     assert.equal(ai.unwrapNote(begun, 'x', true), '', JSON.stringify(begun) + ' is no text yet');
   assert.equal(ai.unwrapNote('<note>\r', 'x', true), '', 'half of the line end after the marker');
+  assert.equal(ai.unwrapNote('\r<no', 'x', true), '');
+  assert.equal(ai.unwrapNote('\r<note>\r', 'x', true), '');
+  assert.equal(ai.unwrapNote('<note>\rText\r</no', 'x', true), 'Text');
+  assert.equal(ai.unwrapNote('<note>\rText\r</note>', 'x'), 'Text');
+  assert.equal(ai.unwrapNote('\r    <note>\rText\r    </note>', 'x'), '\r    <note>\rText\r    </note>');
   for (const ending of ['<', '</', '</n', '</no', '</not', '</note', '  </no'])
     assert.equal(ai.unwrapNote('<note>\nText\n' + ending, 'x', true), 'Text', JSON.stringify(ending));
   assert.equal(ai.unwrapNote('<note>\n</no', 'x', true), '');
@@ -466,4 +471,14 @@ test('an answer cut off in the middle of a marker loses the part of the marker i
     ['<note>\nText\n</no', '<note>\nquoted\n</note>', true]
   ])
     assert.equal(ai.unwrapNote(result, input, truncated), result, JSON.stringify(result));
+});
+
+test('blank lines before an echoed marker accept mixed line endings and preserve indentation', () => {
+  const { ai } = loadRules();
+  const blank = ' \t\r\n\r\n\t\r \n';
+  assert.equal(ai.unwrapNote(blank + '<no', 'Draft', true), '');
+  assert.equal(ai.unwrapNote(blank + '<note>\r\nFirst\rSecond', 'Draft', true), 'First\rSecond');
+  for (const content of ['First paragraph', '  <no', '    <note>\r\nExample']) {
+    assert.equal(ai.unwrapNote(blank + content, 'Draft', true), blank + content);
+  }
 });

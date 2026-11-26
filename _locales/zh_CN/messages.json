@@ -248,6 +248,15 @@
   "aiResultApplied": {
     "message": "已采用 AI 结果，可使用“撤销 AI”恢复。"
   },
+  "aiVisibilityChange": {
+    "message": "写入此结果会将保存范围从「{before}」扩大到「{after}」。"
+  },
+  "aiConfirmAdoption": {
+    "message": "按此范围写入"
+  },
+  "aiCancelAdoption": {
+    "message": "取消"
+  },
   "clipAddSource": {
     "message": "插入网页来源"
   },

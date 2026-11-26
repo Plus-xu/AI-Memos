@@ -101,6 +101,7 @@ const absent = {
   'options.html': [
     'js/ai-optimize.js LLMTransport', // only callLLMAPI() generates, and the settings page never runs a task
     'js/ai-optimize.js memoSaveInProgress', // typeof-guarded; only the popup saves memos
+    'js/ai-review.js Workspace', // only the editor checks visibility at adoption
     'js/ai-review.js memoSaveInProgress', // typeof-guarded
     'js/clipper.js DraftEditor', // typeof-guarded
     'js/clipper.js Workspace', // typeof-guarded

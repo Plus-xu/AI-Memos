@@ -227,8 +227,14 @@ async function main() {
     pass('AI output can be edited, appended and undone from the other editor');
     // The fixture sends the first eight characters at once, two more soon after, and holds the rest back.
     const answer = '阅读室的周末开放时间是读者最关心的问题。';
+    const privateDraft = clipped + '\n\n#ai-review-private';
     fixture.state.aiDelay = 6000;
+    await worker.evaluate(() => chrome.storage.sync.set({ hidetag: 'ai-review-private' }));
     await panel.bringToFront();
+    await panel.fill('#content', privateDraft);
+    await waitFor(panel, () =>
+      document.getElementById('effectiveVisibility').textContent.includes(uiMessage('lockPrivate'))
+    );
     await panel.evaluate(() => document.getElementById('ai_optimize').click());
     await waitFor(
       panel,
@@ -265,7 +271,7 @@ async function main() {
       async () =>
         !AIReview.isBusy() && (await chrome.storage.local.get('memosAIReview')).memosAIReview?.truncated === 'stopped'
     );
-    assert.equal(await panel.inputValue('#content'), clipped);
+    assert.equal(await panel.inputValue('#content'), privateDraft);
     assert.equal(await panel.inputValue('#aiReviewResult'), answer.slice(0, 10));
     assert.deepEqual(
       await panel.evaluate(() => [
@@ -275,9 +281,33 @@ async function main() {
       ]),
       [true, false, true]
     );
-    await panel.click('#aiReviewDiscard');
-    fixture.state.aiDelay = 0;
     pass('Stopping a generation leaves the draft unchanged and the partial result ready for review');
+    await panel.click('#aiReviewReplace');
+    await panel.waitForSelector('#aiVisibilityConfirmation', { state: 'visible' });
+    assert.equal(
+      await panel.textContent('#aiVisibilityChange'),
+      await panel.evaluate(() =>
+        uiMessage('aiVisibilityChange')
+          .replace('{before}', uiMessage('lockPrivate'))
+          .replace('{after}', uiMessage('lockSpace'))
+      )
+    );
+    assert.equal(await panel.inputValue('#content'), privateDraft);
+    await panel.click('#aiCancelAdoption');
+    assert.equal(await panel.inputValue('#content'), privateDraft);
+    // The later save uses this capture's sources to verify duplicate detection.
+    const editedResult = answer.slice(0, 10) + '\n\n' + clipped;
+    await panel.fill('#aiReviewResult', editedResult);
+    await panel.click('#aiReviewReplace');
+    await panel.click('#aiConfirmAdoption');
+    assert.equal(await panel.inputValue('#content'), editedResult);
+    await panel.click('#aiUndo');
+    assert.equal(await panel.inputValue('#content'), privateDraft);
+    await worker.evaluate(() => chrome.storage.sync.remove('hidetag'));
+    await panel.fill('#content', clipped);
+    await waitFor(page, original => document.getElementById('content').value === original, clipped);
+    fixture.state.aiDelay = 0;
+    pass('Adopting a stopped result that broadens visibility requires confirmation and remains undoable');
     // A model or gateway that refuses to stream is asked again without the flag, and answers in one piece.
     const chatCalls = () => fixture.calls.filter(call => call.route === '/v1/chat/completions');
     const asked = chatCalls().length;

@@ -248,6 +248,15 @@
   "aiResultApplied": {
     "message": "AI result applied. You can undo this edit."
   },
+  "aiVisibilityChange": {
+    "message": "Applying this result will broaden the save visibility from {before} to {after}."
+  },
+  "aiConfirmAdoption": {
+    "message": "Apply with this visibility"
+  },
+  "aiCancelAdoption": {
+    "message": "Cancel"
+  },
   "clipAddSource": {
     "message": "Insert page source"
   },

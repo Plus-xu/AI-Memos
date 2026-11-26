@@ -67,18 +67,11 @@ var LLMTransport = (function () {
     return { url: request.url, headers: request.headers, body: body };
   }
 
-  /** The reason an error gives in words: its message, or the error itself where that is the words. */
-  function worded(error) {
-    return (error && error.message) || error;
-  }
-
   /**
    * For each protocol: request() builds what is sent, plain() turns that into the request for the same
    * answer in one piece, or nothing when it is that already, whole() reads an answer that arrived in one
    * piece as { text, finish }, and event() reads one event of a stream into `answer`, which takes text
-   * through add(), all of the text at once through all(), the reason the answer ended through end() and
-   * an error the server reports through fail(), as its reason in words and then all of what it said. That
-   * is the whole event: what an error rejects may stand beside it there, as a parameter or a code of its own.
+   * through add(), all of the text at once through all(), and the reason the answer ended through end().
    */
   const protocols = {
     'openai-responses': {
@@ -97,8 +90,6 @@ var LLMTransport = (function () {
       whole: response => ({ text: openaiText(response), finish: openaiFinish(response) }),
       event(event, answer) {
         if (event.type === 'response.output_text.delta') answer.add(event.delta);
-        else if (event.type === 'error') answer.fail(event.message, event);
-        else if (event.type === 'response.failed') answer.fail(worded(event.response?.error), event);
         else if (event.type === 'response.completed' || event.type === 'response.incomplete') {
           const response = event.response || {};
           // The finished response carries the whole text. A stream may have brought none of it in deltas,
@@ -129,7 +120,6 @@ var LLMTransport = (function () {
         finish: response.choices?.[0]?.finish_reason
       }),
       event(event, answer) {
-        if (event.error) answer.fail(worded(event.error), event);
         const choice = event.choices && event.choices[0];
         if (!choice) return;
         // Reasoning arrives beside the content, under a name of its own, and is not part of the answer.
@@ -159,7 +149,6 @@ var LLMTransport = (function () {
       },
       whole: response => ({ text: geminiText(response), finish: response.candidates?.[0]?.finishReason }),
       event(event, answer) {
-        if (event.error) answer.fail(worded(event.error), event);
         answer.add(geminiText(event));
         // A prompt the service blocks is answered without candidates: that answer is over, and has no text.
         const finish = event.candidates?.[0]?.finishReason || event.promptFeedback?.blockReason;
@@ -191,7 +180,6 @@ var LLMTransport = (function () {
         if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') answer.add(event.delta.text);
         else if (event.type === 'message_delta' && event.delta?.stop_reason) answer.end(event.delta.stop_reason);
         else if (event.type === 'message_stop') answer.end();
-        else if (event.type === 'error') answer.fail(worded(event.error), event);
       }
     }
   };
@@ -206,11 +194,44 @@ var LLMTransport = (function () {
     return protocol.request(provider, input);
   }
 
-  // An event stream that reported an error, or closed before saying it was done. `said` is all of the error
-  // the server reported, kept the way a refused request keeps what it was answered with.
-  function broken(reason, said) {
-    const failure = { status: 0, statusText: 'stream', reason: typeof reason === 'string' ? reason : '' };
-    if (said !== undefined) failure.responseJSON = said;
+  function firstValidationIssue(report) {
+    if (!Array.isArray(report?.detail)) return undefined;
+    return report.detail.find(issue => Array.isArray(issue?.loc) && typeof issue.msg === 'string');
+  }
+
+  function isErrorReport(data) {
+    return (
+      !!data?.error ||
+      data?.success === false ||
+      data?.type === 'error' ||
+      data?.type === 'response.failed' ||
+      data?.object === 'error' ||
+      !!firstValidationIssue(data)
+    );
+  }
+
+  // A gateway can attach a diagnostic detail to a successful answer as well.
+  function isDetailError(data, payload) {
+    return !payload && typeof data?.detail === 'string' && !!data.detail.trim();
+  }
+
+  // An error carried in a stream or JSON response, or a stream that closed early without an error report.
+  function generationFailure(statusText, report) {
+    const failure = { status: 0, statusText, reason: '' };
+    if (report === undefined) return failure;
+    const error = report?.error || report?.response?.error;
+    const errors = Array.isArray(report?.errors) ? report.errors : [report?.errors];
+    const reasons = [
+      error?.message,
+      error,
+      report?.message,
+      report?.detail,
+      firstValidationIssue(report)?.msg,
+      ...errors.map(issue => issue?.message || issue?.msg || issue),
+      report
+    ];
+    failure.reason = reasons.find(value => typeof value === 'string' && value.trim()) || '';
+    failure.responseJSON = report;
     return failure;
   }
 
@@ -218,9 +239,12 @@ var LLMTransport = (function () {
   const namesStream = /(?<![a-z])stream|\bSSE\b|server-sent|流式/i;
   /** A name alone, as a code or the path of a field is written: "stream", "body.stream", "stream_not_supported". */
   const nameAlone = /^[\w.$[\]/-]+$/;
-  /** That name, and "is not available" in the ways it is said, as parts of the pattern below. */
+  /** That name, and the ways a server says something is unavailable or unusable. */
   const streaming = '(?:' + namesStream.source + ')';
-  const unavailable = "(?:\\bunavailable|(?:\\bnot|n't|\\bno\\s+longer)\\s+(?:\\w+\\s+){0,2}?available)\\b";
+  const unavailable =
+    "(?:\\bunavailable|(?:\\bnot|n't|\\bno\\s+longer)\\s+(?:\\w+\\s+){0,2}?available" +
+    "|\\b(?:cannot|can['’]t|can\\s+not)\\s+be\\s+used)\\b";
+  const streamOutput = '(?:data|responses?|events?|chunks?|content|output|text|tokens?)\\b';
   /** How a word begins that tells what became of a stream, or names what else may not be available. */
   const mishap =
     '(?:fail|error|clos|disconnect|reset|abort|interrupt|terminat|lost|broke|drop|timed|timeout|because|upstream' +
@@ -245,13 +269,17 @@ var LLMTransport = (function () {
       // "No streaming here". "No stream data received", "no stream was returned" tell of a stream that
       // brought nothing.
       '\\bno\\s+stream(?:ing|ed|s)?\\b' +
-        '(?!\\s+(?:data|response|events?|chunks?|content|output|was|were|found|received|returned)\\b)',
+        '(?!\\s+(?:' +
+        streamOutput +
+        '|(?:was|were|found|received|returned)\\b|(?:has|have)\\s+been\\s+(?:found|received|returned)\\b))',
       '\\bnon[-\\s]?stream',
       // What the flag has to be, or what to do with it: "stream must be false", "set stream to false",
       // "requires stream=false", "please disable streaming", "turn off streaming".
       '\\b(?:must|should|needs?\\s+to|ha(?:s|ve)\\s+to)\\s+be\\s+(?:set\\s+to\\s+)?(?:false|off|disabled|turned\\s+off)\\b',
       'stream["\'`]?\\s*(?:[:=]+|\\bto\\b)\\s*["\'`]?(?:false|off)\\b',
-      '\\b(?:disable|turn(?:ing)?\\s+off|switch(?:ing)?\\s+off|without)\\s+(?:the\\s+)?(?:stream|SSE)',
+      '\\b(?:disable|turn(?:ing)?\\s+off|switch(?:ing)?\\s+off)\\s+(?:the\\s+)?(?:stream|SSE)',
+      // "Retry without streaming" asks for a different request. "Closed without streaming any output" reports a loss.
+      '\\bwithout\\s+(?:the\\s+)?(?:stream(?:ing|ed)?|SSE)\\b(?!\\s+(?:any\\s+|an?\\s+)?' + streamOutput + ')',
       '\\binvalid\\s+(?:stream(?:ing)?\\s+)?(?:value|parameter|argument|field)\\b',
       // Streaming as what is not available: "Streaming is unavailable", "streaming for this model isn't
       // available yet", "stream=true is not available". Between the two stands nothing that parts clauses
@@ -290,6 +318,9 @@ var LLMTransport = (function () {
   const echoedFlag = /([{,]\s*)(["']?)stream\2\s*:\s*(?:true|True)\b/g;
   /** The field of an error that names what it rejects, where the error is written out in text: "param":"stream". */
   const writtenParameter = /(["']?)\b(?:param(?:eter)?|field)\1\s*[:=]\s*(["'])([\w.$[\]/-]+)\2/gi;
+  const parameterField = /^(?:param(?:eter)?|field|loc)$/i;
+  /** Structured error codes in a gateway's textual representation of an upstream error. */
+  const writtenInterruption = /[{,]\s*(["'])(?:code|type|status|error_type)\1\s*:\s*(["'])([\w .-]+)\2/gi;
   /** A name alone that is the stream flag itself, as the last part of a path: "stream", "body.stream". */
   const flagAlone = /(?:^|[.$[\]/])stream(?:ing)?\]?$/i;
   /** A name alone as the words it is made of: "stream_not_supported", "StreamingNotSupported". */
@@ -297,19 +328,59 @@ var LLMTransport = (function () {
   /** How a name alone names the model: "model", "body.model", "model_not_found". */
   const namesModel = /(?<![a-z])model/i;
 
+  const interruptionCode =
+    /^(?:(?:provider|upstream|stream(?: idle)?|network|request|connection) )?(?:disconnect(?:ed|ion)?|timeout|timed out|connection (?:closed|reset|lost)|econnreset|etimedout)(?: error)?$/i;
+
+  function hasWrittenInterruption(text) {
+    for (const [, , , code] of text.matchAll(writtenInterruption)) {
+      if (interruptionCode.test(inWords(code).trim())) return true;
+    }
+    return false;
+  }
+
+  function reportsInterruption(report, withoutEcho) {
+    if (typeof report === 'string') {
+      const diagnostic = withoutEcho(report);
+      if (!diagnostic) return false;
+      const nested = embedded(report);
+      return nested === undefined ? hasWrittenInterruption(diagnostic) : reportsInterruption(nested, withoutEcho);
+    }
+    if (!report || typeof report !== 'object') return false;
+    const interruptedReport = item => reportsInterruption(item, withoutEcho);
+    if (Array.isArray(report)) return report.some(interruptedReport);
+    const { code, type, status, error_type, metadata } = report;
+    const interrupted = [code, type, status, error_type, metadata?.error_type].some(
+      name => typeof name === 'string' && interruptionCode.test(inWords(name).trim())
+    );
+    // Only the error and forwarded diagnostics describe the interruption. A validation report can echo
+    // the entire request, including a note about a different connection failure.
+    return (
+      interrupted ||
+      [
+        report.error,
+        report.errors,
+        report.response?.error,
+        metadata?.raw,
+        report.message,
+        report.detail,
+        report.msg
+      ].some(interruptedReport)
+    );
+  }
+
   /**
-   * Calls each(text) for every string in a value read from JSON, however deep. With `names` the name of
+   * Calls each(text, false, field) for every string in a value read from JSON, however deep. With `names` the name of
    * every field is a string too, given as each(name, true), except that of a stream flag that is on: that
    * is the request repeated.
    */
-  function strings(value, each, names) {
-    if (typeof value === 'string') each(value);
-    else if (Array.isArray(value)) value.forEach(item => strings(item, each, names));
+  function strings(value, each, names, field) {
+    if (typeof value === 'string') each(value, false, field);
+    else if (Array.isArray(value)) value.forEach(item => strings(item, each, names, field));
     else if (value && typeof value === 'object')
       for (const [name, item] of Object.entries(value)) {
         if (names && name === 'stream' && item === true) continue;
         if (names) each(name, true);
-        strings(item, each, names);
+        strings(item, each, names, name);
       }
   }
 
@@ -348,9 +419,9 @@ var LLMTransport = (function () {
    * An error may also repeat the request it refuses, so what the request with this `body` said itself does
    * not count: its stream flag, and any text of its own that names streaming, such as a note about it.
    *
-   * The refusal may come with the status 400 or 422, or as an event of a stream that was opened: that one
-   * has no status, and the failure keeps what the server said. 406 is a refusal by its status: what the
-   * request said it takes cannot be given, and the request for JSON alone takes something else.
+   * The refusal may come with status 400 or 422, or in an SSE event or JSON error after an HTTP 200.
+   * A structured disconnect or timeout takes precedence over the wording. HTTP 406 tells us to retry
+   * with JSON alone.
    *
    * Not asking again when the refusal was this one leaves the model unusable. Asking again when a refused
    * request had another reason costs one more request, refused the same way. Asking again when a stream
@@ -358,34 +429,50 @@ var LLMTransport = (function () {
    */
   function refusesStream(failure, body) {
     if (failure.status === 406) return true;
-    const reported = failure.statusText === 'stream' && failure.responseJSON !== undefined;
+    const reported = failure.responseJSON !== undefined && ['stream', 'provider'].includes(failure.statusText);
     if (!reported && failure.status !== 400 && failure.status !== 422) return false;
-    const own = [];
+    const own = new Set();
     strings(body, text => {
       // As it was sent, and as it reads inside JSON that is quoted as text.
-      if (namesStream.test(text)) own.push(text, JSON.stringify(text).slice(1, -1));
+      if (namesStream.test(text) || hasWrittenInterruption(text)) {
+        own.add(text);
+        own.add(JSON.stringify(text).slice(1, -1));
+      }
     });
+    const withoutEcho = text => {
+      for (const mine of own) text = text.split(mine).join('');
+      return text;
+    };
     // What the refusal says in sentences, and the names it gives alone, each with whether it is the name
     // of a field. A code, the path of a field and a parameter are values.
     const said = [];
     const alone = [];
-    const hear = (text, isName) => {
+    const report = failure.responseJSON === undefined ? String(failure.responseText || '') : failure.responseJSON;
+    if (reportsInterruption(report, withoutEcho)) return false;
+    const reports = [report];
+    let otherParameter = false;
+    const hear = (text, isName, field) => {
+      if (!isName && own.has(text)) return;
       const held = isName ? undefined : embedded(text);
-      if (held !== undefined) return strings(held, hear, true);
-      for (const mine of own) text = text.split(mine).join('');
-      text = text.replace(echoedFlag, '$1').trim();
-      if (nameAlone.test(text)) return alone.push([text, !!isName]);
+      if (held !== undefined) return reports.push(held);
+      text = withoutEcho(text).replace(echoedFlag, '$1').trim();
+      if (nameAlone.test(text)) {
+        if (!isName && parameterField.test(field) && !flagAlone.test(text)) otherParameter = true;
+        return alone.push([text, !!isName]);
+      }
       said.push(text);
-      for (const written of text.matchAll(writtenParameter)) alone.push([written[3], false]);
+      for (const [, , , parameter] of text.matchAll(writtenParameter)) {
+        if (!flagAlone.test(parameter)) otherParameter = true;
+        alone.push([parameter, false]);
+      }
     };
-    if (failure.responseJSON === undefined) hear(String(failure.responseText || ''));
-    else strings(failure.responseJSON, hear, true);
+    while (reports.length) strings(reports.pop(), hear, true);
     const model = alone.some(([name, isName]) => !isName && namesModel.test(name));
-    // Where the model is what the error rejects, a sentence about the model that names streaming only as
-    // what the model was wanted for refuses the model.
-    const refusal = sentence =>
-      refuses.test(sentence) &&
-      namesStream.test(model && /\bmodel\b/i.test(sentence) ? sentence.replace(forTheRequest, '') : sentence);
+    // If the error identifies another rejected parameter, a reference to this request can be context.
+    const refusal = sentence => {
+      if (otherParameter || (model && /\bmodel\b/i.test(sentence))) sentence = sentence.replace(forTheRequest, '');
+      return refuses.test(sentence) && namesStream.test(sentence);
+    };
     // A name alone refuses streaming as the flag itself, or as a code whose words do, read as a sentence is:
     // those of "stream_timeout" and of "unexpected_end_of_stream" tell what became of a stream.
     return (
@@ -456,11 +543,6 @@ var LLMTransport = (function () {
         done = true;
         // The reason comes once; a closing event after it gives none.
         how = how || ending(finish);
-      },
-      fail(reason, said) {
-        // What reports an error has not ended the answer, though the event it came in reads as its end too.
-        done = false;
-        throw broken(reason, said);
       }
     };
     try {
@@ -488,32 +570,36 @@ var LLMTransport = (function () {
             try {
               event = JSON.parse(data);
             } catch (_) {
-              if (named) answer.fail(data, data);
+              if (named) throw generationFailure('stream', data);
               // Data that never was JSON, such as a gateway's own note, carries nothing. What starts as
               // JSON and does not read as it is an event that was damaged, and what it carried is lost.
               if (/^\s*[{[]/.test(data)) damaged = true;
               return false;
             }
+            // Handle error events before their payload can change the accumulated answer.
+            const payload =
+              event?.type ||
+              event?.choices?.length ||
+              event?.usage ||
+              event?.candidates?.length ||
+              event?.promptFeedback ||
+              event?.usageMetadata;
+            if (named || isErrorReport(event) || isDetailError(event, payload))
+              throw generationFailure('stream', event);
             if (event && typeof event === 'object') protocol.event(event, answer);
-            // The protocol reads the errors it knows first. Any other is still one, by its name.
-            if (named)
-              answer.fail(
-                typeof event === 'string'
-                  ? event
-                  : event?.message || event?.error?.message || event?.error || event?.detail,
-                event
-              );
           }
           // Nothing after the end of the answer is waited for: a server may hold the connection open.
           return done;
         }
       });
       if (!reply.streamed) {
-        // A gateway that does not stream answers the same request in one piece.
-        const whole = protocol.whole(reply.data || {});
+        const data = reply.data || {};
+        if (isErrorReport(data)) throw generationFailure('provider', data);
+        const whole = protocol.whole(data);
+        if (isDetailError(data, whole.text || whole.finish)) throw generationFailure('provider', data);
         return outcome(whole.text, ending(whole.finish));
       }
-      if (!done) throw broken('');
+      if (!done) throw generationFailure('stream');
     } catch (failure) {
       // Only a failed request leaves a partial answer behind; anything else is a defect to surface.
       if (!failure || typeof failure.status !== 'number') throw failure;
@@ -525,7 +611,7 @@ var LLMTransport = (function () {
     }
     if (damaged) {
       // Text is missing from somewhere in the answer: it is not whole, whatever its last event said.
-      if (!text.trim()) throw broken('');
+      if (!text.trim()) throw generationFailure('stream');
       return { text: text, truncated: true, interrupted: 'interrupted' };
     }
     return outcome(text, how);

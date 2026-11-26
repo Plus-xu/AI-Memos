@@ -1,4 +1,4 @@
-/* global DraftEditor, DraftStorage, MemoIndex, MemosAPI, StagedFiles, appendMemoList, clearMemoList, closeTagList, dismissArchiveNotice, get_info, renderMemoList, resolveVisibility, showApiError, uiMessage */
+/* global AIReview, DraftEditor, DraftStorage, MemoIndex, MemosAPI, StagedFiles, appendMemoList, clearMemoList, closeTagList, dismissArchiveNotice, get_info, renderMemoList, resolveVisibility, showApiError, uiMessage */
 /* exported Workspace */
 /** Shared editor navigation, destinations, server search and local clip history. */
 var Workspace = (function () {
@@ -7,9 +7,11 @@ var Workspace = (function () {
     space = '',
     visibility = 'PRIVATE',
     spaces = [],
-    missing = false;
+    missing = false,
+    visibilityReady = false;
   let configuring = Promise.resolve();
   let destinationGeneration = 0,
+    selectionRevision = 0,
     searchGeneration = 0,
     listGeneration = 0,
     nextPage = '',
@@ -44,6 +46,15 @@ var Workspace = (function () {
     el('spaceVisibility').disabled = !space;
   }
 
+  function widerVisibility(before, after) {
+    const rules = { ...account, memo_lock: visibility };
+    const from = resolveVisibility(rules, before);
+    const to = resolveVisibility(rules, after);
+    // A tag rule can only change the selected visibility to PRIVATE or PUBLIC.
+    if (from === to || (from !== 'PRIVATE' && to !== 'PUBLIC')) return null;
+    return { from: labels[from], to: labels[to], account: DraftStorage.scope(account), space };
+  }
+
   function renderSpaces() {
     const select = el('memoSpace');
     select.replaceChildren(new Option(uiMessage('noSpace'), ''));
@@ -56,8 +67,11 @@ var Workspace = (function () {
     refreshVisibility();
   }
 
-  function configure(info) {
-    configuring = loadDestination(info, ++destinationGeneration);
+  function configure(info, tokenChanged = false) {
+    const run = ++destinationGeneration;
+    visibilityReady = false;
+    AIReview.refresh();
+    configuring = loadDestination(info, run, tokenChanged);
     return configuring;
   }
 
@@ -83,8 +97,13 @@ var Workspace = (function () {
     }
   }
 
-  async function loadDestination(info, run) {
+  async function loadDestination(info, run, tokenChanged) {
+    if (!info) info = await new Promise(resolve => get_info(resolve));
+    // A token that had expired was shown the public memos only.
+    if (tokenChanged && info.status) MemoIndex.clear(info);
+    if (run !== destinationGeneration) return;
     account = info;
+    visibilityReady = !info.status;
     spaces = [];
     space = '';
     missing = false;
@@ -93,16 +112,19 @@ var Workspace = (function () {
     el('duplicateNotice').hidden = true;
     el('saveStatus').hidden = true;
     renderSpaces();
+    AIReview.refresh();
     if (!info.status) return;
     // Runs again when the account changes; it never rejects.
     StagedFiles.refreshLimit(info);
     const key = 'memosDestination:' + DraftStorage.scope(info),
       listKey = 'memosSpaces:' + DraftStorage.scope(info);
+    const revision = selectionRevision;
     const stored = await DraftStorage.get('local', { [key]: null, [listKey]: null });
     if (run !== destinationGeneration) return;
     const saved = stored[key],
       remembered = spaceList(stored[listKey]?.spaces);
-    if (saved) {
+    // The other editor or the destination controls may have supplied a newer selection during the read.
+    if (saved && revision === selectionRevision) {
       space = saved.space || '';
       visibility = labels[saved.visibility] ? saved.visibility : 'PRIVATE';
     }
@@ -110,6 +132,8 @@ var Workspace = (function () {
       spaces = remembered;
       renderSpaces();
     }
+    visibilityReady = true;
+    AIReview.refresh();
     await refreshHistory();
     if (run !== destinationGeneration) return;
     let list = null;
@@ -127,6 +151,7 @@ var Workspace = (function () {
   }
 
   async function saveDestination() {
+    selectionRevision++;
     const selected = el('memoSpace').value;
     space = selected;
     missing = !!space && !spaces.some(entry => entry.name === space);
@@ -141,15 +166,26 @@ var Workspace = (function () {
   }
 
   async function destination(info) {
+    const run = destinationGeneration;
     await configuring;
-    if (!account || DraftStorage.scope(info) !== DraftStorage.scope(account)) throw new Error('draftChanged');
+    if (
+      run !== destinationGeneration ||
+      !account ||
+      DraftStorage.scope(info) !== DraftStorage.scope(account) ||
+      info.hidetag !== account.hidetag ||
+      info.showtag !== account.showtag
+    )
+      throw new Error('draftChanged');
     const target = space,
+      selectedVisibility = visibility,
       scope = resolveVisibility({ ...info, memo_lock: visibility });
     if (missing || (scope === 'SPACE' && !target)) throw new Error('spaceUnavailable');
     if (target) {
       const list = spaceList(await MemosAPI.listSpaces(info));
-      if (DraftStorage.scope(info) !== DraftStorage.scope(account) || target !== space) throw new Error('draftChanged');
+      if (run !== destinationGeneration || target !== space) throw new Error('draftChanged');
       await showSpaces(info, list);
+      if (run !== destinationGeneration || target !== space || selectedVisibility !== visibility)
+        throw new Error('draftChanged');
       if (!list.some(entry => entry.name === target)) throw new Error('spaceUnavailable');
     }
     return target ? { visibility: scope, space: target } : { visibility: scope };
@@ -351,25 +387,27 @@ var Workspace = (function () {
     });
     chrome.storage.onChanged.addListener((changes, area) => {
       if (area === 'local' && changes.memosClipHistory) refreshHistory();
-      if (area === 'sync' && ['apiUrl', 'apiTokens', 'userName', 'hidetag', 'showtag'].some(key => changes[key])) {
+      if (
+        area === 'sync' &&
+        ['apiUrl', 'apiTokens', 'userName', 'userid', 'hidetag', 'showtag', 'memo_lock'].some(key => changes[key])
+      ) {
+        configure(undefined, !!changes.apiTokens);
         resetSearch();
         closeTagList();
-        get_info(info => {
-          // A token that had expired was shown the public memos only.
-          if (changes.apiTokens && info.status) MemoIndex.clear(info);
-          configure(info);
-        });
       }
       if (area === 'local' && account && changes['memosDestination:' + DraftStorage.scope(account)]) {
         const saved = changes['memosDestination:' + DraftStorage.scope(account)].newValue;
         if (saved) {
+          selectionRevision++;
           space = saved.space;
           visibility = saved.visibility;
           missing = false;
           renderSpaces();
-        }
+        } else configure();
       }
     });
+    // Listen before starting the first read so a settings change can supersede it even on startup.
+    configure();
     chrome.tabs.onActivated?.addListener(() => refreshHistory());
     chrome.tabs.onUpdated?.addListener((id, changes, tabInfo) => {
       if (tabInfo.active && changes.url) refreshHistory();
@@ -386,6 +424,8 @@ var Workspace = (function () {
   return {
     configure,
     destination,
+    widerVisibility,
+    isVisibilityReady: () => visibilityReady,
     refreshVisibility,
     refreshHistory,
     resetSearch,

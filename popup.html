@@ -147,6 +147,18 @@
               ><button id="aiReviewAppend" data-feature-message="aiAppend"></button
               ><button id="aiReviewDiscard" class="text-button" data-feature-message="aiDiscard"></button>
             </div>
+            <div id="aiVisibilityConfirmation" class="notice" hidden>
+              <p id="aiVisibilityChange" role="alert" tabindex="-1"></p>
+              <div class="row wrap">
+                <button
+                  id="aiConfirmAdoption"
+                  class="text-button"
+                  aria-describedby="aiVisibilityChange"
+                  data-feature-message="aiConfirmAdoption"
+                ></button
+                ><button id="aiCancelAdoption" class="text-button" data-feature-message="aiCancelAdoption"></button>
+              </div>
+            </div>
           </section>
         </section>
         <section id="searchView" hidden>

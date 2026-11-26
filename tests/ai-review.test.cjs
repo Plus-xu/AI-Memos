@@ -1,8 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const vm = require('node:vm');
-const { plain, flush } = require('./helpers/scripts.cjs');
-const { harness } = require('./helpers/environments.cjs');
+const { plain, flush, loadScripts } = require('./helpers/scripts.cjs');
+const { harness, loadPopup } = require('./helpers/environments.cjs');
 const { streamingFetch } = require('./helpers/http.cjs');
 
 test('AI results are persisted as a pending review without replacing the draft', () => {
@@ -229,7 +229,7 @@ test('the actual draft-load callback refreshes adoption after a review restores 
       callback?.();
     }
   };
-  state.context.Workspace = { configure() {}, refreshVisibility() {} };
+  Object.assign(state.context.Workspace, { configure() {}, refreshVisibility() {} });
   state.load('editor-draft.js');
   state.load('oper.js');
   assert.equal(typeof finishDraftLoad, 'function');
@@ -694,7 +694,16 @@ test('text of a generation gives way to its result once there is one, and to wha
 });
 
 test('stopping when only part of an echoed marker has arrived keeps the earlier pending review', async () => {
-  for (const pieces of [['<'], ['<', 'note'], ['\n', '<no'], ['<note>'], ['<note>\r'], ['<note>\n'], ['\n\n']]) {
+  for (const pieces of [
+    ['<'],
+    ['<', 'note'],
+    ['\n', '<no'],
+    ['\r', '<no'],
+    ['<note>'],
+    ['<note>\r'],
+    ['<note>\n'],
+    ['\n\n']
+  ]) {
     const state = streamingEditor();
     state.context.AIReview.show('Original draft', 'Earlier result', 'summary');
     state.context.optimizeWithAI();
@@ -774,6 +783,45 @@ test('a selection stays on its text when the finished answer brings back a part 
   assert.deepEqual([box.selectionStart, box.selectionEnd], [0, 4]);
 });
 
+test('a selection stays on its text when the finished answer fills gaps on both sides of it', () => {
+  const selected = 'Three';
+  const cases = [
+    ['One. Three. Five.', 'Three. One. Two. Three. Four. Five.', 'Three. Four.'],
+    [
+      'One. Three is the right one. Five.',
+      'One. Two mentions Three. Three is the right one. Four. Five.',
+      'Three is the right one.'
+    ],
+    [
+      'One. Three is the right one. Five.',
+      'One. Three was mentioned earlier. Two. Three is the right one. Four. Five.',
+      'Three is the right one.'
+    ],
+    ['One. Keep this Three. Five.', 'One. Two. Keep this Three. Four mentions Three. Five.', 'Three. Four']
+  ];
+  for (const [arriving, finished, anchor] of cases) {
+    const state = harness();
+    const box = state.node('#aiReviewResult')[0];
+    asTextBox(box);
+    state.context.AIReview.setBusy(true, 'organize', () => {});
+    state.context.AIReview.stream('Original draft', arriving, 'organize');
+    const start = arriving.indexOf(selected);
+    box.setSelectionRange(start, start + selected.length, 'backward');
+    state.context.AIReview.stream('Original draft', finished, 'organize');
+    state.context.AIReview.show('Original draft', finished, 'organize');
+    state.context.AIReview.setBusy(false);
+    state.frame();
+
+    const expected = finished.indexOf(anchor);
+    assert.equal(box.value, finished);
+    assert.deepEqual(
+      [box.selectionStart, box.selectionEnd, box.selectionDirection],
+      [expected, expected + selected.length, 'backward'],
+      finished
+    );
+  }
+});
+
 test('a selection made backwards in the arriving text still grows from its start as more arrives', () => {
   const state = harness();
   const box = state.node('#aiReviewResult')[0];
@@ -787,6 +835,19 @@ test('a selection made backwards in the arriving text still grows from its start
     [box.value, box.selectionStart, box.selectionEnd, box.selectionDirection],
     ['Some text and more', 5, 9, 'backward']
   );
+});
+
+test('a selection spanning a restored gap keeps both endpoints on their original characters', () => {
+  for (const direction of ['forward', 'backward']) {
+    const state = harness();
+    const box = state.node('#aiReviewResult')[0];
+    state.context.AIReview.setBusy(true, 'organize');
+    state.context.AIReview.stream('Draft', 'A B C D', 'organize');
+    box.setSelectionRange(2, 5, direction);
+    state.context.AIReview.show('Draft', 'A + B + C + D', 'organize');
+    assert.equal(box.value.slice(box.selectionStart, box.selectionEnd), 'B + C');
+    assert.equal(box.selectionDirection, direction);
+  }
 });
 
 test('a selection made while text arrives is kept when the generation ends before the last text was drawn', () => {
@@ -924,19 +985,164 @@ test('an adoption an earlier version stored with carriage returns can be undone,
   assert.equal(heard.node('#content').val(), 'Original draft');
 });
 
-test('a caret in a part of the text that the finished answer changes stays a caret', () => {
+test('a caret follows the original word when the final answer fills gaps on both sides', () => {
   const state = harness();
   const box = state.node('#aiReviewResult')[0];
   state.context.AIReview.setBusy(true, 'organize', () => {});
-  // Two parts were lost on the way. All from the first of them to the last counts as changed: both texts
-  // begin with "One. T", and the caret is behind that, inside "Three".
   state.context.AIReview.stream('Original draft', 'One. Three. Five.', 'organize');
   box.setSelectionRange(8, 8);
   state.context.AIReview.stream('Original draft', 'One. Two. Three. Four. Five.', 'organize');
   state.frame();
-  assert.deepEqual(
-    [box.value, box.selectionStart, box.selectionEnd],
-    ['One. Two. Three. Four. Five.', 6, 6],
-    'where the change begins'
+  assert.deepEqual([box.value, box.selectionStart, box.selectionEnd], ['One. Two. Three. Four. Five.', 13, 13]);
+
+  box.setSelectionRange(box.value.length, box.value.length);
+  state.context.AIReview.show('Original draft', 'Zero. One. Two. Three. Four. Five.', 'organize');
+  assert.equal(box.selectionStart, box.value.length);
+  assert.equal(box.selectionEnd, box.value.length);
+});
+
+async function popupWithAI(draft, saved, overrides) {
+  const popup = await loadPopup(overrides, {
+    ...saved,
+    open_content: draft,
+    userLanguage: 'en',
+    llmActiveProvider: 'openai',
+    llmProviderConfigs: { openai: { model: 'gpt-5.5', apiKey: 'fixture-key' } }
+  });
+  popup.context.TextDecoder = TextDecoder;
+  popup.context.clearTimeout = clearTimeout;
+  popup.context.uiMessage = key => (key === 'aiVisibilityChange' ? '{before} → {after}' : key);
+  loadScripts(popup.context, ['llm-config', 'ai-workflow', 'ai-review', 'llm-transport', 'ai-optimize']);
+  popup.context.loadLLMState(() => {});
+  popup.context.AIReview.init();
+  return popup;
+}
+
+test('only the latest settings and destination reads can enable adoption', async () => {
+  const draft = 'Draft #new';
+  const { context, node } = await popupWithAI(draft, { memo_lock: 'PUBLIC' });
+  const info = await new Promise(resolve => context.get_info(resolve));
+  context.AIReview.show(draft, 'Edited draft', 'organize');
+  const settings = [];
+  context.get_info = callback => settings.push(callback);
+  const get = context.DraftStorage.get;
+  let finishDestination;
+  context.DraftStorage.get = (area, keys) => {
+    if (Object.keys(keys).some(key => key.startsWith('memosDestination:')) && !finishDestination) {
+      return new Promise(resolve => {
+        finishDestination = () => resolve(keys);
+      });
+    }
+    return get(area, keys);
+  };
+  const changed = tag => context.chrome.storage.onChanged.emit({ hidetag: { newValue: tag } }, 'sync');
+
+  changed('first');
+  settings.shift()({ ...info, hidetag: 'first' });
+  await flush();
+  changed('second');
+  finishDestination();
+  await flush();
+  assert.equal(context.Workspace.isVisibilityReady(), false);
+  assert.equal(node('#aiReviewReplace').prop('disabled'), true);
+
+  changed('new');
+  const [obsolete, latest] = settings;
+  latest({ ...info, hidetag: 'new' });
+  await flush();
+  obsolete({ ...info, hidetag: 'second' });
+  await flush();
+  assert.equal(node('#aiReviewReplace').prop('disabled'), false);
+  await assert.rejects(context.Workspace.destination(info), /draftChanged/);
+  node('#aiReviewReplace').click();
+  assert.equal(node('#content').val(), draft);
+  assert.equal(node('#aiVisibilityChange').text(), 'lockPrivate → lockPublic');
+});
+
+test('a destination selected in another editor survives an older local read', async () => {
+  const { context } = await loadPopup();
+  const info = await new Promise(resolve => context.get_info(resolve));
+  const key = 'memosDestination:' + context.DraftStorage.scope(info);
+  const get = context.DraftStorage.get;
+  let finish;
+  context.DraftStorage.get = (area, keys) =>
+    Object.hasOwn(keys, key)
+      ? new Promise(resolve => {
+          finish = resolve;
+        })
+      : get(area, keys);
+  const loading = context.Workspace.configure(info);
+  const newer = { space: '', visibility: 'PROTECTED' };
+  context.chrome.storage.onChanged.emit({ [key]: { newValue: newer } }, 'local');
+  finish({ [key]: { space: '', visibility: 'PRIVATE' } });
+  await loading;
+  assert.deepEqual(plain(await context.Workspace.destination(info)), { visibility: 'PROTECTED' });
+});
+
+test('adopting a stopped result that would remove a private tag requires explicit confirmation', async () => {
+  const draft = 'Private contents\n#private';
+  const saved = [];
+  const { context, node, storage, messages } = await popupWithAI(
+    draft,
+    { hidetag: 'private', memo_lock: 'PUBLIC' },
+    {
+      createMemo: async (_, body) => {
+        saved.push(body);
+        return { name: 'memos/saved', ...body };
+      }
+    }
   );
+  const requests = [];
+  context.fetch = streamingFetch(requests);
+  const job = context.optimizeWithAI();
+  await flush();
+  assert.equal(requests.length, 1, messages.join(', '));
+  requests[0].send(delta('Private contents'));
+  await shown();
+  node('#aiStop').click();
+  await job;
+  assert.equal(storage.memosAIReview?.truncated, 'stopped', messages.join(', '));
+
+  node('#aiReviewReplace').click();
+  assert.equal(node('#aiVisibilityConfirmation').prop('hidden'), false);
+  assert.equal(node('#aiVisibilityChange').text(), 'lockPrivate → lockPublic');
+  assert.equal(node('#content').val(), draft);
+  assert.equal(storage.memosAIUndo, null);
+
+  node('#aiCancelAdoption').click();
+  node('#aiConfirmAdoption').click();
+  assert.equal(node('#aiVisibilityConfirmation').prop('hidden'), true);
+  assert.equal(node('#content').val(), draft);
+  assert.equal(storage.memosAIReview.truncated, 'stopped');
+
+  node('#aiReviewReplace').click();
+  node('#aiConfirmAdoption').click();
+  assert.equal(node('#content').val(), 'Private contents');
+  await context.sendText();
+  assert.equal(saved[0].visibility, 'PUBLIC');
+});
+
+test('append checks the joined draft and rechecks the currently selected scope at confirmation', async () => {
+  const draft = 'Private contents\n```text\nSome code';
+  const result = '```\n#publish';
+  const { context, node } = await popupWithAI(draft, { showtag: 'publish', memo_lock: 'PRIVATE' });
+  const review = context.AIReview;
+  review.show(draft, result, 'organize', 'interrupted');
+
+  node('#aiReviewAppend').click();
+  assert.equal(node('#aiVisibilityChange').text(), 'lockPrivate → lockPublic');
+  assert.equal(node('#content').val(), draft);
+
+  node('#visibility').val('PROTECTED');
+  await node('#visibility')[0].onchange();
+  node('#aiConfirmAdoption').click();
+  assert.equal(node('#aiVisibilityChange').text(), 'lockProtected → lockPublic');
+  assert.equal(node('#content').val(), draft, 'the original confirmation has expired');
+
+  node('#aiReviewResult').val('Revised result').trigger('input');
+  node('#aiConfirmAdoption').click();
+  assert.equal(node('#content').val(), draft, 'changing the result invalidates the confirmation');
+  assert.equal(node('#aiVisibilityConfirmation').prop('hidden'), true);
+  node('#aiReviewAppend').click();
+  assert.equal(node('#content').val(), draft + '\n\nRevised result');
 });

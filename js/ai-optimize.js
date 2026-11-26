@@ -818,10 +818,11 @@ function gatewayChatUrl(baseUrl) {
 }
 
 function extractLLMErrorMessage(xhr) {
-  // An error the server reported inside its stream, or a stream that closed before saying it was done.
-  if (xhr.statusText === 'stream') {
+  // The requested answer failed after the server had sent HTTP 200.
+  if (xhr.statusText === 'stream' || xhr.statusText === 'provider') {
     const cause = typeof xhr.reason === 'string' ? xhr.reason.trim().slice(0, 240) : '';
-    return getLLMMessage('aiInterrupted') + (cause ? ' (' + cause + ')' : '');
+    const key = xhr.statusText === 'stream' ? 'aiInterrupted' : 'apiFailed';
+    return getLLMMessage(key) + (cause ? ' (' + cause + ')' : '');
   }
   if (xhr.status === 401 || xhr.status === 403 || xhr.status === 404) return getLLMMessage('aiUnavailable');
   if (xhr.status === 429) return getLLMMessage('requestLimited');

@@ -1,4 +1,4 @@
-/* global AIWorkflow, DraftStorage, getLLMMessage, memoSaveInProgress */
+/* global AIWorkflow, DraftStorage, Workspace, getLLMMessage, memoSaveInProgress */
 /* exported AIReview */
 /** AI responses remain separate from the draft until explicitly adopted. */
 var AIReview = (function () {
@@ -6,6 +6,7 @@ var AIReview = (function () {
   var lastTransaction = null;
   var busy = false;
   var runningTask = 'organize';
+  let pendingAdoption = null;
   // The answer this editor is generating, as { input, text, task }: shown while it arrives, never stored.
   var streaming = null;
   // Whether a frame is awaited in which the text that arrived since the last one will be drawn.
@@ -31,6 +32,7 @@ var AIReview = (function () {
     $('#aiUndo').attr('title', message('aiUndo'));
     refreshTaskHint();
     renderWarning();
+    renderVisibilityConfirmation();
   }
 
   function taskName(task) {
@@ -60,12 +62,20 @@ var AIReview = (function () {
     // Text that is still arriving is not a review yet: nothing is said about it and it cannot be adopted.
     var review = streaming ? null : currentReview;
     var empty = !review || !review.result.trim();
-    if (review && $('#content').val() !== review.input) warnings.push(message('aiEditConflict'));
+    const draft = $('#content').val();
+    const canAdopt = !busy && !empty && typeof Workspace !== 'undefined' && Workspace.isVisibilityReady();
+    if (
+      pendingAdoption &&
+      (!canAdopt || draft !== pendingAdoption.transaction.before || review.result !== pendingAdoption.result)
+    ) {
+      askForAdoption(null);
+    }
+    if (review && draft !== review.input) warnings.push(message('aiEditConflict'));
     if (review && review.truncated) warnings.push(message(AIWorkflow.incompleteMessage(review.truncated)));
     if (review && AIWorkflow.missingReferences(review).length) warnings.push(message('aiMissingLinks'));
     $('#aiReviewWarning').text(warnings.join(' ')).prop('hidden', !warnings.length);
-    $('#aiReviewReplace').prop('disabled', busy || empty || $('#content').val() !== review.input);
-    $('#aiReviewAppend').prop('disabled', busy || empty);
+    $('#aiReviewReplace').prop('disabled', !canAdopt || draft !== review.input);
+    $('#aiReviewAppend').prop('disabled', !canAdopt);
     $('#aiUndo').prop('disabled', !lastTransaction || busy);
   }
 
@@ -141,6 +151,63 @@ var AIReview = (function () {
     if (follow) box.scrollTop = box.scrollHeight;
   }
 
+  /** Locates intact selected text, starting after any previously matched prefix. */
+  function findSelection(had, text, from, to, preferred, prefix = { old: 0, restored: 0 }) {
+    // The old text on either side of a candidate must still fit in order.
+    let first = prefix.restored;
+    for (let index = prefix.old; index < from; index++) {
+      const found = text.indexOf(had[index], first);
+      if (found < 0) return -1;
+      first = found + 1;
+    }
+    let lastEnd = text.length;
+    for (let index = had.length - 1; index >= to; index--) {
+      if (lastEnd === 0) return -1;
+      lastEnd = text.lastIndexOf(had[index], lastEnd - 1);
+      if (lastEnd < 0) return -1;
+    }
+
+    const selected = had.slice(from, to);
+    // Nearby characters distinguish repeated selections. Keep each comparison cheap for long answers.
+    const contextLength = 64;
+    const contextStart = Math.max(0, from - contextLength);
+    const contextEnd = Math.min(had.length, to + contextLength);
+    let best = -1;
+    let bestScore = -1;
+    for (
+      let match = text.indexOf(selected, first);
+      match >= 0 && match + selected.length <= lastEnd;
+      match = selected ? text.indexOf(selected, match + 1) : match + 1
+    ) {
+      const offset = match - from;
+      let left = from;
+      while (left > contextStart && had[left - 1] === text[left + offset - 1]) left--;
+      let right = to;
+      while (right < contextEnd && had[right] === text[right + offset]) right++;
+      const score = from - left + (right - to);
+      if (score > bestScore || (score === bestScore && match === preferred)) {
+        best = match;
+        bestScore = score;
+      }
+    }
+    return best;
+  }
+
+  function restoredSelection(had, text, from, to, start, end) {
+    const match = findSelection(had, text, from, to, start);
+    if (match >= 0) return [match, match + (to - from)];
+    // Insertions inside a selection can separate its first and last characters. Anchor each one,
+    // matching the old text between them in order so repeated words cannot reverse the selection.
+    if (to - from > 1) {
+      const first = findSelection(had, text, from, from + 1, start);
+      if (first >= 0) {
+        const last = findSelection(had, text, to - 1, to, end - 1, { old: from + 1, restored: first + 1 });
+        if (last >= 0) return [first, last + 1];
+      }
+    }
+    return [start, end];
+  }
+
   /** Makes `text` what the box holds, with what is selected in it still selected, in the direction it was. */
   function put(box, text) {
     // The text is compared with what the box holds, and added to it, in the form the box holds it in.
@@ -170,27 +237,59 @@ var AIReview = (function () {
       // A caret selects nothing, and stays a caret. Its two ends are one place: taken apart, as those of a
       // selection are, a caret inside the change would come to span all of it.
       var end = to === from ? start : to <= head ? to : to >= had.length - tail ? to + moved : text.length - tail;
+      // Filling several gaps can leave the original selection or caret between the changes.
+      if (moved > 0) [start, end] = restoredSelection(had, text, from, to, start, end);
       box.value = text;
       box.setSelectionRange(start, end, direction);
     }
   }
 
-  function adopt(mode) {
+  function renderVisibilityConfirmation() {
+    $('#aiVisibilityConfirmation').prop('hidden', !pendingAdoption);
+    if (!pendingAdoption) return;
+    const { from, to } = pendingAdoption.visibility;
+    $('#aiVisibilityChange').text(
+      message('aiVisibilityChange').replace('{before}', message(from)).replace('{after}', message(to))
+    );
+  }
+
+  function askForAdoption(confirmation) {
+    pendingAdoption = confirmation;
+    renderVisibilityConfirmation();
+    if (confirmation) $('#aiVisibilityChange')[0].focus();
+  }
+
+  function adopt(mode, approval) {
     if (
       !currentReview ||
       !currentReview.result.trim() ||
       busy ||
+      !Workspace.isVisibilityReady() ||
       (typeof memoSaveInProgress !== 'undefined' && memoSaveInProgress)
     )
       return;
     try {
-      lastTransaction = AIWorkflow.apply(currentReview, $('#content').val(), mode);
+      const transaction = AIWorkflow.apply(currentReview, $('#content').val(), mode);
+      const visibility = Workspace.widerVisibility(transaction.before, transaction.after);
+      const approved =
+        approval &&
+        visibility &&
+        transaction.before === approval.transaction.before &&
+        transaction.after === approval.transaction.after &&
+        Object.keys(visibility).every(key => visibility[key] === approval.visibility[key]);
+      if (!approved && (visibility || approval)) {
+        askForAdoption(visibility ? { mode, transaction, visibility, result: currentReview.result } : null);
+        return;
+      }
+      askForAdoption(null);
+      lastTransaction = transaction;
       $('#content').val(lastTransaction.after).trigger('input');
       currentReview = null;
       persist();
       render();
       $.message({ message: message('aiResultApplied') });
     } catch (_) {
+      askForAdoption(null);
       $.message({ message: message('aiEditConflict') });
     }
   }
@@ -298,6 +397,12 @@ var AIReview = (function () {
     });
     $('#aiReviewAppend').click(function () {
       adopt('append');
+    });
+    $('#aiConfirmAdoption').click(function () {
+      if (pendingAdoption) adopt(pendingAdoption.mode, pendingAdoption);
+    });
+    $('#aiCancelAdoption').click(function () {
+      askForAdoption(null);
     });
     $('#aiReviewDiscard').click(function () {
       if (streaming) return;

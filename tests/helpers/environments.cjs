@@ -54,6 +54,7 @@ function harness(options = {}) {
     clearTimeout() {},
     console: { log() {}, error() {}, warn() {} },
     Clipper: { init() {} },
+    Workspace: { isVisibilityReady: () => true, widerVisibility: () => null },
     MemosAPI: { normalizeBaseUrl: value => value && value.replace(/\/+$/, '') + '/' }
   });
   const load = file => {

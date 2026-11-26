@@ -95,8 +95,8 @@ function showApiError(prefix, xhr, fallbackMessage) {
   $.message({ message: errorMsg });
 }
 
-function resolveVisibility(info) {
-  return MemoTags.visibility($('textarea[name=text]').val(), info);
+function resolveVisibility(info, content = $('textarea[name=text]').val()) {
+  return MemoTags.visibility(content, info);
 }
 
 var exposedMemo = null;
@@ -332,13 +332,10 @@ function appendMemoList(info, memos) {
   window.ViewImage && ViewImage.init('.random-image');
 }
 
-get_info(function (info) {
-  Workspace.configure(info);
+DraftStorage.load(function (draft) {
   const editor = document.getElementById('content');
-  DraftStorage.load(function (draft) {
-    return DraftEditor.init(editor, draft).then(() => editor.focus());
-  }).catch(() => $.message({ message: uiMessage('draftSaveFailed') }));
-});
+  return DraftEditor.init(editor, draft).then(() => editor.focus());
+}).catch(() => $.message({ message: uiMessage('draftSaveFailed') }));
 
 function saveCurrentDraft() {
   Workspace.refreshVisibility();
