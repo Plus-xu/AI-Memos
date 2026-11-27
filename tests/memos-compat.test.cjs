@@ -629,6 +629,25 @@ test('private image previews share one download per account and release their Bl
   assert.deepEqual(revoked, ['blob:test-preview-1', 'blob:test-preview-2']);
 });
 
+test('a managed link without a filename downloads under its link text, or the attachment ID when it has none', async () => {
+  const popup = await loadPopup({ fetchAttachmentBlob: async () => new Blob(['file']) });
+  const links = [];
+  popup.document.createElement = () => {
+    links.push({ click() {} });
+    return links.at(-1);
+  };
+  const downloadName = async (url, text) => {
+    popup.node('document').attr('data-url', url).text(text);
+    popup.handlers.get('document:click:.memos-file-link')({ preventDefault() {} });
+    await flush();
+    return links.at(-1).download;
+  };
+  assert.equal(await downloadName(info.apiUrl + 'file/attachments/report/q3%20plan.pdf', 'Plan'), 'q3 plan.pdf');
+  assert.equal(await downloadName(info.apiUrl + 'file/attachments/report', ' Q3 plan '), 'Q3 plan');
+  assert.equal(await downloadName(info.apiUrl + 'file/attachments/report', ''), 'report');
+  assert.equal(links.length, 3);
+});
+
 test('quota and permission errors are distinct from invalid-token errors', async () => {
   const popup = await loadPopup();
   popup.context.showApiError('test', refused(403));

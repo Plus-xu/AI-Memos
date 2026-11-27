@@ -602,13 +602,16 @@ $('#archiveUndo').click(undoArchive);
 $(document).on('click', '.memos-file-link', function (event) {
   event.preventDefault();
   var url = $(this).attr('data-url');
+  var label = $(this).text().trim();
   get_info(function (info) {
     MemosAPI.fetchAttachmentBlob(info, url)
       .then(function (blob) {
         var objectUrl = URL.createObjectURL(blob);
         var link = document.createElement('a');
+        var file = MemosAPI.managedFile(info.apiUrl, url);
         link.href = objectUrl;
-        link.download = MemosAPI.managedFile(info.apiUrl, url).filename;
+        // An ID-only link has no filename; without a name the browser would use the Blob's UUID.
+        link.download = file.filename || label || file.name.split('/').pop();
         link.click();
         setTimeout(function () {
           URL.revokeObjectURL(objectUrl);
