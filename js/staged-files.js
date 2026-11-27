@@ -116,12 +116,11 @@ var StagedFiles = (function () {
         const cached = entry.uploads[account];
         if (cached?.attemptId === attemptId && cached.url) return cached.url;
         const bytes = await base64(entry.blob);
-        checkDestination?.(info);
-        const file = await MemosAPI.uploadAttachment(info, {
-          filename: entry.name,
-          type: entry.blob.type || 'application/octet-stream',
-          content: bytes
-        });
+        const file = await MemosAPI.uploadAttachment(
+          info,
+          { filename: entry.name, type: entry.blob.type || 'application/octet-stream', content: bytes },
+          checkDestination
+        );
         const uploaded = MemosAPI.buildFileUrl(info.apiUrl, file);
         if (!file.name || !MemosAPI.managedFile(info.apiUrl, uploaded)) throw new Error('stagedFileMissing');
         entry.uploads[account] = { attemptId, url: uploaded };

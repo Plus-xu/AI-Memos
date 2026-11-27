@@ -517,16 +517,24 @@ test('unnamed gateway errors before DONE preserve partial text and mark it inter
   for (const report of [
     { detail: 'Upstream generation was interrupted.' },
     { choices: [], detail: 'Upstream generation was interrupted.' },
+    { errors: [{ message: 'Upstream generation was interrupted.' }] },
     { success: false, errors: [{ message: 'Upstream generation was interrupted.' }] }
   ]) {
     const { sent, result } = generation('deepseek');
     // A diagnostic beside actual delta text belongs to that event.
-    const chunk = { choices: [{ delta: { content: 'First paragraph.' } }], detail: 'Diagnostic' };
+    const chunk = { choices: [{ delta: { content: 'First paragraph.' } }], errors: [], detail: 'Diagnostic' };
     sent[0].send(sse(chunk) + sse(report) + sse('[DONE]'));
     assert.deepEqual(plain(await result), { text: 'First paragraph.', truncated: true, interrupted: 'interrupted' });
     assert.equal(sent.length, 1);
   }
   assert.equal(await requestsWhenStreamSays({ detail: 'Streaming is not supported.' }), 2);
+  assert.equal(await requestsWhenStreamSays({ errors: ['Streaming is not supported.'] }), 2);
+});
+
+test('an HTTP 200 errors array supplies the reason even without a success flag', async () => {
+  const { ctx } = runtime(async () => jsonResponse({ errors: [{ message: 'Provider is overloaded.' }] }));
+  const error = await failure(ctx.callLLMAPI('deepseek', 'm', 'fixture', 'Draft', 'en', '', 'summary', ''));
+  assert.equal(error.message, 'apiFailed (Provider is overloaded.)');
 });
 
 test('an explicit HTTP 200 failure retries a stream refusal and surfaces the next gateway error', async () => {
@@ -1212,14 +1220,25 @@ test('a gateway describing a timeout or disconnect without output is never asked
     { error: { message } },
     { detail: message },
     { error: { message, param: 'stream' } },
+    { error: { message: '504 Gateway Timeout', param: 'stream' } },
+    { error: { message: 'Gateway timeout after 30s', param: 'stream' } },
+    { error: { message: 'read ECONNRESET', param: 'stream' } },
     { error: { message: 'The connection closed without streaming.' } }
   ]) {
     assert.equal(await requestsWhenRefused(200, report), 1);
     assert.equal(await requestsWhenRefused(400, report), 1);
     assert.equal(await requestsWhenStreamSays(report), 1);
   }
-  for (const message of ['Retry without streaming', 'Please send the request again without streaming.']) {
+  for (const message of [
+    'Retry without streaming',
+    'Please send the request again without streaming.',
+    'Please make a new request without streaming.',
+    'This model can only be used without streaming.',
+    'This endpoint requires requests without streaming.'
+  ]) {
     assert.equal(await requestsWhenRefused(200, { error: { message } }), 2);
+    assert.equal(await requestsWhenRefused(400, { error: { message } }), 2);
+    assert.equal(await requestsWhenStreamSays({ error: { message } }), 2);
   }
 });
 

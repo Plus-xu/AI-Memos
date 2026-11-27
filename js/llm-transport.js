@@ -202,6 +202,7 @@ var LLMTransport = (function () {
   function isErrorReport(data) {
     return (
       !!data?.error ||
+      (Array.isArray(data?.errors) && data.errors.length > 0) ||
       data?.success === false ||
       data?.type === 'error' ||
       data?.type === 'response.failed' ||
@@ -253,6 +254,11 @@ var LLMTransport = (function () {
   const notFromUpstream = '(?<!\\bupstream\\s|上游)';
   /** The rest of the word that names streaming, with what closes a quote or a bracket, and the flag as it is set. */
   const restOfName = '[\\w\'"`)\\]-]*(?:\\s*[:=]\\s*["\'`]?true\\b["\'`]?)?';
+  const requestInstruction =
+    /\b(?:retry|try|resend|send|submit|make|use|call|run|requires?|works? only|only (?:works?|accepts?|supports?)|(?:supported|available|used) only|(?:must|can only) be (?:sent|used|called))\s+/
+      .source;
+  const requestWords = /(?:(?:the|an?|your|this|same|new|another|requests?|calls?|model|endpoint|api|it|again)\s+)*/
+    .source;
   /**
    * The words that say something is not to be had or not to be sent, as distinct from a request that went
    * wrong. Three of them are a server's words for a failure too: "unavailable", "unknown" and "unexpected"
@@ -279,8 +285,7 @@ var LLMTransport = (function () {
       'stream["\'`]?\\s*(?:[:=]+|\\bto\\b)\\s*["\'`]?(?:false|off)\\b',
       '\\b(?:disable|turn(?:ing)?\\s+off|switch(?:ing)?\\s+off)\\s+(?:the\\s+)?(?:stream|SSE)',
       // "Without streaming" describes a lost response too. Look for a request instruction or limitation.
-      /\b(?:retry|try|resend|send|submit|make|use|call|run|works? only|only works?|only accepts?|only supports?|(?:supported|available) only|must be (?:sent|used|called))\s+(?:(?:the|a|your|this|same|request|requests|call|model|endpoint|api|it|again)\s+)*without\s+(?:the\s+)?(?:stream(?:ing|ed)?|SSE)\b/
-        .source,
+      requestInstruction + requestWords + /without\s+(?:the\s+)?(?:stream(?:ing|ed)?|SSE)\b/.source,
       '\\binvalid\\s+(?:stream(?:ing)?\\s+)?(?:value|parameter|argument|field)\\b',
       // Streaming as what is not available: "Streaming is unavailable", "streaming for this model isn't
       // available yet", "stream=true is not available". Between the two stands nothing that parts clauses
@@ -334,8 +339,17 @@ var LLMTransport = (function () {
     /^(?:408|504|(?:(?:provider|upstream|gateway|stream(?: idle)?|network|request|connection) )?(?:disconnect(?:ed|ion)?|timeout|timed out|deadline exceeded|connection (?:closed|reset|lost)|econnreset|etimedout)(?: error)?)$/i;
 
   // A gateway may name the stream parameter beside a failure it reports only in words.
-  const interruptionMessage =
-    /\b(?:request|connection|stream|gateway|provider|upstream)\s+(?:was\s+|has (?:been )?)?(?:timed out|closed|reset|lost|aborted|disconnected|interrupted)\b/i;
+  const interruptionMessage = new RegExp(
+    [
+      /\b(?:request|connection|stream|gateway|provider|upstream)\s+(?:was\s+|has (?:been )?)?(?:timed out|closed|reset|lost|aborted|disconnected|interrupted)\b/
+        .source,
+      /\b(?:408\s+request|504\s+gateway)\s+time[- ]?out\b/.source,
+      /\b(?:request|connection|stream|gateway|provider|upstream|read)\s+time[- ]?out\b(?=\s*(?:$|[.!,:;'"()]|after\b|while\b|waiting\b))/
+        .source,
+      /\b(?:ECONNRESET|ETIMEDOUT)\b/.source
+    ].join('|'),
+    'i'
+  );
 
   function isInterruptionCode(value) {
     return (

@@ -180,6 +180,7 @@ async function loadPopup(overrides = {}, saved = {}, session = {}) {
     document,
     crypto: webcrypto,
     TextEncoder,
+    FileReader,
     uiMessage: key => key,
     Option,
     AIReview: { isBusy: () => false, onMemoSaved() {}, refresh() {} },

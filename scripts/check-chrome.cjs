@@ -187,7 +187,11 @@ async function main() {
     assert.match(clipped, /\| 时段 \| 人数 \|/);
     assert.match(clipped, /- +延长周末开放时间/);
     assert.match(clipped, /\[来源说明\]\(http:\/\/127\.0\.0\.1:/);
-    assert.match(clipped, /\[!\[阅读室照片\]\(memos-local:\/\/[a-f0-9-]{36}\)\]\(http:\/\/127\.0\.0\.1:\d+\/notes\)/);
+    assert.match(
+      clipped,
+      /\[!\[阅读室照片\]\(memos-local:\/\/[a-f0-9-]{36}\)\]\(http:\/\/127\.0\.0\.1:\d+\/notes "阅读室 \\"相册\\""\)/
+    );
+    assert.ok(clipped.includes('![示例](/file/attachments/example)'));
     assert.equal(fixture.attachments.size + fixture.memos.size, 0);
     pass('Rich selection retains headings, lists, a table, links and a staged image without a server write');
     await waitFor(page, original => document.getElementById('content').value === original, clipped);
@@ -399,6 +403,37 @@ async function main() {
     assert.equal(await panel.inputValue('#content'), clipped);
     assert.equal(fixture.attachments.size + fixture.memos.size, 0);
     pass('Rejected uploads leave the image staged and the draft available for retry');
+    await page.selectOption('#visibility', 'PRIVATE');
+    await waitFor(panel, () => document.getElementById('visibility').value === 'PRIVATE');
+    const uploadUrl = fixture.base + '/api/attachments';
+    const releaseUpload = Promise.withResolvers();
+    await panel.route(
+      uploadUrl,
+      async route => {
+        await releaseUpload.promise;
+        await route.continue();
+      },
+      { times: 1 }
+    );
+    try {
+      await Promise.all([panel.waitForRequest(uploadUrl), panel.click('#content_submit_text')]);
+      await page.selectOption('#visibility', 'SPACE');
+      await waitFor(panel, () => document.getElementById('visibility').value === 'SPACE');
+    } finally {
+      releaseUpload.resolve();
+    }
+    await waitFor(panel, () => document.querySelector('.tip')?.textContent === uiMessage('destinationChanged'));
+    assert.equal(fixture.attachments.size, 1);
+    assert.equal(fixture.memos.size, 0);
+    await panel.reload();
+    await waitFor(
+      panel,
+      original =>
+        !document.getElementById('content_submit_text').disabled &&
+        document.getElementById('content').value === original &&
+        document.getElementById('visibility').value === 'SPACE',
+      clipped
+    );
     fixture.state.loseReceipt = true;
     await panel.click('#content_submit_text');
     await waitFor(
@@ -422,10 +457,13 @@ async function main() {
     assert.equal(memo.visibility, 'SPACE');
     assert.equal(memo.space, 'spaces/reading');
     assert.doesNotMatch(memo.content, /memos-local:\/\//);
-    assert.ok(memo.content.includes('[![阅读室照片](/file/attachments/file-1)](' + fixture.base + '/notes)'));
+    assert.ok(
+      memo.content.includes('[![阅读室照片](/file/attachments/file-1)](' + fixture.base + '/notes "阅读室 \\"相册\\"")')
+    );
     assert.deepEqual(memo.attachments, [{ name: 'attachments/file-1' }]);
     assert.equal(fixture.calls.filter(r => r.route === '/api/memos' && r.method === 'POST').length, 1);
     assert.equal(fixture.calls.filter(r => r.route === '/api/attachments' && r.method === 'POST').length, 2);
+    pass('Changing visibility during upload and reopening the editor reuses the uploaded image at the new visibility');
     pass('Retry after a lost receipt reuses the confirmed memo, binds its attachment once and clears the saved draft');
     await capture(panel, 'capturePage');
     await panel.waitForSelector('#duplicateNotice', { state: 'visible' });

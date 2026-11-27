@@ -646,9 +646,12 @@ async function submitMemo(info, snapshot, selection) {
   const key = 'memosSaveAttempt:' + scope;
   const prior = (await DraftStorage.get('local', { [key]: null }))[key];
   selection.assertCurrent(info);
+  // A null signature reserves uploaded files for this account. A recorded signature means a memo POST may have run.
   const retry = prior?.signature === signature;
-  const attemptId = retry ? prior.id : crypto.randomUUID();
-  if (!retry) await DraftStorage.put('local', { [key]: { signature, id: attemptId } });
+  const preparing = prior?.signature === null && !!prior.id;
+  const attemptId = retry || preparing ? prior.id : crypto.randomUUID();
+  const reservation = { signature: null, id: attemptId };
+  if (!retry && !preparing) await DraftStorage.put('local', { [key]: reservation });
   const memoId = acceptsId ? attemptId : undefined;
   selection.assertCurrent(info);
   const content = await StagedFiles.resolve(info, original, attemptId, selection.assertCurrent);
@@ -672,7 +675,14 @@ async function submitMemo(info, snapshot, selection) {
   }
   if (!memo) {
     selection.assertCurrent(info);
-    memo = await MemosAPI.createMemo(info, body, memoId);
+    if (!retry) await DraftStorage.put('local', { [key]: { signature, id: attemptId } });
+    try {
+      memo = await MemosAPI.createMemo(info, body, memoId, selection.assertCurrent);
+    } catch (error) {
+      // The send guard can stop the first POST, or a fallback after a definitive missing-route response.
+      if (!retry && error.message === 'destinationChanged') await DraftStorage.put('local', { [key]: reservation });
+      throw error;
+    }
   }
   if (!memo?.name || !/^memos\/[^/]+$/.test(memo.name)) throw new Error('unconfirmedSave');
   if (memoId && memo.name !== 'memos/' + memoId) throw new Error('unconfirmedSave');

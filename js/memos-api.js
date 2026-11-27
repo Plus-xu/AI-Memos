@@ -75,6 +75,7 @@ const MemosAPI = (function () {
   }
 
   function rawRequest(info, prefix, options) {
+    options.checkDestination?.(info);
     return Http.json({
       url: normalizeBaseUrl(info.apiUrl) + prefix + options.path,
       method: options.method || 'GET',
@@ -249,11 +250,12 @@ const MemosAPI = (function () {
     });
   }
 
-  function createMemo(info, body, memoId) {
+  function createMemo(info, body, memoId, checkDestination) {
     return request(info, {
       path: 'memos' + (memoId ? '?memoId=' + encodeURIComponent(memoId) : ''),
       method: 'POST',
-      body: body
+      body: body,
+      checkDestination
     });
   }
 
@@ -277,11 +279,12 @@ const MemosAPI = (function () {
     return patchMemo(info, memoName, 'visibility', visibility);
   }
 
-  function uploadAttachment(info, body) {
+  function uploadAttachment(info, body, checkDestination) {
     return request(info, {
       path: 'attachments',
       method: 'POST',
-      body: { filename: body.filename, type: body.type, content: body.content }
+      body: { filename: body.filename, type: body.type, content: body.content },
+      checkDestination
     });
   }
 
@@ -363,7 +366,7 @@ const MemosAPI = (function () {
 
   const labelChar = /(?:\\.|[^\\[\]\r\n])/.source;
   const destination = /(?:<[^>\r\n]+>|[^\s)<][^\s)]*)/.source;
-  const optionalTitle = /(?:[ \t]+(?:"[^"\r\n]*"|'[^'\r\n]*'))?/.source;
+  const optionalTitle = /(?:[ \t]+(?:"(?:\\.|[^"\\\r\n])*"|'(?:\\.|[^'\\\r\n])*'))?/.source;
   const imageInLabel = `!\\[${labelChar}*\\]\\(${destination}${optionalTitle}\\)`;
   const inlineMarkup = new RegExp(
     [
@@ -399,7 +402,9 @@ const MemosAPI = (function () {
     }
 
     let fence = null;
-    const listsByQuote = [];
+    // In opening order: '>' for a quote, or the spaces needed to continue a list item.
+    const containers = [];
+    const quoteMarker = /^ {0,3}> ?/;
     const fenceMarker = /^ {0,3}(`{3,}|~{3,})([^\r\n]*)\r?$/;
     const listMarker = /^ {0,3}(?:[-+*]|\d{1,9}[.)])( +|$)/;
     return String(content)
@@ -407,45 +412,49 @@ const MemosAPI = (function () {
       .map(function (line) {
         // Measure Markdown columns on a copy so literal tabs survive in the saved text.
         let extra = 0;
-        const columns = line.replace(/\t/g, (_, index) => {
+        let body = line.replace(/\r$/, '').replace(/\t/g, (_, index) => {
           const width = 4 - ((index + extra) % 4);
           extra += width - 1;
           return ' '.repeat(width);
         });
-        const quote = columns.match(/^(?: {0,3}> ?)+/)?.[0] || '';
-        const markers = quote.match(/ {0,3}> ?/g) || [];
-        const depth = markers.length;
-        let body = columns.slice(quote.length);
-        if (fence && depth >= fence.depth) {
-          // Deeper quote markers are literal text while still inside the opening fence's list item.
-          const inside = markers.slice(fence.depth).join('') + body;
-          if (!inside.trim() || inside.startsWith(fence.padding)) {
-            const close = inside.slice(fence.padding.length).match(fenceMarker);
-            if (close && close[1][0] === fence.mark[0] && close[1].length >= fence.mark.length && !close[2].trim())
-              fence = null;
-            return formatText(line);
-          }
+        let depth = 0;
+        for (const container of containers) {
+          if (container === '>') {
+            const quote = body.match(quoteMarker);
+            if (!quote) break;
+            body = body.slice(quote[0].length);
+          } else if (body.startsWith(container)) {
+            body = body.slice(container.length);
+          } else if (body.trim()) break;
+          depth++;
         }
-        fence = null;
-        listsByQuote.length = depth + 1;
-        if (!body.trim()) return formatText(line);
-        const indents = (listsByQuote[depth] ??= []);
-        const indent = body.match(/^ */)[0].length;
-        while (indents.length && indents.at(-1) > indent) indents.pop();
-        let offset = indents.at(-1) || 0;
-        body = body.slice(offset);
-        // Turndown indents nested list items and their continuation paragraphs, including real images.
-        for (let item = body.match(listMarker); item; item = body.match(listMarker)) {
+        if (depth < containers.length) {
+          containers.length = depth;
+          fence = null;
+        }
+        if (fence) {
+          const close = body.match(fenceMarker);
+          if (close && close[1][0] === fence[0] && close[1].length >= fence.length && !close[2].trim()) fence = null;
+          return formatText(line);
+        }
+        for (;;) {
+          const quote = body.match(quoteMarker);
+          if (quote) {
+            containers.push('>');
+            body = body.slice(quote[0].length);
+            continue;
+          }
+          const item = body.match(listMarker);
+          if (!item) break;
           const gap = item[1].length;
           const width = item[0].length - gap + (gap >= 1 && gap <= 4 ? gap : 1);
-          offset += width;
-          indents.push(offset);
+          containers.push(' '.repeat(width));
           body = body.slice(width);
         }
         if (body.startsWith('    ')) return formatText(line);
         const marker = body.match(fenceMarker);
         if (marker && !(marker[1][0] === '`' && marker[2].includes('`'))) {
-          fence = { depth, padding: ' '.repeat(offset), mark: marker[1] };
+          fence = marker[1];
           return formatText(line);
         }
         return inline(line);

@@ -123,7 +123,9 @@ async function checkLiveMemos({ context, ext, fixture, waitFor, pass }) {
     assert.equal(attachment.memo, memo.name);
     assert.equal(attachment.filename, 'image (1).png');
     const imagePath = '/file/' + attachment.name;
-    assert.ok(memo.content.includes('[![阅读室照片](' + imagePath + ')](' + fixture.base + '/notes)'));
+    assert.ok(
+      memo.content.includes('[![阅读室照片](' + imagePath + ')](' + fixture.base + '/notes "阅读室 \\"相册\\"")')
+    );
     assert.ok(!memo.content.includes('memos-local://'));
     pass('The real server without an instance URL binds the clipped linked image on explicit save');
     const fileUrl = new URL(imagePath, base);

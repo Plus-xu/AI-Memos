@@ -353,6 +353,28 @@ test('the indentation of a clipped list item still allows a real image beside a 
   assert.deepEqual(paths(calls), ['/api/attachments/photo']);
 });
 
+test('a fenced example inside a list-item quote stays literal in both save and preview', async () => {
+  const { api, calls } = loadApi(options => {
+    if (new URL(options.url).pathname !== '/api/attachments/photo') throw refused(404);
+    return { name: 'attachments/photo' };
+  });
+  const { context } = await loadPopup();
+  const example = '![example](/file/attachments/example)';
+  const photo = '![photo](' + info.apiUrl + 'file/attachments/photo/pic.png)';
+  // Turndown indents the quote inside the list. The default clip template adds another quote.
+  const lines = ['-   Intro', '    ', '    > ~~~', '    > > ~~~', '    > ' + example, '    > ~~~', '    > ' + photo];
+  for (const prefix of ['', '> ']) {
+    const content = lines.map(line => prefix + line).join('\r\n');
+    const prepared = await api.prepareMemo(info, { content });
+    assert.equal(prepared.content, content.replace(photo, '![photo](/file/attachments/photo/pic.png)'));
+    assert.deepEqual(plain(prepared.attachments), [{ name: 'attachments/photo' }]);
+    const preview = context.renderMarkdownPreview(content, info);
+    assert.ok(preview.includes(example));
+    assert.equal((preview.match(/<img /g) || []).length, 1);
+  }
+  assert.deepEqual(paths(calls), ['/api/attachments/photo', '/api/attachments/photo']);
+});
+
 test('legacy servers retain the filename segment in a managed image URL', async () => {
   const { api } = loadApi(options => {
     if (!options.url.includes('/api/v1/')) throw refused(404);
@@ -557,6 +579,23 @@ test('a clickable image keeps its protected thumbnail and its separate link targ
   const unsafe = context.renderMarkdownPreview('[' + image + '](javascript:invalid)', info);
   assert.ok(!unsafe.includes('<a '));
   assert.ok(unsafe.includes('<img '));
+});
+
+test('quoted titles preserve a linked image target in both save and preview', async () => {
+  const { api } = loadApi(() => ({ name: 'attachments/photo' }));
+  const { context } = await loadPopup();
+  const photo = info.apiUrl + 'file/attachments/photo/pic.png';
+  const titles = [String.raw`"Gallery \"Summer\""`, String.raw`'Summer\'s gallery'`];
+  for (const title of titles) {
+    const content = `[![Photo](${photo} ${title})](https://example.org/gallery ${title})`;
+    const prepared = await api.prepareMemo(info, { content });
+    assert.equal(prepared.content, content.replace(photo, '/file/attachments/photo/pic.png'));
+    assert.deepEqual(plain(prepared.attachments), [{ name: 'attachments/photo' }]);
+    assert.match(
+      context.renderMarkdownPreview(prepared.content, info),
+      /^<a href="https:\/\/example\.org\/gallery"[^>]*><img [^>]*><\/a>$/
+    );
+  }
 });
 
 test('private image previews share one download per account and release their Blob URLs on clearing', async () => {
@@ -1082,6 +1121,93 @@ test('a destination change during attachment preparation stops the memo write an
   assert.equal(posts, 0);
   assert.equal(popup.messages.at(-1), 'destinationChanged');
   assert.equal(popup.storage.memosDraft.open_content, 'draft text');
+});
+
+for (const route of ['memos', 'attachments']) {
+  test('changing visibility stops the ' + route + ' POST before a legacy route replay', async () => {
+    const started = Promise.withResolvers();
+    const missing = Promise.withResolvers();
+    const { api, calls } = loadApi(async options => {
+      if (new URL(options.url).pathname === '/api/' + route) {
+        started.resolve();
+        await missing.promise;
+      }
+      throw refused(404);
+    });
+    const popup = await loadPopup(
+      { createMemo: api.createMemo, uploadAttachment: api.uploadAttachment },
+      { memo_lock: 'PUBLIC', memosVersion: '0.25.0' }
+    );
+    if (route === 'attachments') {
+      const image = await popup.context.StagedFiles.stage(new Blob(['pic'], { type: 'image/png' }), 'p.png');
+      popup.node('#content').val(image);
+    }
+    const draft = popup.node('#content').val();
+    const save = popup.context.sendText();
+    await started.promise;
+    popup.node('#visibility').val('PRIVATE');
+    await popup.node('#visibility')[0].onchange();
+    missing.resolve();
+    await save;
+    assert.deepEqual(paths(calls), ['/api/' + route]);
+    assert.equal(popup.messages.at(-1), 'destinationChanged');
+    assert.equal(popup.storage.memosDraft.open_content, draft);
+  });
+}
+
+test('a changed destination reuses uploads only while the previous memo is known to be unsent', async () => {
+  const uploading = Promise.withResolvers();
+  const finishUpload = Promise.withResolvers();
+  const uploads = [];
+  const posts = [];
+  const { api } = loadApi(async options => {
+    const url = new URL(options.url);
+    if (url.pathname === '/api/attachments') {
+      const name = 'attachments/photo' + (uploads.length + 1);
+      uploads.push(name);
+      if (uploads.length === 1) {
+        uploading.resolve();
+        await finishUpload.promise;
+      }
+      return { name, filename: 'photo.png' };
+    }
+    if (url.pathname.startsWith('/api/attachments/')) return { name: url.pathname.slice(5) };
+    assert.equal(url.pathname, '/api/memos');
+    const memo = { ...JSON.parse(options.data), name: 'memos/' + url.searchParams.get('memoId') };
+    posts.push(memo);
+    if (posts.length === 1) throw refused(503); // The memo could already have been created.
+    return memo;
+  });
+  const popup = await loadPopup(
+    { createMemo: api.createMemo, prepareMemo: api.prepareMemo, uploadAttachment: api.uploadAttachment },
+    { memosVersion: '26.11.2' }
+  );
+  const changeVisibility = async value => {
+    popup.node('#visibility').val(value);
+    await popup.node('#visibility')[0].onchange();
+  };
+  const image = await popup.context.StagedFiles.stage(new Blob(['pic'], { type: 'image/png' }), 'photo.png');
+  popup.node('#content').val(image);
+  const save = popup.context.sendText();
+  await uploading.promise;
+  await changeVisibility('PROTECTED');
+  finishUpload.resolve();
+  await save;
+  assert.equal(popup.messages.at(-1), 'destinationChanged');
+  assert.equal(posts.length, 0);
+  await popup.context.sendText();
+  assert.deepEqual(uploads, ['attachments/photo1']);
+  assert.deepEqual(posts[0].attachments, [{ name: 'attachments/photo1' }]);
+  assert.equal(posts[0].visibility, 'PROTECTED');
+  assert.equal(popup.storage.memosDraft.open_content, image);
+
+  await changeVisibility('PRIVATE');
+  await popup.context.sendText();
+  assert.deepEqual(uploads, ['attachments/photo1', 'attachments/photo2']);
+  assert.deepEqual(posts[1].attachments, [{ name: 'attachments/photo2' }]);
+  assert.equal(posts[1].visibility, 'PRIVATE');
+  assert.notEqual(posts[0].name, posts[1].name);
+  assert.equal(popup.storage.memosDraft.open_content, '');
 });
 
 test('the destination is drawn from the remembered spaces before the server answers, then follows the answer', async () => {
