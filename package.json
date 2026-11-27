@@ -1,6 +1,6 @@
 {
   "name": "ai-memos",
-  "version": "2026.11.19-1",
+  "version": "2026.11.27-1",
   "private": true,
   "description": "Development and packaging tools for the AI-MEMOS browser extension",
   "scripts": {
@@ -10,6 +10,8 @@
     "format:check": "prettier --check .",
     "check": "npm run format:check && npm run lint && npm test",
     "package": "pwsh -NoProfile -File scripts/package-extension.ps1",
+    "package:dev": "pwsh -NoProfile -File scripts/package-extension.ps1 -Development",
+    "version:bump": "node scripts/bump-version.cjs",
     "preview": "node scripts/preview-server.cjs"
   },
   "engines": {

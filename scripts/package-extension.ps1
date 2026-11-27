@@ -2,7 +2,8 @@
 [CmdletBinding()]
 param(
     [string]$SourceDirectory = (Split-Path -Parent $PSScriptRoot),
-    [string]$OutputDirectory = ''
+    [string]$OutputDirectory = '',
+    [switch]$Development
 )
 
 $ErrorActionPreference = 'Stop'
@@ -31,6 +32,12 @@ function Assert-NoLink([string]$LiteralPath) {
         }
         $taskItem = if ($taskItem -is [System.IO.DirectoryInfo]) { $taskItem.Parent } else { $taskItem.Directory }
     }
+}
+
+function Get-ByteHash([byte[]]$Bytes) {
+    $taskBytesStream = [System.IO.MemoryStream]::new($Bytes)
+    try { (Get-FileHash -InputStream $taskBytesStream -Algorithm SHA256).Hash }
+    finally { $taskBytesStream.Dispose() }
 }
 
 Assert-NoLink $taskRoot
@@ -71,7 +78,9 @@ foreach ($taskFile in $taskFiles) {
     }
 }
 
-$taskManifest = Get-Content -LiteralPath (Get-SafeSourcePath 'manifest.json') -Raw -Encoding utf8 | ConvertFrom-Json -AsHashtable
+$taskManifestBytes = [System.IO.File]::ReadAllBytes((Get-SafeSourcePath 'manifest.json'))
+$taskManifestText = [System.Text.Encoding]::UTF8.GetString($taskManifestBytes).TrimStart([char]0xFEFF)
+$taskManifest = $taskManifestText | ConvertFrom-Json -AsHashtable
 $taskVersion = $taskManifest.version
 if ($taskVersion -isnot [string] -or $taskVersion -notmatch '^(?:0|[1-9][0-9]{0,4})(?:\.(?:0|[1-9][0-9]{0,4})){0,3}$') {
     throw 'manifest.version must contain one to four integers without leading zeros.'
@@ -155,16 +164,33 @@ while (-not (Test-Path -LiteralPath $taskExistingOutputParent)) { $taskExistingO
 Assert-NoLink $taskExistingOutputParent
 if (-not (Test-Path -LiteralPath $taskOutput -PathType Container)) { New-Item -ItemType Directory -Path $taskOutput -Force | Out-Null }
 Assert-NoLink $taskOutput
-$taskPackageName = 'ai-memos-' + $taskVersion + '.zip'
+$taskExpectedHashes = @{ 'manifest.json' = (Get-ByteHash $taskManifestBytes) }
+foreach ($taskFile in $taskFiles | Where-Object { $_ -ne 'manifest.json' }) {
+    $taskExpectedHashes[$taskFile] = (Get-FileHash -LiteralPath (Get-SafeSourcePath $taskFile) -Algorithm SHA256).Hash
+}
+
+$taskPackageStem = 'ai-memos-' + $taskVersion
+if ($Development) {
+    $taskRevision = git -C $taskRoot rev-parse --short=7 HEAD
+    if ($LASTEXITCODE -ne 0 -or $taskRevision -notmatch '^[0-9a-f]{7,40}$') {
+        throw 'A development package needs a Git checkout with a commit.'
+    }
+    # A working-tree edit can change the runtime files without changing the Git revision.
+    $taskInventory = foreach ($taskFile in $taskFiles) { $taskFile + '=' + $taskExpectedHashes[$taskFile] }
+    $taskDigest = Get-ByteHash ([System.Text.Encoding]::UTF8.GetBytes(($taskInventory -join "`n")))
+    $taskBuild = $taskRevision + '-' + $taskDigest.Substring(0, 12).ToLowerInvariant()
+    $taskManifest['version_name'] = $taskVersion + ' dev ' + $taskBuild
+    $taskManifestBytes = [System.Text.Encoding]::UTF8.GetBytes(($taskManifest | ConvertTo-Json -Depth 100) + "`n")
+    $taskExpectedHashes['manifest.json'] = Get-ByteHash $taskManifestBytes
+    $taskPackageStem += '-dev-' + $taskBuild
+}
+$taskPackageName = $taskPackageStem + '.zip'
 $taskPackage = Join-Path $taskOutput $taskPackageName
 $taskChecksum = $taskPackage + '.sha256'
 $taskStaging = Join-Path $taskOutput ('.ai-memos-' + [System.Guid]::NewGuid().ToString('N') + '.tmp')
 foreach ($taskDestination in @($taskPackage, $taskChecksum)) {
     if (Test-Path -LiteralPath $taskDestination) { Assert-NoLink $taskDestination }
 }
-$taskExpectedHashes = @{}
-foreach ($taskFile in $taskFiles) { $taskExpectedHashes[$taskFile] = (Get-FileHash -LiteralPath (Get-SafeSourcePath $taskFile) -Algorithm SHA256).Hash }
-
 Add-Type -AssemblyName System.IO.Compression
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $taskStream = [System.IO.File]::Open($taskStaging, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
@@ -172,6 +198,13 @@ try {
     $taskArchive = [System.IO.Compression.ZipArchive]::new($taskStream, [System.IO.Compression.ZipArchiveMode]::Create, $true)
     try {
         foreach ($taskFile in $taskFiles) {
+            if ($Development -and $taskFile -eq 'manifest.json') {
+                $taskEntry = $taskArchive.CreateEntry($taskFile, [System.IO.Compression.CompressionLevel]::Optimal)
+                $taskEntryStream = $taskEntry.Open()
+                try { $taskEntryStream.Write($taskManifestBytes, 0, $taskManifestBytes.Length) }
+                finally { $taskEntryStream.Dispose() }
+                continue
+            }
             [void][System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
                 $taskArchive, (Get-SafeSourcePath $taskFile), $taskFile, [System.IO.Compression.CompressionLevel]::Optimal)
         }

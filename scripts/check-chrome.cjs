@@ -26,11 +26,9 @@ async function main() {
     throw new Error(
       'Use the unpacked release ZIP for browser checks. Chrome can remove reserved metadata from a loaded source tree.'
     );
-  const output = path.resolve(
-    root,
-    'artifacts',
-    'acceptance-' + JSON.parse(await fs.readFile(path.join(extension, 'manifest.json'))).version
-  );
+  const manifest = JSON.parse(await fs.readFile(path.join(extension, 'manifest.json'), 'utf8'));
+  const build = (manifest.version_name || manifest.version).replace(/[^\w.-]+/g, '-');
+  const output = path.resolve(root, 'artifacts', 'acceptance-' + build);
   await fs.mkdir(output, { recursive: true });
   const fixture = await startFixture();
   let context;
@@ -61,10 +59,11 @@ async function main() {
       new URL(worker.url()).origin === 'null'
         ? worker.url().split('/').slice(0, 3).join('/')
         : new URL(worker.url()).origin;
-    assert.equal(
-      await worker.evaluate(() => chrome.runtime.getManifest().version),
-      JSON.parse(await fs.readFile(path.join(extension, 'manifest.json'))).version
-    );
+    const installedVersion = await worker.evaluate(() => {
+      const { version, version_name } = chrome.runtime.getManifest();
+      return { version, versionName: version_name ?? null };
+    });
+    assert.deepEqual(installedVersion, { version: manifest.version, versionName: manifest.version_name ?? null });
     await worker.evaluate(() =>
       chrome.storage.sync.set({
         open_action: 'save_text',

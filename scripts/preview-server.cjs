@@ -20,6 +20,8 @@ const contentTypes = {
 };
 
 function chromeRuntime(messages) {
+  const { version, version_name } = JSON.parse(fs.readFileSync(path.join(root, 'manifest.json'), 'utf8'));
+  const manifest = JSON.stringify({ name: 'AI-MEMOS 本地预览', version, version_name }).replace(/</g, '\\u003c');
   return `(() => {
   'use strict';
   const messages = ${JSON.stringify(messages).replace(/</g, '\\u003c')};
@@ -108,7 +110,7 @@ function chromeRuntime(messages) {
       await DraftStorage.append(ClipperCore.format({ url, title, content }, template), null, [source]);
       return { result:{ kind:request.mode === 'selection' ? 'selection' : 'article', source } };
     },
-    getManifest: () => ({ name: 'AI-MEMOS 本地预览', version: '2026.11.19.1' }), reload: () => location.reload()
+    getManifest: () => (${manifest}), reload: () => location.reload()
   };
   const chrome = {
     runtime, windows:{ getCurrent:async () => ({ id:1 }) }, sidePanel:{ open:async () => { window.open('/panel.html','_blank','noopener'); } },

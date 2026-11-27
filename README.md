@@ -1,6 +1,6 @@
 # AI-MEMOS
 
-在 Chrome 中速记、剪藏网页，并用 AI 整理 Memos 笔记。当前扩展版本 **2026.11.19.1**，适配 Memos 26.11.1，支持仍使用 `/api/v1` 的旧实例。剪藏流程参考官方 Memos Web Clipper 0.6.1。[Memos 发行说明](https://github.com/usememos/memos/releases/tag/26.11.1) · [官方 Chrome 扩展](https://chromewebstore.google.com/detail/memos-web-clipper/nebaoebnljalfegiidibihhkebeiklbl)
+在 Chrome 中速记、剪藏网页，并用 AI 整理 Memos 笔记。扩展适配 Memos 26.11.1，支持仍使用 `/api/v1` 的旧实例。剪藏流程参考官方 Memos Web Clipper 0.6.1。[修改记录](CHANGELOG.md) · [Memos 发行说明](https://github.com/usememos/memos/releases/tag/26.11.1) · [官方 Chrome 扩展](https://chromewebstore.google.com/detail/memos-web-clipper/nebaoebnljalfegiidibihhkebeiklbl)
 
 ## 开始使用
 
@@ -71,3 +71,17 @@ npm.cmd run package
 浏览器验收脚本 `scripts/check-chrome.cjs` 使用临时配置及回环地址上的 Memos、New API 测试服务。先解压待验收的 ZIP，设置 `EXTENSION_PATH` 为该目录、`CHROMIUM_PATH` 为支持扩展的 Chromium 可执行文件。如果环境中没有可直接导入的 `playwright-core`，将 `PLAYWRIGHT_MODULE` 指向它的安装目录。运行 `node scripts/check-chrome.cjs` 后，截图和检查结果保存在 `artifacts/acceptance-<版本>/`。
 
 如需实测 Memos 26.11.1，可另外将 `MEMOS_BINARY` 指向从官方发行包解压的可执行文件。脚本默认要求该程序为 26.11.1；用其他版本实测时，将 `MEMOS_VERSION` 设为该版本号。脚本会启动仅监听本机的临时 SQLite 实例，创建测试账号和临时令牌，从扩展界面保存、搜索、预览并归档测试笔记，随后关闭实例并清理测试库。[官方发行包及校验值](https://github.com/usememos/memos/releases/expanded_assets/26.11.1)
+
+### 试装与升版
+
+临时试装运行 `npm.cmd run package:dev`。ZIP 文件名和 Chrome 显示版本都包含当前 Git 短提交号和运行文件的摘要，同一提交上的本地改动也能区分。解压后可用临时 Chrome 配置加载测试包。
+
+将一批改动交付到常用 Chrome 目录前，把变更记入「未发布」，再指定一个 `年.月.日.序号` 版本。月、日不补零，每天从 `1` 开始，同日交付依次加一。升版命令同步 `manifest.json`、`package.json`、`package-lock.json`，并为这一批日志建立版本标题。以当天首次交付为例：
+
+```powershell
+npm.cmd run version:bump -- 2026.11.27.1
+npm.cmd run check
+npm.cmd run package
+```
+
+通过浏览器验收后，用相应的 Git 标签（例如 `v2026.11.27.1`）标记这份 ZIP 的源提交，保留 ZIP 与 SHA-256，供安装和回滚使用。
